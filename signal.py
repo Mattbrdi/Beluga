@@ -8,6 +8,9 @@ class Signal:
     @property
     def duration(self):
         return len(self.data) / self.freq
+    @property
+    def time(self):
+        return np.arange(0, self.duration, self.freq)
     
     @classmethod
     def from_zeros(cls, duration: float, freq:float):
@@ -105,21 +108,25 @@ class Signal:
         
         signal[idx_start:idx_end] = active_signal * window
         return Signal(data = signal, freq = fs )
-
-def apply_convolution(signal , impulse_response, mode='same'):
-    """
-    Réalise la convolution entre un signal et une réponse impulsionnelle.
     
-    Paramètres:
-    - signal: array du signal d'origine (x)
-    - impulse_response: array de la réponse impulsionnelle (h)
-    - mode: 
-        'full': sortie de taille N + M - 1 (inclut les queues de convolution)
-        'same': sortie de la même taille que le signal d'origine (centré)
-        'valid': sortie uniquement là où les signaux se chevauchent complètement
-    """
-    signal_1 = np.array(signal)
-    h = np.array(impulse_response)
-
-    resultat = np.convolve(signal_1, h, mode='same')
-    return resultat
+    def convolve(self, impulse_response: 'list|np.ndarray|Signal', mode='same'):
+        """
+        Réalise la convolution entre un signal et une réponse impulsionnelle.
+        
+        Paramètres:
+        - signal: array du signal d'origine (x)
+        - impulse_response: array de la réponse impulsionnelle (h)
+        - mode: 
+            'full': sortie de taille N + M - 1 (inclut les queues de convolution)
+            'same': sortie de la même taille que le signal d'origine (centré)
+            'valid': sortie uniquement là où les signaux se chevauchent complètement
+        """
+        signal_1 = self.data
+        if isinstance(impulse_response, Signal):
+            if self.freq != impulse_response.freq:
+                raise ValueError("Les fréquences d'échantillonnage doivent être identiques.")
+            h = impulse_response.data
+        else: 
+            h = np.ndarray(impulse_response)
+        resultat = Signal(np.convolve(signal_1, h, mode='same'), self.freq)
+        return resultat
