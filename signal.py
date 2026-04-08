@@ -83,19 +83,20 @@ class Signal:
         # On retourne une nouvelle instance de la classe (cls)
         return cls(new_data, reference_freq)
     @classmethod
-    def convolve(cls, signal: 'Signal', impulse_response: 'list|np.ndarray|Signal', mode='same') -> 'Signal':
+    def convolve(cls, signal: 'Signal', impulse_response: 'list|np.ndarray|Signal', mode = "full", method = 'auto' ) -> 'Signal':
         """
-        Réalise la convolution entre un signal et une réponse impulsionnelle.
+        Réalise la convolution entre un signal et une réponse impulsionnelle (causal).
         
         Paramètres:
         - signal: array du signal d'origine (x)
-        - impulse_response: array de la réponse impulsionnelle (h)
-        - mode: 
-            'full': sortie de taille N + M - 1 (inclut les queues de convolution)
-            'same': sortie de la même taille que le signal d'origine (centré)
-            'valid': sortie uniquement là où les signaux se chevauchent complètement
-            
+        - impulse_response: array de la réponse impulsionnelle (h) 
+        - mode 
+            'full' : output of size N+L-1
+            'same' : output of size N
+               
         return un nouveau signal
+        
+        Rq : on considère ici le filtre causal ce qui implique que h[0] correspond à la réponse impultionelle en t = 0
         """
         signal_1 = signal.data
         if isinstance(impulse_response, Signal):
@@ -104,7 +105,13 @@ class Signal:
             h = impulse_response.data
         else: 
             h = np.array(impulse_response)
-        resultat = Signal(np.convolve(signal_1, h, mode='same'), signal.freq)
+        
+        #control de la taille de la réponse (causal)
+        if mode == "full":
+            resultat = Signal(sp_signal.convolve(signal_1, h, mode='full', method=method), signal.freq) 
+        elif mode =="same":
+            resultat = Signal(sp_signal.convolve(signal_1, h, mode='full', method = method)[:len(signal_1)], signal.freq) 
+
         return resultat
     
     
