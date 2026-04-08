@@ -10,7 +10,7 @@ class Signal:
         return len(self.data) / self.freq
     @property
     def time(self):
-        return np.arange(0, self.duration, self.freq)
+        return np.arange(0, self.duration, 1/self.freq)
     
     @classmethod
     def from_zeros(cls, duration: float, freq:float):
@@ -127,6 +127,6 @@ class Signal:
                 raise ValueError("Les fréquences d'échantillonnage doivent être identiques.")
             h = impulse_response.data
         else: 
-            h = np.ndarray(impulse_response)
+            h = np.array(impulse_response)
         resultat = Signal(np.convolve(signal_1, h, mode='same'), self.freq)
         return resultat
