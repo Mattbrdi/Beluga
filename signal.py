@@ -193,7 +193,6 @@ class MultiSignal:
         n_samples = self.data.shape[1]
         return f"MultiSignal(E={self.E}, Fs={self.freq}Hz, Durée={n_samples/self.freq:.3f}s)"
     
-    
 class Mixture:
     def __init__(self, E: int, S: int, L: int):
         """
@@ -213,7 +212,49 @@ class Mixture:
         # - S lignes (sorties)
         # - E colonnes (entrées)
         # - L profondeur (coefficients du filtre/réponse impulsionnelle)
-        self.filters = np.random.randn(S, E, L)a
+        self.filters = np.random.randn(S, E, L)
 
+    def apply(self, input_multi: 'MultiSignal', method: str = 'auto') -> 'MultiSignal':
+        """
+        Applique le mélange convolutif : Y = A * X.
+        Chaque sortie s est la somme des entrées e convoluées par le filtre A[s,e].
+        
+        Args:
+            input_multi (MultiSignal): Le conteneur des signaux d'entrée.
+            method (str): Méthode de convolution ('auto', 'fft', ou 'direct').
+            
+        Returns:
+            MultiSignal: Le résultat du mélange.
+        """
+        # On récupère la matrice des données X (E, N)
+        X = input_multi.data
+        fs = input_multi.freq
+        E_in, N_samples = X.shape
+        
+        if E_in != self.E:
+            raise ValueError(f"Nombre d'entrées incohérent : reçu {E_in}, attendu {self.E}")
+
+        # Initialisation de la matrice de sortie Y (S, N)
+        Y = np.zeros((self.S, N_samples))
+
+        for s in range(self.S):
+            for e in range(self.E):
+                # Extraction du filtre h_se
+                h = self.filters[s, e, :]
+                
+                # Calcul de la convolution complète
+                # L'indice 0 de h est h[0], donc la convolution est naturellement causale
+                y_full = sp_signal.convolve(X[e, :], h, mode='full', method=method)
+                
+                # Troncature causale pour conserver la durée N (équivalent à votre mode "same")
+                # On additionne la contribution de la source e à la sortie s
+                Y[s, :] += y_full[:N_samples]
+
+        # Reconstruction des objets Signal pour le MultiSignal de sortie
+
+        output_signals = [Signal(Y[i, :], fs) for i in range(self.S)]
+        
+        return MultiSignal(output_signals)
+    
     def __repr__(self):
         return f"Mixture(Entrées={self.E}, Sorties={self.S}, Longueur du filtre={self.L})"git 
