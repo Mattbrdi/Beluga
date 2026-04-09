@@ -38,7 +38,7 @@ def pretty_plot(data, titles, palet, fs=1, length=100, nperseg=256):
         index += 2
 
 
-def run_experiment(data, level=2, fs=1, nperseg=256, length=100):
+def run_experiment(data, level=2, fs=1, f0 = 1, nperseg=256, length=100):
     """! Run the wavelet denoising over the input data for each threshold
     method.
     """
@@ -70,7 +70,7 @@ def run_experiment(data, level=2, fs=1, nperseg=256, length=100):
                           method="universal",
                           energy_perc=0.90,
                           fs=fs,
-                          ff=4000)
+                          ff=f0)
 
     # Run all the experiments, first element in res is the original data
     res = [data]
@@ -104,7 +104,7 @@ if __name__ == '__main__':
     duration = 1.5  # seconds
     t = np.linspace(0, duration, int(fs * duration), endpoint=False)
     # Base frequency (center of whistle)
-    f0 = 4000  # Hz
+    f0 = 1000  # Hz
 
     # Frequency modulation (slow + fast wobble)
     f_mod = 800 * np.sin(2 * np.pi * 2 * t)      # slow sweep
@@ -133,8 +133,8 @@ if __name__ == '__main__':
 
 
     noise = np.random.rand(np.shape(data)[0])
-    data = data + noise / 25
-    res = run_experiment(data, level=2, fs=fs)
+    data = data + noise / 20
+    res = run_experiment(data, level=4, fs=fs, f0 = f0)
 
     # EEG Data
     # raw_data = np.genfromtxt("./data/Z001.txt")

@@ -316,11 +316,7 @@ class WaveletDenoising:
                 level = level_determination(self.fundamental_frequency, self.sampling_frequency)
                 self.nlevel = level
                 print("uwu", self.nlevel)
-            print(self.nlevel)
-            print(size)
-            print(np.shape(signal[:size]))
             coeffs = swt(signal[:size], self.filter_, level=self.nlevel)
-            print("shape coeffs", np.shape(coeffs))
 
         else:
             print("transform is not set correctly defaulting to dwt")
@@ -407,12 +403,10 @@ class WaveletDenoising:
         """
         # coeffs = impulsive_noise_filter(signal, coeffs)
         print(np.shape(coeffs))
-        filtered_coeffs = non_impulsive_noise_filter(signal, coeffs, self.filter_, self.sampling_frequency)
-        #TODO: check if not inverted
-        coeffs = [(ca, filtered_coeffs[i + 1]) for i, (ca, cd) in enumerate(coeffs)]
-
+        filtered_coeffs = non_impulsive_noise_filter(signal, np.array(coeffs), self.filter_, self.sampling_frequency)
+    
         # Apply the WAVEREC to reconstruct the signal
-        denoised_signal = iswt(coeffs, self.filter_)
+        denoised_signal = iswt(filtered_coeffs, self.filter_)
 
         # Inverse normalization in case the input signal was normalized
         if self.normalize:
