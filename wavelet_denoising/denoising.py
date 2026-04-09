@@ -1,11 +1,14 @@
+# code taken from https://github.com/gdetor/wavelet_denoising/blob/master/denoising.py
+
 import numpy as np
 
 from scipy.signal import detrend
 
 from sklearn.preprocessing import MinMaxScaler
 
-from pywt import wavedec, dwt_max_level, Wavelet, threshold, waverec
+from pywt import wavedec, dwt_max_level, Wavelet, threshold, waverec, swt, swt_max_level, iswt
 
+from src.si_acf.si_acf import non_impulsive_noise_filter, level_determination
 
 # =====================================================================
 # Auxiliary functions
@@ -117,12 +120,15 @@ class WaveletDenoising:
     def __init__(self,
                  normalize=False,
                  wavelet='haar',
+                 transform='dwt',
                  level=1,
                  thr_mode='soft',
                  recon_mode='smooth',
                  selected_level=0,
                  method='universal',
-                 energy_perc=0.9):
+                 energy_perc=0.9,
+                 fs=1,
+                 ff=1):
         """! Constructor of WaveletDenoising class.
         @param normalize Enables the normalization of the input signal into
         [0, 1] (bool)
@@ -157,6 +163,7 @@ class WaveletDenoising:
         https://pywavelets.readthedocs.io/en/latest/ref/signal-extension-modes.html#ref-modes
         """
         self.wavelet = wavelet
+        self.transform = transform
         self.level = level
         self.method = method
         self.thr_mode = thr_mode
@@ -164,6 +171,8 @@ class WaveletDenoising:
         self.recon_mode = recon_mode
         self.energy_perc = energy_perc
         self.normalize = normalize
+        self.sampling_frequency = fs
+        self.fundamental_frequency = ff
 
         self.filter_ = Wavelet(self.wavelet)    # Wavelet function
 
@@ -172,6 +181,11 @@ class WaveletDenoising:
             self.nlevel = 1
         else:
             self.nlevel = level
+
+        # check if self.transform is set correctly:
+        if self.transform != 'swt' and self.transform != 'dwt':
+            print(f"transform is set to {self.transform} which is not either swt or dwt defaulting to dwt")
+            self.transform = "dwt"
         self.normalized_data = None
 
     def fit(self, signal):
@@ -189,7 +203,10 @@ class WaveletDenoising:
         tmp_signal = signal.copy()
         tmp_signal = self.Preprocess(tmp_signal)
         coeffs = self.WavTransform(tmp_signal)
-        denoised_signal = self.Denoise(tmp_signal, coeffs)
+        if self.method == "si_acf":
+            denoised_signal = self.Denoise_SI_ACF(tmp_signal, coeffs)
+        else:
+            denoised_signal = self.Denoise(tmp_signal, coeffs)
         return denoised_signal
 
     # ********************************************************************
@@ -220,6 +237,7 @@ class WaveletDenoising:
 
     # ********************************************************************
     # Standard Deviation
+    #TODO: Adapt std to work with swt
     def std(self, signal, level=None):
         """! Estimates the standard deviation of the input signal for rescaling
         the Wavelet's coefficients.
@@ -277,15 +295,46 @@ class WaveletDenoising:
         """
         # Find the nearest even integer to input signal's length
         size = NearestEvenInteger(signal.shape[0])
+        print(self.nlevel)
 
+        if self.transform == 'dwt':
         # Check if a WAVEDEC level has been provided otherwise infer one
-        if self.nlevel == 0:
-            level = dwt_max_level(signal.shape[0],
-                                  filter_len=self.filter_.dec_len)
-            self.nlevel = level
+            if self.nlevel == 0:
+                level = dwt_max_level(signal.shape[0],
+                                    filter_len=self.filter_.dec_len)
+                self.nlevel = level
+            
+            coeffs = wavedec(signal[:size], self.filter_, level=self.nlevel)
+
+        elif self.transform == 'swt':
+            if self.nlevel == 0:
+                level = swt_max_level(signal.shape[0])
+                self.nlevel = level
+
+            if self.method == "si_acf":
+                #TODO: link it and add both frenquency parameters when creating the class
+                level = level_determination(self.fundamental_frequency, self.sampling_frequency)
+                self.nlevel = level
+                print("uwu", self.nlevel)
+            print(self.nlevel)
+            print(size)
+            print(np.shape(signal[:size]))
+            coeffs = swt(signal[:size], self.filter_, level=self.nlevel)
+            print("shape coeffs", np.shape(coeffs))
+
+        else:
+            print("transform is not set correctly defaulting to dwt")
+            self.transform = "dwt"
+
+            if self.nlevel == 0:
+                level = dwt_max_level(signal.shape[0],
+                                    filter_len=self.filter_.dec_len)
+                self.nlevel = level
+            
+            coeffs = wavedec(signal[:size], self.filter_, level=self.nlevel)
+
 
         # Compute the Wavelet coefficients using WAVEDEC
-        coeffs = wavedec(signal[:size], self.filter_, level=self.nlevel)
         return coeffs
 
     # ********************************************************************
@@ -304,26 +353,73 @@ class WaveletDenoising:
         @return The denoised signal
         """
         # Estimate the SD of the wavelet coefficients
-        sigma = self.std(coeffs[1:], level=self.selected_level)
+        if self.transform == "dwt":
+            details_coeffs = coeffs[1:]
 
-        # Determine the threshold for the coefficients based on the level of
-        # WAVEDEC
-        thr = [self.DetermineThreshold(coeffs[1+level] / sigma[level],
-                                       self.energy_perc) * sigma[level]
-               for level in range(self.nlevel)]
+            sigma = self.std(details_coeffs, level=self.selected_level)
 
-        # Apply the threshold to all the coefficients
-        coeffs[1:] = [threshold(c, value=thr[i], mode=self.thr_mode)
-                      for i, c in enumerate(coeffs[1:])]
+            # Determine the threshold for the coefficients based on the level of
+            # WAVEDEC
+            thr = [self.DetermineThreshold(coeffs[1+level] / sigma[level],
+                                        self.energy_perc) * sigma[level]
+                for level in range(self.nlevel)]
 
-        # Apply the WAVEREC to reconstruct the signal
-        denoised_signal = waverec(coeffs, self.filter_, mode=self.recon_mode)
+            # Apply the threshold to all the coefficients
+            coeffs[1:] = [threshold(c, value=thr[i], mode=self.thr_mode)
+                        for i, c in enumerate(coeffs[1:])]
+
+            # Apply the WAVEREC to reconstruct the signal
+            denoised_signal = waverec(coeffs, self.filter_, mode=self.recon_mode)
+            
+        if self.transform == "swt":
+            details_coeffs = [cd for ca, cd in coeffs]
+
+            sigma = self.std(details_coeffs, level=self.selected_level)
+
+            # Determine the threshold for the coefficients based on the level of
+            # WAVEDEC
+            thr = [self.DetermineThreshold(details_coeffs[level] / sigma[level],
+                                        self.energy_perc) * sigma[level]
+                for level in range(self.nlevel)]
+
+            # Apply the threshold to all the coefficients
+            details_coeffs = [threshold(c, value=thr[i], mode=self.thr_mode)
+                        for i, c in enumerate(details_coeffs)]
+
+            coeffs = [(ca, details_coeffs[i]) for i, (ca, cd) in enumerate(coeffs)]
+
+            # Apply the WAVEREC to reconstruct the signal
+            denoised_signal = iswt(coeffs, self.filter_)
 
         # Inverse normalization in case the input signal was normalized
         if self.normalize:
             denoised_signal = self.scaler.inverse_transform(
                     denoised_signal.reshape(-1, 1))[:, 0]
         return denoised_signal
+    
+    def Denoise_SI_ACF(self, signal, coeffs):
+        """! Denoises the input signal based on the heuristic from Zhou et al 2025.
+
+        @param signal The input signal to be denoised
+        @param coeffs The wavelet multilevel decomposition coefficients
+
+        @return The denoised signal
+        """
+        # coeffs = impulsive_noise_filter(signal, coeffs)
+        print(np.shape(coeffs))
+        filtered_coeffs = non_impulsive_noise_filter(signal, coeffs, self.filter_, self.sampling_frequency)
+        #TODO: check if not inverted
+        coeffs = [(ca, filtered_coeffs[i + 1]) for i, (ca, cd) in enumerate(coeffs)]
+
+        # Apply the WAVEREC to reconstruct the signal
+        denoised_signal = iswt(coeffs, self.filter_)
+
+        # Inverse normalization in case the input signal was normalized
+        if self.normalize:
+            denoised_signal = self.scaler.inverse_transform(
+                    denoised_signal.reshape(-1, 1))[:, 0]
+        return denoised_signal
+
 
     # ********************************************************************
     # Thresholding methods

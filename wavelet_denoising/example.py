@@ -1,3 +1,5 @@
+# code taken from https://github.com/gdetor/wavelet_denoising/blob/master/example.py
+
 import numpy as np
 # import pandas as pd
 import matplotlib.pylab as plt
@@ -7,6 +9,7 @@ from scipy.signal import spectrogram
 
 from denoising import WaveletDenoising
 
+from src.mathematics.metrics import SNR_in, SNR_out
 
 def plot_coeffs_distribution(coeffs):
     """! Plots all the wavelet decomposition's coefficients. """
@@ -46,23 +49,28 @@ def run_experiment(data, level=2, fs=1, nperseg=256, length=100):
               'SURE Method',
               'Energy Method',
               'SQTWOLOG Method',
-              'Heursure Method']
+              'Heursure Method',
+              'SI-ACF Method']
 
     # Theshold methods
     experiment = ['universal',
                   'stein',
                   'energy',
                   'sqtwolog',
-                  'heurstein']
+                  'heurstein',
+                  "si_acf"]
 
     # WaveletDenoising class instance
     wd = WaveletDenoising(normalize=False,
                           wavelet='db3',
+                          transform='swt',
                           level=level,
                           thr_mode='soft',
                           selected_level=level,
                           method="universal",
-                          energy_perc=0.90)
+                          energy_perc=0.90,
+                          fs=fs,
+                          ff=4000)
 
     # Run all the experiments, first element in res is the original data
     res = [data]
@@ -78,17 +86,55 @@ def run_experiment(data, level=2, fs=1, nperseg=256, length=100):
                 fs=fs,
                 length=length,
                 nperseg=nperseg)
+    
+    return res
 
 
 if __name__ == '__main__':
     # ECG Data
     import pandas as pd
-    fs = 100
-    raw_data = pd.read_pickle("./data/apnea_ecg.pkl")
-    N = int(len(raw_data) // 1000)
-    data = raw_data[:N].values
-    data = data[:, 0]
-    run_experiment(data, level=3, fs=fs)
+    # fs = 20
+    # raw_data = pd.read_pickle("./data/apnea_ecg.pkl")
+    # N = int(len(raw_data) // 1000)
+    # N = min(2048, N)
+    # data = raw_data[:N].values
+    # data = data[:, 0]
+
+    fs = 44100  # sample rate
+    duration = 1.5  # seconds
+    t = np.linspace(0, duration, int(fs * duration), endpoint=False)
+    # Base frequency (center of whistle)
+    f0 = 4000  # Hz
+
+    # Frequency modulation (slow + fast wobble)
+    f_mod = 800 * np.sin(2 * np.pi * 2 * t)      # slow sweep
+    f_vibrato = 200 * np.sin(2 * np.pi * 8 * t)  # faster vibrato
+
+    # Instantaneous frequency
+    f_t = f0 + f_mod + f_vibrato
+
+    # Integrate frequency to phase
+    phase = 2 * np.pi * np.cumsum(f_t) / fs
+
+    # Generate waveform
+    signal = np.sin(phase)
+
+    # Apply amplitude envelope (fade in/out)
+    envelope = np.exp(-3 * t) * (1 - np.exp(-10 * t))
+    signal *= envelope
+
+    # Normalize
+    signal /= np.max(np.abs(signal))
+
+    print(signal.shape)  # NumPy array
+
+    data = signal[:65536]
+    print(np.size(data))
+
+
+    noise = np.random.rand(np.shape(data)[0])
+    data = data + noise / 25
+    res = run_experiment(data, level=2, fs=fs)
 
     # EEG Data
     # raw_data = np.genfromtxt("./data/Z001.txt")
@@ -99,3 +145,7 @@ if __name__ == '__main__':
     # data = filtfilt(b, a, raw_data)
     # run_experiment(data, level=4, fs=fs)
     plt.show()
+
+    print("SNR_in", SNR_in(data, noise))
+    for r in res[1:]:
+        print("SNR_out", SNR_out(data + noise, r))
