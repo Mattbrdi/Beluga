@@ -1,6 +1,6 @@
 import numpy as np 
 from scipy import signal as sp_signal 
-
+import matplotlib.pyplot as plt
 class Signal:
     def __init__(self, data: np.ndarray, freq: float):
         self.data = np.array(data)
@@ -142,6 +142,118 @@ class Signal:
         
         signal[idx_start:idx_end] = active_signal * window
         return Signal(data = signal, freq = fs )
+
+    def fft(self, n: int|None = None) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Calcule la transformée de Fourier discrète (DFT) du signal.
+        
+        Args:
+            n (int, optional): Nombre de points de la FFT (zero-padding si n > len(data)).
+            
+        Returns:
+            tuple: (fréquences en Hz, amplitudes complexes)
+        """
+        n = n or len(self.data)
+        freqs = np.fft.fftfreq(n, 1/self.freq)
+        fft_values = np.fft.fft(self.data, n)
+        return freqs, fft_values
+
+    def power_spectral_density(self, nperseg: int = 256):
+        """Calcule la densité spectrale de puissance (méthode de Welch)."""
+        f, psd = sp_signal.welch(self.data, self.freq, nperseg=nperseg)
+        return f, psd
+    
+    def normalize(self, method: str = 'peak') -> 'Signal':
+        """
+        Normalise le signal.
+        - 'peak' : ramène l'amplitude max à 1.
+        - 'rms' : ramène la valeur efficace à 1.
+        """
+        if method == 'peak':
+            new_data = self.data / np.max(np.abs(self.data))
+        elif method == 'rms':
+            rms = np.sqrt(np.mean(self.data**2))
+            new_data = self.data / rms
+        else:
+            raise ValueError("Méthode inconnue")
+        return Signal(new_data, self.freq)
+
+    @property
+    def energy(self) -> float:
+        """Calcule l'énergie du signal : E = sum(|x[n]|^2)"""
+        return np.sum(np.square(self.data)) 
+    
+    def stft(self, window: str = 'hann', nperseg: int = 256, noverlap: int|None = None, nfft: int|None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Calcule la STFT.
+        
+        Args:
+            window (str): Type de fenêtre à utiliser (ex: 'hann', 'hamming', 'boxcar').
+            nperseg (int): Longueur de chaque segment (nombre d'échantillons).
+            noverlap (int, optional): Nombre de points de recouvrement entre segments. 
+                                      Par défaut, nperseg // 2.
+            nfft (int, optional): Longueur de la FFT utilisée, si un zero-padding est souhaité.
+
+        Returns:
+            f (np.ndarray): Tableau des fréquences d'échantillonnage.
+            t (np.ndarray): Tableau des temps de segments.
+            Zxx (np.ndarray): STFT du signal (valeurs complexes).
+        """
+        f, t, Zxx = sp_signal.stft(
+            self.data, 
+            fs=self.freq, 
+            window=window, 
+            nperseg=nperseg, 
+            noverlap=noverlap, 
+            nfft=nfft,
+            boundary='zeros',
+            padded=True
+        )
+        return f, t, Zxx
+
+    def plot(self, ax=None, title="Signal", **kwargs):
+        """Affiche le signal dans le domaine temporel."""
+        if ax is None:
+            _, ax = plt.subplots(figsize=(10, 4))
+        
+        ax.plot(self.time, self.data, **kwargs)
+        ax.set_title(title)
+        ax.set_xlabel("Temps (s)")
+        ax.set_ylabel("Amplitude")
+        ax.grid(True)
+        return ax
+    
+    def plot_spectrogram(self, nperseg=256, ax=None, db=True):
+            """
+            Affiche le spectrogramme d'un signal unique.
+            Rigueur : Utilise une échelle logarithmique (dB) pour la dynamique.
+            """
+            
+            f, t, Zxx = self.stft(nperseg=nperseg)
+            
+            if ax is None:
+                fig, ax = plt.subplots(figsize=(10, 6))
+            
+            # Calcul de la magnitude
+            magnitude = np.abs(Zxx)
+            if db:
+                # Ajout d'un epsilon pour éviter log(0)
+                display_data = 10 * np.log10(magnitude + 1e-10)
+                label = "Magnitude (dB)"
+            else:
+                display_data = magnitude
+                label = "Magnitude (linéaire)"
+
+            im = ax.pcolormesh(t, f, display_data, shading='gouraud', cmap='viridis')
+            ax.set_title(f"Spectrogramme - fs={self.freq}Hz")
+            ax.set_ylabel("Fréquence (Hz)")
+            ax.set_xlabel("Temps (s)")
+            
+            # Gestion de la colorbar si l'axe est créé ici
+            if ax.get_figure().axes:
+                plt.colorbar(im, ax=ax, label=label)
+                
+            return im
     
 class MultiSignal:
     def __init__(self, signals: list):
@@ -160,7 +272,7 @@ class MultiSignal:
             raise ValueError("Toutes les instances de Signal doivent avoir la même fréquence.")
         
         self.signals = signals
-        self.E = len(signals) #nombre de signal
+        self.num_signals = len(signals) #nombre de signal
 
     @property
     def data(self) -> np.ndarray:
@@ -173,9 +285,9 @@ class MultiSignal:
         max_len = max(len(s.data) for s in self.signals)
         
         # Initialisation de la matrice (Nombre d'entrées E x Longueur N)
-        matrix = np.zeros((self.E, max_len))
+        matrix = np.zeros((self.num_signals, max_len))
         
-        # Remplissage de la matrice avec padding automatique
+        # Remplissage de la matrice 
         for i, s in enumerate(self.signals):
             matrix[i, :len(s.data)] = s.data
             
@@ -189,9 +301,112 @@ class MultiSignal:
     def time(self) -> np.ndarray:
         return np.arange(0, self.duration, 1/self.freq)
     
+    def stft(self, window: str = 'hann', nperseg: int = 256, noverlap: int|None = None, nfft: int|None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+        """
+        Calcule la STFT de manière vectorisée sur la matrice de données.
+        
+        Args:
+            window (str): Fenêtre de pondération.
+            nperseg (int): Longueur de chaque segment.
+            noverlap (int, optional): Nombre de points de recouvrement.
+            nfft (int, optional): Longueur de la FFT.
+
+        Returns:
+            f (np.ndarray): Fréquences.
+            t (np.ndarray): Temps.
+            Zxx (np.ndarray): Tenseur (signaux, fréquences, temps).
+        """
+        # On récupère la matrice (E, N) qui gère déjà le padding
+        X = self.data
+        
+        # scipy.signal.stft accepte des matrices en entrée.
+        # Par défaut, il opère sur le dernier axe (axis=-1), ce qui correspond à nos échantillons N.
+        f, t, Zxx = sp_signal.stft(
+            X, 
+            fs=self.freq, 
+            window=window, 
+            nperseg=nperseg, 
+            noverlap=noverlap, 
+            nfft=nfft,
+            axis=-1
+        )
+        
+        return f, t, Zxx
+    
+    def plot(self, overlay: bool = False, sharex: bool = True, figsize: tuple = (12, 6)):
+        """
+        Affiche les signaux du MultiSignal.
+        
+        Args:
+            overlay (bool): Si True, tous les signaux sont tracés sur le même graphique.
+                            Si False, chaque signal a son propre subplot.
+            sharex (bool): Partage l'axe X entre les subplots (ignoré si overlay=True).
+            figsize (tuple): Taille de la figure.
+        """
+        if overlay:
+            # Cas : Tout sur le même graphique
+            fig, ax = plt.subplots(figsize=figsize)
+            for i, s in enumerate(self.signals):
+                ax.plot(s.time, s.data, label=f"Signal {i}")
+            ax.set_title("MultiSignal - Vue superposée")
+            ax.set_xlabel("Temps (s)")
+            ax.set_ylabel("Amplitude")
+            ax.legend()
+            ax.grid(True)
+            return fig, ax
+        else:
+            # Cas : Subplots séparés 
+            fig, axes = plt.subplots(self.num_signals, 1, figsize=(figsize[0], 2 * self.num_signals), sharex=sharex)
+            
+            if self.num_signals == 1:
+                axes = [axes]
+                
+            for i, (s, ax) in enumerate(zip(self.signals, axes)):
+                ax.plot(s.time, s.data)
+                ax.set_title(f"Signal {i}")
+                ax.set_ylabel("Amplitude")
+                ax.grid(True)
+            
+            axes[-1].set_xlabel("Temps (s)")
+            plt.tight_layout()
+            return fig, axes
+        
+    def plot_spectrograms(self, nperseg=256, figsize=(12, 10), db=True):
+            """
+            Affiche une grille de spectrogrammes pour comparer les signaux (E).
+            Rigueur : Calcul vectorisé et partage des axes pour comparaison directe.
+            """
+            # Utilisation du calcul vectorisé sur la matrice data (E, N)
+            f, t, Zxx_multi = self.stft(nperseg=nperseg)
+            
+            # Création de subplots verticaux (un par signal)
+            fig, axes = plt.subplots(self.num_signals, 1, figsize=figsize, sharex=True, sharey=True)
+            
+            # Sécurité si E=1
+            if self.num_signals == 1:
+                axes = [axes]
+                
+            for i in range(self.num_signals):
+                magnitude = np.abs(Zxx_multi[i])
+                if db:
+                    display_data = 10 * np.log10(magnitude + 1e-10)
+                else:
+                    display_data = magnitude
+                    
+                im = axes[i].pcolormesh(t, f, display_data, shading='gouraud', cmap='magma')
+                axes[i].set_title(f"Spectrogramme - Signal {i}")
+                axes[i].set_ylabel("Freq (Hz)")
+                
+                # Une colorbar par signal pour voir les différences de gain
+                fig.colorbar(im, ax=axes[i], label="Magnitude")
+                
+            axes[-1].set_xlabel("Temps (s)")
+            plt.tight_layout()
+            return fig, axes
+        
     def __repr__(self):
         n_samples = self.data.shape[1]
-        return f"MultiSignal(E={self.E}, Fs={self.freq}Hz, Durée={n_samples/self.freq:.3f}s)"
+        return f"MultiSignal(E={self.num_signals}, Fs={self.freq}Hz, Durée={n_samples/self.freq:.3f}s)"
     
 class Mixture:
     def __init__(self, E: int, S: int, L: int):
@@ -213,8 +428,47 @@ class Mixture:
         # - E colonnes (entrées)
         # - L profondeur (coefficients du filtre/réponse impulsionnelle)
         self.filters = np.random.randn(S, E, L)
+        
+    @classmethod
+    def create_delay_mixture(cls, E: int, S: int, L: int, delay_matrix: np.ndarray|None = None) -> 'Mixture':
+        """
+        Crée une instance de Mixture où chaque filtre est un retard pur.
+        
+        Args:
+            E (int): Nombre de sources.
+            S (int): Nombre de capteurs.
+            L (int): Longueur des filtres (doit être supérieure au retard max).
+            delay_matrix (np.ndarray, optional): Matrice de dimensions (S, E) contenant les indices 
+                                                 des retards (entiers). Si None, les retards sont aléatoires.
+                                                 
+        Returns:
+            Mixture: Une instance avec des filtres de type dirac.
+        """
+        # Initialisation de l'instance via le constructeur standard
+        instance = cls(E, S, L)
+        
+        # Mise à zéro de tous les filtres initialisés aléatoirement par le constructeur
+        instance.filters = np.zeros((S, E, L))
+        
+        if delay_matrix is None:
+            # Génération de retards aléatoires entre 0 et L-1
+            delay_matrix = np.random.randint(0, L, size=(S, E))
+        else:
+            # Vérification de la rigueur des dimensions
+            if delay_matrix.shape != (S, E):
+                raise ValueError(f"La matrice de retard doit être de taille ({S}, {E})")
+            if np.max(delay_matrix) >= L:
+                raise ValueError("Un retard spécifié dépasse la longueur L du filtre.")
 
-    def apply(self, input_multi: 'MultiSignal', method: str = 'auto') -> 'MultiSignal':
+        # Placement du dirac (valeur 1) à l'indice du retard pour chaque couple (s, e)
+        for s in range(S):
+            for e in range(E):
+                d = int(delay_matrix[s, e])
+                instance.filters[s, e, d] = 1.0
+                
+        return instance
+    
+    def apply(self, input_multi: 'MultiSignal', method: str = 'auto', mode = 'full') -> 'MultiSignal':
         """
         Applique le mélange convolutif : Y = A * X.
         Chaque sortie s est la somme des entrées e convoluées par le filtre A[s,e].
@@ -244,11 +498,10 @@ class Mixture:
                 
                 # Calcul de la convolution complète
                 # L'indice 0 de h est h[0], donc la convolution est naturellement causale
-                y_full = sp_signal.convolve(X[e, :], h, mode='full', method=method)
+                y_out = sp_signal.convolve(X[e, :], h, mode=mode, method=method)
                 
-                # Troncature causale pour conserver la durée N (équivalent à votre mode "same")
                 # On additionne la contribution de la source e à la sortie s
-                Y[s, :] += y_full[:N_samples]
+                Y[s, :] += y_out
 
         # Reconstruction des objets Signal pour le MultiSignal de sortie
 
@@ -257,4 +510,4 @@ class Mixture:
         return MultiSignal(output_signals)
     
     def __repr__(self):
-        return f"Mixture(Entrées={self.E}, Sorties={self.S}, Longueur du filtre={self.L})"git 
+        return f"Mixture(Entrées={self.E}, Sorties={self.S}, Longueur du filtre={self.L})"
