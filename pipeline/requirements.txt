@@ -1,0 +1,12 @@
+numpy>=2.1.2
+matplotlib>=3.10.0
+scipy >= 1.15.2
+torch
+torchvision
+librosa
+soundfile
+scikit-maad
+dash
+plotly
+folium
+pyproj
