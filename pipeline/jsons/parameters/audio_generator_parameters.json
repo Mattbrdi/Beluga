@@ -1,0 +1,40 @@
+{
+  "debug_mode": true,
+  "print_level": 2,
+  "max_position_frames": 100,
+  "use_gcc": false,
+  "location_parameters": {
+    "use_h4": true,
+    "fusion_type": "low",
+    "projection_plan": 0.0
+  },
+  "vmd_denoise_parameters": {
+    "use_woa": false,
+    "use_vmd": false,
+    "modes_choice_method": "cc",
+    "vmd_options": {
+        "max_iter": 500,
+        "nb_modes": 4,
+        "tolerance": 1e-7,
+        "alpha": 3000,
+        "tau": 0
+    },
+    "woa_options": {
+        "pop_size": 15,
+        "max_iter": 50,
+        "min_k_bound": 3,
+        "max_k_bound": 9,
+        "min_alpha_bound": 1000,
+        "max_alpha_bound": 9000
+    },
+    "imf_threshold": 0.7,
+    "output_vmd_log": false,
+    "remove_dc": true,
+    "compute_noisy_imfs": true,
+    "cc_threshold": 0.1
+  },
+  "pre_filter_parameters": {
+    "order": 4,
+    "filtering_method": "ideal_bp"
+  }
+}
