@@ -1,4 +1,4 @@
 ## gitignore
 
-/pipeline/test_data/full_audios/
+/pipeline/test_data/full\ audios/
 /pipeline/noises/
