@@ -4,6 +4,8 @@ import pywt
 
 import numpy.typing as npt
 
+import ruptures as rpt
+
 def full_swt_coeffs_to_approx_coeff(full_swt_coeffs : npt.NDArray[np.float64]):
     """! Extracts the SWT coefficients into the reduced format that keeps
     only the top-level approximation coefficient and all detail coefficients.
@@ -270,4 +272,48 @@ def non_impulsive_noise_filter(signal : npt.NDArray[np.float64], coeffs : npt.ND
     return replace_approx_coeff_in_full_swt_coeffs(coeffs, new_coeffs)
   
 def impulsive_noise_filter(signal : npt.NDArray[np.float64], coeffs : npt.NDArray[np.float64], wavelet : pywt.Wavelet, fs : float) -> npt.NDArray[np.float64]:
-    pass
+    window_length = int(0.1 * fs)
+    signal_length = len(signal)
+    full_approx_coeff = full_swt_coeffs_to_approx_coeff(coeffs)    
+
+    K = 1
+
+    for coeff in full_approx_coeff[1:]:
+        for i in range(0,signal_length - window_length + 1, window_length // 2):
+            chunk = coeff[i:i + window_length].copy()
+            sorted_indexes = np.argsort(chunk)
+            sorted_chunk = chunk[sorted_indexes]
+
+            positive_sorted_chunk = sorted_chunk[sorted_chunk > 0]
+            negative_sorted_chunk = sorted_chunk[sorted_chunk <= 0]
+
+            bkps_neg = None
+            changepoints_neg = None
+            bkps_pos = None
+            changepoints_pos = None
+
+            # positive side
+            if len(positive_sorted_chunk) >= 4:
+                algo_pos = rpt.Dynp(model="normal", min_size=2).fit(positive_sorted_chunk)
+                bkps_pos = algo_pos.predict(n_bkps=K)
+                cp = bkps_pos[0]
+                print("cp", cp, i + sorted_indexes[cp])
+                if 0 < cp < len(positive_sorted_chunk):
+                    t_plus = positive_sorted_chunk[cp - 1]
+                    mu_plus = np.mean(positive_sorted_chunk[cp:])
+                    chunk[chunk > t_plus] = mu_plus
+
+            # negative side
+            if len(negative_sorted_chunk) >= 4:
+                algo_neg = rpt.Dynp(model="normal", min_size=2).fit(negative_sorted_chunk)
+                bkps_neg = algo_neg.predict(n_bkps=K)
+                cp = bkps_neg[0]
+
+                if 0 < cp < len(negative_sorted_chunk):
+                    t_minus = negative_sorted_chunk[cp]
+                    mu_neg = np.mean(negative_sorted_chunk[:cp])
+                    chunk[chunk < t_minus] = mu_neg
+
+            coeff[i: i + window_length] = chunk
+    
+    return replace_approx_coeff_in_full_swt_coeffs(coeffs, full_approx_coeff)
