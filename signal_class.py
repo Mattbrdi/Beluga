@@ -1,6 +1,7 @@
 import numpy as np 
 from scipy import signal as sp_signal 
 import matplotlib.pyplot as plt
+print("hello")
 class Signal:
     def __init__(self, data: np.ndarray, freq: float):
         self.data = np.array(data)
@@ -39,9 +40,10 @@ class Signal:
     @property
     def duration(self) -> float:
         return len(self.data) / self.freq
+    
     @property
     def time(self) -> np.ndarray:
-        return np.arange(0, self.duration, 1/self.freq)
+        return np.linspace(0, self.duration, len(self.data), endpoint=False)
     
     @classmethod
     def from_zeros(cls, duration: float, freq:float) -> 'Signal':
@@ -56,6 +58,33 @@ class Signal:
         data = np.zeros(int(duration * freq))
         return cls(data, freq)
     
+    @classmethod 
+    def generate_multi_freq_signal(cls, duration: float, fs: float, start_time : float, end_time: float, frequencies: list, window_type: str = 'hann'):
+        """
+        
+        Crée un signal de durée duration avec contenue fréquentiel entre deux instant
+
+        Returns:
+            Signal
+        """
+        t = np.arange(0, duration, 1/fs)
+        signal = np.zeros_like(t)
+        
+        idx_start = int(start_time * fs)
+        idx_end = int(end_time * fs)
+        
+        t_active = t[idx_start:idx_end]
+        
+        # Somme des composantes fréquentielles (f en Hz)
+        active_signal = np.zeros_like(t_active)
+        for f in frequencies:
+            active_signal += np.sin(2 * np.pi * f * t_active)
+        
+        # Fenêtrage pour une montée/descente progressive
+        window = sp_signal.get_window(window_type, len(active_signal))
+        
+        signal[idx_start:idx_end] = active_signal * window
+        return Signal(data = signal, freq = fs )
     
     @classmethod
     def concat(cls, *signals : 'Signal')-> 'Signal' :
@@ -90,9 +119,9 @@ class Signal:
         Paramètres:
         - signal: array du signal d'origine (x)
         - impulse_response: array de la réponse impulsionnelle (h) 
-        - mode 
+        - mode : Attention, ca ne correspond pas aux modes habituels, ce sont ici toujours des filtres causaux
             'full' : output of size N+L-1
-            'same' : output of size N
+            'same' : output of size N 
                
         return un nouveau signal
         
@@ -115,33 +144,6 @@ class Signal:
         return resultat
     
     
-    @classmethod 
-    def generate_multi_freq_signal(cls, duration: float, fs: float, start_time : float, end_time: float, frequencies: list, window_type: str = 'hann'):
-        """
-        
-        Crée un signal de durée duration avec contenue fréquentiel entre deux instant
-
-        Returns:
-            Signal
-        """
-        t = np.arange(0, duration, 1/fs)
-        signal = np.zeros_like(t)
-        
-        idx_start = int(start_time * fs)
-        idx_end = int(end_time * fs)
-        
-        t_active = t[idx_start:idx_end]
-        
-        # Somme des composantes fréquentielles (f en Hz)
-        active_signal = np.zeros_like(t_active)
-        for f in frequencies:
-            active_signal += np.sin(2 * np.pi * f * t_active)
-        
-        # Fenêtrage pour une montée/descente progressive
-        window = sp_signal.get_window(window_type, len(active_signal))
-        
-        signal[idx_start:idx_end] = active_signal * window
-        return Signal(data = signal, freq = fs )
 
     def fft(self, n: int|None = None) -> tuple[np.ndarray, np.ndarray]:
         """
@@ -172,7 +174,7 @@ class Signal:
         if method == 'peak':
             new_data = self.data / np.max(np.abs(self.data))
         elif method == 'rms':
-            rms = np.sqrt(np.mean(self.data**2))
+            rms = np.sqrt(np.mean(np.abs(self.data**2)))
             new_data = self.data / rms
         else:
             raise ValueError("Méthode inconnue")
@@ -226,7 +228,7 @@ class Signal:
     def plot_spectrogram(self, nperseg=256, ax=None, db=True):
             """
             Affiche le spectrogramme d'un signal unique.
-            Rigueur : Utilise une échelle logarithmique (dB) pour la dynamique.
+            db : Utilise une échelle logarithmique (dB) pour la dynamique.
             """
             
             f, t, Zxx = self.stft(nperseg=nperseg)
@@ -249,9 +251,11 @@ class Signal:
             ax.set_ylabel("Fréquence (Hz)")
             ax.set_xlabel("Temps (s)")
             
-            # Gestion de la colorbar si l'axe est créé ici
-            if ax.get_figure().axes:
-                plt.colorbar(im, ax=ax, label=label)
+            # Gestion de la colorbar avec vérification de la figure
+            fig = ax.get_figure()
+            if fig is not None:
+                # On ajoute la colorbar à la figure associée à l'axe
+                fig.colorbar(im, ax=ax, label=label)
                 
             return im
     
@@ -379,6 +383,9 @@ class MultiSignal:
             # Utilisation du calcul vectorisé sur la matrice data (E, N)
             f, t, Zxx_multi = self.stft(nperseg=nperseg)
             
+            magnitude_globale = np.abs(Zxx_multi)
+            vmax = 10 * np.log10(np.max(magnitude_globale) + 1e-10)
+            vmin = vmax - 80 # Dynamique de 80 dB par exemple
             # Création de subplots verticaux (un par signal)
             fig, axes = plt.subplots(self.num_signals, 1, figsize=figsize, sharex=True, sharey=True)
             
@@ -393,7 +400,7 @@ class MultiSignal:
                 else:
                     display_data = magnitude
                     
-                im = axes[i].pcolormesh(t, f, display_data, shading='gouraud', cmap='magma')
+                im = axes[i].pcolormesh(t, f, display_data, shading='gouraud', cmap='magma', vmax = vmax, vmin = vmin)
                 axes[i].set_title(f"Spectrogramme - Signal {i}")
                 axes[i].set_ylabel("Freq (Hz)")
                 
@@ -476,6 +483,7 @@ class Mixture:
         Args:
             input_multi (MultiSignal): Le conteneur des signaux d'entrée.
             method (str): Méthode de convolution ('auto', 'fft', ou 'direct').
+            mode (str): 
             
         Returns:
             MultiSignal: Le résultat du mélange.
@@ -489,7 +497,13 @@ class Mixture:
             raise ValueError(f"Nombre d'entrées incohérent : reçu {E_in}, attendu {self.E}")
 
         # Initialisation de la matrice de sortie Y (S, N)
-        Y = np.zeros((self.S, N_samples))
+        if mode =='full': 
+            len_final = N_samples + self.L - 1 
+        elif mode == 'same':
+            len_final = N_samples
+        else: 
+            raise ValueError("mode choisis non supporté")
+        Y = np.zeros((self.S, len_final))
 
         for s in range(self.S):
             for e in range(self.E):
