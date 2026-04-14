@@ -8,7 +8,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 from pywt import wavedec, dwt_max_level, Wavelet, threshold, waverec, swt, swt_max_level, iswt
 
-from src.si_acf.si_acf import non_impulsive_noise_filter, level_determination
+from src.si_acf.si_acf import non_impulsive_noise_filter, level_determination, impulsive_noise_filter
 
 # =====================================================================
 # Auxiliary functions
@@ -377,7 +377,7 @@ class WaveletDenoising:
             thr = [self.DetermineThreshold(details_coeffs[level] / sigma[level],
                                         self.energy_perc) * sigma[level]
                 for level in range(self.nlevel)]
-
+            # print("thr array", list(thr))
             # Apply the threshold to all the coefficients
             details_coeffs = [threshold(c, value=thr[i], mode=self.thr_mode)
                         for i, c in enumerate(details_coeffs)]
@@ -401,12 +401,24 @@ class WaveletDenoising:
 
         @return The denoised signal
         """
-        # coeffs = impulsive_noise_filter(signal, coeffs)
-        print(np.shape(coeffs))
-        filtered_coeffs = non_impulsive_noise_filter(signal, np.array(coeffs), self.filter_, self.sampling_frequency)
+        impulsive_filtered_coeffs = impulsive_noise_filter(signal, coeffs, self.filter_, self.sampling_frequency)
+
+        filtered_coeffs, thr_array = non_impulsive_noise_filter(signal, np.array(impulsive_filtered_coeffs), self.filter_, self.sampling_frequency)
+
+        
+        #testing something 
+        
+        thr_array = thr_array[1:]
+        details_coeffs = [cd for ca, cd in impulsive_filtered_coeffs]
+        test_coeffs = [threshold(c, value=thr_array[i], mode=self.thr_mode)
+                        for i, c in enumerate(details_coeffs)]
+
+        full_test_coeffs = [(ca, test_coeffs[i]) for i, (ca, cd) in enumerate(impulsive_filtered_coeffs)]
     
+        denoised_signal = iswt(full_test_coeffs, self.filter_)
+
         # Apply the WAVEREC to reconstruct the signal
-        denoised_signal = iswt(filtered_coeffs, self.filter_)
+        # denoised_signal = iswt(filtered_coeffs, self.filter_)
 
         # Inverse normalization in case the input signal was normalized
         if self.normalize:

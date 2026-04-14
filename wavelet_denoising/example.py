@@ -133,7 +133,7 @@ if __name__ == '__main__':
 
 
     noise = np.random.rand(np.shape(data)[0])
-    data = data + noise / 20
+    data = data + noise
     res = run_experiment(data, level=4, fs=fs, f0 = f0)
 
     # EEG Data
