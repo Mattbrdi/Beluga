@@ -377,7 +377,7 @@ class WaveletDenoising:
             thr = [self.DetermineThreshold(details_coeffs[level] / sigma[level],
                                         self.energy_perc) * sigma[level]
                 for level in range(self.nlevel)]
-
+            # print("thr array", list(thr))
             # Apply the threshold to all the coefficients
             details_coeffs = [threshold(c, value=thr[i], mode=self.thr_mode)
                         for i, c in enumerate(details_coeffs)]
@@ -403,8 +403,22 @@ class WaveletDenoising:
         """
         impulsive_filtered_coeffs = impulsive_noise_filter(signal, coeffs, self.filter_, self.sampling_frequency)
 
+        filtered_coeffs, thr_array = non_impulsive_noise_filter(signal, np.array(impulsive_filtered_coeffs), self.filter_, self.sampling_frequency)
+
+        
+        #testing something 
+        
+        thr_array = thr_array[1:]
+        details_coeffs = [cd for ca, cd in impulsive_filtered_coeffs]
+        test_coeffs = [threshold(c, value=thr_array[i], mode=self.thr_mode)
+                        for i, c in enumerate(details_coeffs)]
+
+        full_test_coeffs = [(ca, test_coeffs[i]) for i, (ca, cd) in enumerate(impulsive_filtered_coeffs)]
+    
+        denoised_signal = iswt(full_test_coeffs, self.filter_)
+
         # Apply the WAVEREC to reconstruct the signal
-        denoised_signal = iswt(filtered_coeffs, self.filter_)
+        # denoised_signal = iswt(filtered_coeffs, self.filter_)
 
         # Inverse normalization in case the input signal was normalized
         if self.normalize:

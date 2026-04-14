@@ -197,6 +197,7 @@ def non_impulsive_noise_filter(signal : npt.NDArray[np.float64], coeffs : npt.ND
     details_coeffs = full_swt_coeffs_to_approx_coeff(coeffs)
     l = len(details_coeffs) - 1
 
+    thr_array = [np.inf] * (l + 1)
     P1 = compute_P1(coeffs, wavelet)
 
     P2 = compute_P2(coeffs, wavelet)
@@ -210,6 +211,7 @@ def non_impulsive_noise_filter(signal : npt.NDArray[np.float64], coeffs : npt.ND
     if l != (l + 1 - w) and (l + 1 - w) != l - 1 and P2[0] != np.argmin(P2):
         AL = np.zeros(shape=np.shape(AL))
         new_coeffs[0] = AL
+        thr_array[0] = 0
 
     new_full_swt_coeffs = coeffs.copy()
 
@@ -219,6 +221,7 @@ def non_impulsive_noise_filter(signal : npt.NDArray[np.float64], coeffs : npt.ND
             print(np.shape(new_full_swt_coeffs))
             thr = trisection(new_full_swt_coeffs, i, wavelet)
             new_coeffs[i][np.abs(new_coeffs[i]) < thr] = 0
+            thr_array[i] = thr
 
     win = int(0.1 * fs)
     D_w = new_coeffs[w]
@@ -268,8 +271,9 @@ def non_impulsive_noise_filter(signal : npt.NDArray[np.float64], coeffs : npt.ND
     thr = ak if rho_ak > rho_dk else dk
 
     new_coeffs[w][np.abs(new_coeffs[w]) < thr] = 0
+    thr_array[w] = thr
     #TODO: verify what to return  
-    return replace_approx_coeff_in_full_swt_coeffs(coeffs, new_coeffs)
+    return replace_approx_coeff_in_full_swt_coeffs(coeffs, new_coeffs), thr_array
   
 def impulsive_noise_filter(signal : npt.NDArray[np.float64], coeffs : npt.NDArray[np.float64], wavelet : pywt.Wavelet, fs : float) -> npt.NDArray[np.float64]:
     window_length = int(0.1 * fs)
