@@ -134,11 +134,11 @@ def compute_P2(full_swt_coeffs : npt.NDArray[np.float64], wavelet : pywt.Wavelet
     original_shape = np.shape(full_approx_coeffs)
     new_shape = (original_shape[0], original_shape[0], original_shape[1])
     i = np.arange(original_shape[0])
-    new_coeffs = individual_coeffs = np.zeros(shape=new_shape, dtype=np.float64)
+    new_coeffs = np.zeros(shape=new_shape, dtype=np.float64)
     new_coeffs[i,:,:] = full_approx_coeffs.copy()
     new_coeffs[i,i,:] = np.zeros(shape=new_shape[2], dtype=np.float64)
     
-    individual_signals =  np.array([iswt(replace_approx_coeff_in_full_swt_coeffs(full_swt_coeffs, ac), wavelet) for ac in individual_coeffs])
+    individual_signals =  np.array([iswt(replace_approx_coeff_in_full_swt_coeffs(full_swt_coeffs, ac), wavelet) for ac in new_coeffs])
 
     auto_correlations = np.array([auto_correlation(s) for s in individual_signals])
 
