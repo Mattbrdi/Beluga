@@ -6,9 +6,13 @@ from pyproj import Transformer
 from math import radians, sin, cos, sqrt, atan2
 
 
-audio_path =  [r"C:\Users\Admin\Desktop\belugaWatch\beluga-watch\beluga-watch-main\test_data\full audios\8296\8296.240804084225.wav", 
-               r"C:\Users\Admin\Desktop\belugaWatch\beluga-watch\beluga-watch-main\test_data\full audios\8295\8295.240804084225.wav",
-               ]
+# audio_path =  [r"C:\Users\Admin\Desktop\belugaWatch\beluga-watch\beluga-watch-main\test_data\full audios\8296\8296.240804084225.wav", 
+#                r"C:\Users\Admin\Desktop\belugaWatch\beluga-watch\beluga-watch-main\test_data\full audios\8295\8295.240804084225.wav",
+#                ]
+
+audio_path =  [r"C:\Users\amine\Desktop\Canada\beluga\pipeline\test_data\full audios\8296\8296.240729065600.wav", 
+               r"C:\Users\amine\Desktop\Canada\beluga\pipeline\test_data\full audios\8295\8295.240729065600.wav",
+               ]    
 model_path = 'jsons/models/mobile_net_8_layers_qat.pt'
 param_path = 'jsons/parameters/default_parameters.json'
 env_path = 'jsons/environments/env_cacouna.json'
@@ -46,9 +50,9 @@ if __name__ == "__main__":
         #[(47.943012, -69.518671)],
 
         #2024-07-29 [07h00-07h10]
-        #[(47.940056, -69.530229), (47.939948, -69.530897), (47.939373, -69.531312),
-        # (47.938277, -69.533283), (47.937416, -69.535017), (47.937167, -69.535564),
-        # (47.939913, -69.534175)],
+        [(47.940056, -69.530229), (47.939948, -69.530897), (47.939373, -69.531312),
+        (47.938277, -69.533283), (47.937416, -69.535017), (47.937167, -69.535564),
+        (47.939913, -69.534175)],
 
         #2024-07-29 [11h40-12h40]
         #[(47.939973, -69.528317), (47.941761, -69.522871), (47.941849, -69.522566),
@@ -56,11 +60,11 @@ if __name__ == "__main__":
         # (47.940690, -69.530254), (47.938799, -69.535928)],
 
         #2024-08-04 [08h30-09h50]
-        [(47.936815, -69.524449), (47.933553, -69.540572), (47.932641, -69.539965),
-         (47.932844, -69.540278), (47.932842, -69.540286), (47.945641, -69.523906),
-         (47.945017, -69.524993), (47.944608, -69.526129), (47.941017, -69.533308),
-         (47.935525, -69.535717), (47.935611, -69.535486), (47.936317, -69.530894),
-         (47.937244, -69.528370)],
+        # [(47.936815, -69.524449), (47.933553, -69.540572), (47.932641, -69.539965),
+        #  (47.932844, -69.540278), (47.932842, -69.540286), (47.945641, -69.523906),
+        #  (47.945017, -69.524993), (47.944608, -69.526129), (47.941017, -69.533308),
+        #  (47.935525, -69.535717), (47.935611, -69.535486), (47.936317, -69.530894),
+        #  (47.937244, -69.528370)],
         
         # dummy (modifier le code pour pouvoir utiliser sans ground truth?)
         #[(47.942531, -69.528000)],
