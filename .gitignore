@@ -4,3 +4,4 @@
 /pipeline/noises/
 /pipeline/__pycache__/
 /pipeline/test_data/results/
+__pycache__/
