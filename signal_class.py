@@ -476,7 +476,7 @@ class Mixture:
 
 class NSpectrogram:
     def __init__(self, f: np.ndarray, t: np.ndarray, Sxx: np.ndarray, fs: float, 
-                 window: str, nperseg: int, noverlap: int|None = None, nfft: int|None = None, whitening_matrix: np.ndarray|None = None):
+                 window: str, nperseg: int, noverlap: int|None = None, nfft: int|None = None):
         """
         Conteneur pour les données de temps-fréquence de plusieurs signaux avec métadonnées de construction.
         
@@ -576,37 +576,55 @@ class NSpectrogram:
             noverlap=self.noverlap, 
             nfft=self.nfft
         )
-          
-    def compute_whitening_matrix(self) -> np.ndarray:
+    
+    def decompose_spatial_correlation(self) -> tuple[np.ndarray, np.ndarray]:
         """
-        Calcule la matrice de blanchiment W basée sur la corrélation spatiale.
-        
-        W est définie telle que E[(W X)(W X)^H] = I.
+        Calcule la décomposition spectrale (Eigendecomposition) de la corrélation spatiale.
         
         Returns:
-            np.ndarray: Matrice de blanchiment de dimension (E, E).
+            tuple: (eigenvalues, eigenvectors) 
+                eigenvalues: vecteur (E,) des variances sur les axes principaux.
+                eigenvectors: matrice (E, E) des directions spatiales.
         """
-        # E: nombre de signaux, F: fréquences, T: temps
-        E_num, _, _ = self.Sxx.shape
+        # E_num: nombre de capteurs (micros)
+        E_num = self.Sxx.shape[0]
         
-        # Reformater en (E, F*T) pour calculer la corrélation sur tout le plan TF
+        # Passage en 2D (E, F*T) pour traiter tous les points temps-fréquence
         X_flat = self.Sxx.reshape(E_num, -1)
         n_observations = X_flat.shape[1]
         
-        # R = E[X @ X^H] (Matrice de corrélation hermitienne)
+        # Calcul de la matrice de corrélation hermitienne R
         R = (X_flat @ X_flat.conj().T) / n_observations
         
-        # Décomposition en valeurs propres (eigh est optimal pour les matrices hermitiennes)
+        # Décomposition : eigh garantit des valeurs propres réelles pour une matrice hermitienne
         eigenvalues, eigenvectors = np.linalg.eigh(R)
         
-        # Inversion de la racine carrée des valeurs propres avec protection numérique
-        eps = 1e-12
-        inv_sqrt_eigenvalues = np.diag(1.0 / np.sqrt(np.maximum(eigenvalues, eps)))
-        
-        # W = Lambda^(-1/2) @ V^H
-        W = inv_sqrt_eigenvalues @ eigenvectors.conj().T
-        return W
+        return eigenvalues, eigenvectors # D and E
     
+    def compute_whitening_matrix(self, eigenvalues: np.ndarray, eigenvectors: np.ndarray) -> np.ndarray:
+        """
+        Construit la matrice de blanchiment W à partir de la décomposition.
+        
+        Args:
+            eigenvalues: Valeurs propres matrice (E) 
+            eigenvectors: Vecteurs propres (E,E)
+            
+        Returns:
+            np.ndarray: Matrice W de dimension (Entrée, Entrée)
+        """
+        # Protection numérique contre les divisions par zéro ou valeurs négatives
+        eps = 1e-12
+        
+        # Calcul de D^(-1/2)
+        # On travaille sur un vecteur pour l'efficacité, puis on transforme en diagonale
+        inv_sqrt_diag = 1.0 / np.sqrt(np.maximum(eigenvalues, eps))
+        D_inv_sqrt = np.diag(inv_sqrt_diag)
+        
+        # W = D^(-1/2) @ E^H
+        # E.conj().T est la transposée hermitienne
+        W = D_inv_sqrt @ eigenvectors.conj().T
+        
+        return W 
     def apply_transformation(self, W: np.ndarray) -> 'NSpectrogram':
         """
         Applique une matrice de transformation linéaire W sur chaque vecteur 
