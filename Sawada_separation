@@ -1,0 +1,24 @@
+from __future__ import annotations 
+import numpy as np 
+from scipy import signal as sp_signal 
+import matplotlib.pyplot as plt
+from signal_class import Signal, MultiSignal, NSpectrogram
+
+
+
+    
+class SawadaSeparation():
+    
+    """
+    Algorithme de Sawada: 
+    
+    - Apllique la stft pour obtenir le NSpectrogram
+    - Normalise par bin le Nspectrogram
+    - Blanchissage
+
+    
+    """
+    def __init__(self, input: MultiSignal):
+        self.input = input 
+        
+    def 

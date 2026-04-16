@@ -476,7 +476,7 @@ class Mixture:
 
 class NSpectrogram:
     def __init__(self, f: np.ndarray, t: np.ndarray, Sxx: np.ndarray, fs: float, 
-                 window: str, nperseg: int, noverlap: int|None = None, nfft: int|None = None):
+                 window: str, nperseg: int, noverlap: int|None = None, nfft: int|None = None, whitening_matrix: np.ndarray|None = None):
         """
         Conteneur pour les données de temps-fréquence de plusieurs signaux avec métadonnées de construction.
         
@@ -486,6 +486,7 @@ class NSpectrogram:
             window (str) : Type de fenêtre (ex: 'hann').
             nperseg (int) : Longueur de la fenêtre (points). Détermine la résolution fréquentielle (fs/nperseg).
             noverlap (int) : Nombre de points de recouvrement. Détermine la résolution temporelle.
+            nfft (int) : nombre de point utilisé pour calculé la fft (indépendemment de nperseg car ca rajoute juste des zero et pas du signal)
         """
         if (Sxx.shape[1], Sxx.shape[2]) != (len(f), len(t)):
             raise ValueError(f"Incohérence : Sxx {Sxx.shape} != (f:{len(f)}, t:{len(t)})")
@@ -498,6 +499,7 @@ class NSpectrogram:
         self.nperseg = nperseg
         self.noverlap = noverlap
         self.nfft = nfft
+        
 
     @property
     def delta_f(self) -> float:
@@ -512,7 +514,7 @@ class NSpectrogram:
         else:
             return (self.nperseg - self.noverlap) / self.fs
 
-    def plot(self, nperseg=256, figsize=(12, 10), db=False):
+    def plot(self, figsize=(12, 10), db=False):
             # Création de subplots verticaux (un par signal)
             f,t ,Zxx_multi = self.f, self.t, self.Sxx 
             fig, axes = plt.subplots(self.num_signals, 1, figsize=figsize, sharex=True, sharey=True)
@@ -544,3 +546,97 @@ class NSpectrogram:
             axes[-1].set_xlabel("Temps (s)")
             plt.tight_layout()
             return fig, axes
+        
+    def normalize_each_bin(self) -> 'NSpectrogram':
+        """
+        Normalise les vecteurs d'observation unitaires pour chaque point (t, f).
+        
+        Cette opération projette chaque vecteur complexe sur l'hypersphère unité,
+        ce qui est l'étape préliminaire au clustering de Sawada pour s'affranchir
+        de la puissance absolue des sources.
+        
+        Returns:
+            NSpectrogram: Une nouvelle instance contenant les vecteurs normalisés.
+        """
+        # Sxx a pour dimensions (E, F, T) où E est le nombre de signaux (capteurs)
+        
+        norms = np.linalg.norm(self.Sxx, axis=0)
+        
+        norms_safe = np.where(norms == 0, 1.0, norms)
+
+        new_Sxx = self.Sxx / norms_safe
+        
+        return NSpectrogram(
+            f=self.f, 
+            t=self.t, 
+            Sxx=new_Sxx, 
+            fs=self.fs, 
+            window=self.window, 
+            nperseg=self.nperseg, 
+            noverlap=self.noverlap, 
+            nfft=self.nfft
+        )
+          
+    def compute_whitening_matrix(self) -> np.ndarray:
+        """
+        Calcule la matrice de blanchiment W basée sur la corrélation spatiale.
+        
+        W est définie telle que E[(W X)(W X)^H] = I.
+        
+        Returns:
+            np.ndarray: Matrice de blanchiment de dimension (E, E).
+        """
+        # E: nombre de signaux, F: fréquences, T: temps
+        E_num, _, _ = self.Sxx.shape
+        
+        # Reformater en (E, F*T) pour calculer la corrélation sur tout le plan TF
+        X_flat = self.Sxx.reshape(E_num, -1)
+        n_observations = X_flat.shape[1]
+        
+        # R = E[X @ X^H] (Matrice de corrélation hermitienne)
+        R = (X_flat @ X_flat.conj().T) / n_observations
+        
+        # Décomposition en valeurs propres (eigh est optimal pour les matrices hermitiennes)
+        eigenvalues, eigenvectors = np.linalg.eigh(R)
+        
+        # Inversion de la racine carrée des valeurs propres avec protection numérique
+        eps = 1e-12
+        inv_sqrt_eigenvalues = np.diag(1.0 / np.sqrt(np.maximum(eigenvalues, eps)))
+        
+        # W = Lambda^(-1/2) @ V^H
+        W = inv_sqrt_eigenvalues @ eigenvectors.conj().T
+        return W
+    
+    def apply_transformation(self, W: np.ndarray) -> 'NSpectrogram':
+        """
+        Applique une matrice de transformation linéaire W sur chaque vecteur 
+        d'observation (t, f) du spectrogramme.
+        
+        Args:
+            W (np.ndarray): Matrice de transformation (ex: blanchiment) de dimension (E, E).
+            
+        Returns:
+            NSpectrogram: Une nouvelle instance contenant les données transformées.
+        """
+        E_num, F_num, T_num = self.Sxx.shape
+        
+        # Vérification de la cohérence des dimensions
+        if W.shape != (E_num, E_num):
+            raise ValueError(f"La matrice W doit être de taille ({E_num}, {E_num}).")
+
+        # Application de la transformation : X_new = W @ X
+        # On aplatit pour le calcul matriciel efficace, puis on redimensionne
+        X_flat = self.Sxx.reshape(E_num, -1)
+        X_transformed_flat = W @ X_flat
+        new_Sxx = X_transformed_flat.reshape(E_num, F_num, T_num)
+        
+        return NSpectrogram(
+            f=self.f, 
+            t=self.t, 
+            Sxx=new_Sxx, 
+            fs=self.fs, 
+            window=self.window, 
+            nperseg=self.nperseg, 
+            noverlap=self.noverlap, 
+            nfft=self.nfft
+        )
