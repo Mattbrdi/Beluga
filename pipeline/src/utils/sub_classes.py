@@ -106,6 +106,18 @@ class VMDDenoiseParameters:
     cc_threshold : float
     
 @dataclass
+class SWTDenoiseParameters:
+    use_swt : bool = False
+    wavelet : str = 'db3'
+    level : int = 3
+    thr_mode : str = 'soft'
+    recon_mode : str = 'smooth'
+    method : str = 'universal'
+    energy_perc : float = 0.90
+    fs : int = 0
+    ff : int = 0
+    
+@dataclass
 class LocationParameters:
     use_h4 : bool
     fusion_type : str
@@ -149,6 +161,17 @@ class Parameters:
             data["vmd_denoise_parameters"]["remove_dc"],
             data["vmd_denoise_parameters"]["compute_noisy_imfs"],
             data["vmd_denoise_parameters"]["cc_threshold"]
+        )
+        self.swt_denoise_parameters = SWTDenoiseParameters(
+            use_swt=data["swt_denoise_parameters"]["use_swt"],
+            wavelet=data["swt_denoise_parameters"]["wavelet"],
+            level=data["swt_denoise_parameters"]["level"],
+            thr_mode=data["swt_denoise_parameters"]["thr_mode"],
+            recon_mode=data["swt_denoise_parameters"]["recon_mode"],
+            method=data["swt_denoise_parameters"]["method"],
+            energy_perc=data["swt_denoise_parameters"]["energy_perc"],
+            fs=0,
+            ff=0,
         )
         self.pre_filter_parameters = PreFilterParameters(data["pre_filter_parameters"]["order"], data["pre_filter_parameters"]["filtering_method"])
 

@@ -33,6 +33,15 @@
     "compute_noisy_imfs": true,
     "cc_threshold": 0.1
   },
+  "swt_denoise_parameters": {
+        "use_swt": true,
+        "wavelet": "db3",
+        "level": 3,
+        "thr_mode": "soft",
+        "recon_mode": "smooth",
+        "method": "stein",
+        "energy_perc": 0.90
+  },
   "pre_filter_parameters": {
     "order": 4,
     "filtering_method": "butter_bp"

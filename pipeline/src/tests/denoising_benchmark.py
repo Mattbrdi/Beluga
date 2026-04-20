@@ -1,27 +1,39 @@
 ## THe objecgive of this file is to be able to test diffenrt denoising techniques to increase SNR
 ## Only SNR objectives here so we only comptes SNR from audio files that the only thing we wanna do 
 
+import copy
+import os
 import sys
+from datetime import timedelta
 from pathlib import Path
+from time import time
+
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
 
 # Allow this test file to be run directly with `python src/tests/denoising_benchmark.py`.
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import numpy as np 
-import pandas as pd 
-import matplotlib.pyplot as plt
-import copy 
-
-from src.detection_bricks.mono_audio_detection import SpectrogramGenerator, MobileNetMultilabel, get_audio_start_time, run_pipeline_overlaps_long_spects
-import os
-from time import time
-from datetime import timedelta
-from src.utils.sub_classes import Environment, Parameters, AudioMetadata, AudioArray
-from src.location_bricks.frequencies_filtering import filter_audio_array, filter_audio_array_from_calltype
+from main_module import setup_to_detection, signal_characteristics
+from src.denoising_bricks.swt_denoising import swt_denoise
 from src.denoising_bricks.vmd_denoising import vmd_denoise
-from main_module import signal_characteristics, setup_to_detection
+from src.detection_bricks.mono_audio_detection import (
+    MobileNetMultilabel,
+    SpectrogramGenerator,
+    get_audio_start_time,
+    run_pipeline_overlaps_long_spects,
+)
+from src.location_bricks.frequencies_filtering import (
+    filter_audio_array,
+    filter_audio_array_from_calltype,
+)
+from src.utils.color_prints import LOG_STYLES, cprint
+from src.utils.sub_classes import AudioArray, AudioMetadata, Environment, Parameters, VMDDenoiseParameters, SWTDenoiseParameters
+
+from scipy.io.wavfile import write
 
 audio_path =  [r"C:\Users\amine\Desktop\Canada\transfer_amine\test_data\full audios\8296\8296.240729065600.wav", 
                r"C:\Users\amine\Desktop\Canada\transfer_amine\test_data\full audios\8295\8295.240729065600.wav",
@@ -42,8 +54,10 @@ def butterworth_filtering(audio_arrays : list[AudioArray], parameters : Paramete
         for i in range(len(audio_arrays)):
             audio_arrays[i] = vmd_denoise(audio_arrays[i], parameters.vmd_denoise_parameters)
 
-def filter(audio_arrays : list[AudioArray]):
-    pass
+def filter(audio_arrays : list[AudioArray], parameters : Parameters):
+
+    denoised_arrays, noisy_array = swt_denoise(audio_arrays, parameters.swt_denoise_parameters)
+    return denoised_arrays
 
 def compute_SNR(audio_arrays : list[AudioArray]):
     central_frequency, frequency_range, snrs_list = signal_characteristics(audio_arrays)
@@ -75,6 +89,8 @@ def denoising_iteration(parameters: Parameters, audio_files: list[str], beluga_s
     butterworth_filtering(butterworth_arrays, parameters)
 
     butterworth_filtering(filtered_arrays, parameters)
+
+    filtered_arrays = filter(filtered_arrays, parameters)
 
     snrs_original = compute_SNR(audio_arrays) # looks like (2, 4 ) array
 
