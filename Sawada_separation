@@ -165,6 +165,8 @@ class SawadaSeparation:
         self.whitening = whitening 
         self.eigenvalues_matrix : np.ndarray|None = None
         self.eigenvector_matrix : np.ndarray|None = None
+        self.model: EMClustering | None = None
+        self.masks: np.ndarray | None = None
         
     def get_spectro(self) -> NSpectrogram:
         return self.input.stft(**asdict(self.stft_parameters))
@@ -173,6 +175,40 @@ class SawadaSeparation:
         self.eigenvalues_matrix, self.eigenvector_matrix = spectro.decompose_spatial_correlation()
         whitening_matrix = spectro.compute_whitening_matrix(self.eigenvalues_matrix, self.eigenvector_matrix)
         return spectro.apply_transformation(W = whitening_matrix)
+
+    def preprocess(self) -> NSpectrogram:
+        """
+        Construit le spectrogramme de travail:
+        1) STFT
+        2) normalisation par bin temps-fréquence
+        3) blanchiment optionnel
+        """
+        spectro = self.get_spectro().normalize_each_bin()
+        if self.whitening:
+            spectro = self.apply_whitening(spectro)
+        return spectro
+
+    def fit(self, n_iter: int = 20, phi: float = 1.0, eps: float = 1e-12) -> np.ndarray:
+        """
+        Lance le clustering EM sur les observations temps-fréquence.
+
+        Returns:
+            np.ndarray: Masques binaires de forme (n_sources, n_freq, n_time).
+        """
+        spectro = self.preprocess()
+        e_num, f_num, t_num = spectro.Sxx.shape
+        X = spectro.Sxx.reshape(e_num, -1)
+
+        self.model = EMClustering(
+            n_sources=self.num_classes,
+            n_iter=n_iter,
+            phi=phi,
+            eps=eps
+        )
+        self.model.fit(X)
+        flat_masks = self.model.predict(X)
+        self.masks = flat_masks.reshape(self.num_classes, f_num, t_num)
+        return self.masks
     
     
     
