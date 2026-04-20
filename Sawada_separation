@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from signal_class import Signal, MultiSignal, NSpectrogram
 from dataclasses import dataclass, field, asdict
 from sklearn.cluster import KMeans # Utilisé uniquement pour l'initialisation rapide
+from typing import List, Dict
+from itertools import permutations
 
 @dataclass
 class StftParameters:
@@ -51,7 +53,7 @@ class EMClustering:
         
     def e_step(self, X: np.ndarray) -> np.ndarray:
         """
-        Étape d'Espérance : Calcule les probabilités postérieures P(Ci | x).
+        Étape d'Espérance : Calcule les probabilités postérieures P(Ci | x, theta).
         
         Args:
             X (np.ndarray): Spectrogramme normalisé (n_micros, n_points).
@@ -144,9 +146,8 @@ class EMClustering:
             masks[i, best_source == i] = 1
         return masks
 
-
-class SawadaSeparation:
-    
+class SawadaBSS:
+        
     """
     Algorithme de Sawada: 
     
@@ -155,24 +156,157 @@ class SawadaSeparation:
     - Blanchiment 
     - clustering
 
-    
-    """
-    def __init__(self, input: MultiSignal, num_classes: int,stft_parameters: StftParameters, whitening: bool= False  ):
-        self.input  = input 
-        self.stft_parameters = stft_parameters
-        self.num_classes = num_classes
-        #attribut utile pour le blanchiment
-        self.whitening = whitening 
-        self.eigenvalues_matrix : np.ndarray|None = None
-        self.eigenvector_matrix : np.ndarray|None = None
+    """ 
+    def __init__(self, n_sources: int, stft_parameters: StftParameters, n_iter_em: int = 20, whitening: bool = False ):
+        self.n_sources = n_sources
+        self.n_iter_em = n_iter_em
         
-    def get_spectro(self) -> NSpectrogram:
-        return self.input.stft(**asdict(self.stft_parameters))
+        self.stft_parameters = stft_parameters
+        
+        # Dictionnaires pour stocker les résultats par bin fréquentiel
+        self.bin_models: Dict[int, EMClustering] = {}
+        self.bin_masks: Dict[int, np.ndarray] = {}
+        
+        self.whitening = whitening 
+        self.eigenvalues_matrix : np.ndarray|None = None #(n_sources)
+        self.eigenvector_matrix : np.ndarray|None = None #(n_sources, n_sources)
+        
+    def get_spectro(self, input: MultiSignal) -> NSpectrogram:
+        return input.stft(**asdict(self.stft_parameters))
     
     def apply_whitening(self, spectro: NSpectrogram) -> NSpectrogram:
-        self.eigenvalues_matrix, self.eigenvector_matrix = spectro.decompose_spatial_correlation()
+        self.eigenvalues_matrix, self.eigenvector_matrix = spectro.decompose_spatial_correlation() 
         whitening_matrix = spectro.compute_whitening_matrix(self.eigenvalues_matrix, self.eigenvector_matrix)
         return spectro.apply_transformation(W = whitening_matrix)
     
     
+    def fit_bins(self, nspectro: 'NSpectrogram'):
+        """
+        Exécute le clustering EM pour chaque bin de fréquence indépendamment.
+        
+        Args:
+            nspectro (NSpectrogram): Le spectrogramme normalisé et blanchi.
+        """
+        # Sxx shape: (n_micros, n_freqs, n_times)
+        n_micros, n_freqs, n_times = nspectro.Sxx.shape
+        
+        print(f"Début du clustering pour {n_freqs} bins fréquentiels...")
+
+        for f_idx in range(n_freqs):
+            # 1. Extraction des données pour la fréquence f
+            # X_f shape: (n_micros, n_times)
+            X_f = nspectro.Sxx[:, f_idx, :]
+            
+            # 2. Initialisation de l'EM pour ce bin
+            # On utilise les paramètres de la classe Sawada
+            model = EMClustering(
+                n_sources=self.n_sources, 
+                n_iter=self.n_iter_em
+            )
+            
+            # 3. Entraînement (M-Step et E-Step alternés)
+            # Cette étape estime a_i(f) et sigma_i(f)
+            model.fit(X_f)
+            
+            # 4. Génération du masque binaire (Hard labeling) pour ce bin
+            # mask_f shape: (n_sources, n_times)
+            mask_f = model.predict(X_f)
+            
+            # 5. Stockage des résultats pour le réalignement futur
+            self.bin_models[f_idx] = model
+            self.bin_masks[f_idx] = mask_f
+
+        print("Clustering par bin terminé.")
+
+    @property
+    def all_centroids(self) -> np.ndarray:
+        """
+        Retourne tous les centroïdes estimés sous forme de tenseur.
+        Shape: (n_freqs, n_micros, n_sources)
+        """
+        n_freqs = len(self.bin_models)
+        n_micros = self.bin_models[0].centroids.shape[0]
+        
+        centroids_tensor = np.zeros((n_freqs, n_micros, self.n_sources), dtype=complex)
+        for f_idx, model in self.bin_models.items():
+            centroids_tensor[f_idx] = model.centroids
+            
+        return centroids_tensor
     
+    def align_permutations(self, nspectro: 'NSpectrogram'):
+        """
+        Résout le problème de permutation en utilisant la corrélation d'enveloppe.
+        
+        L'algorithme parcourt les fréquences et aligne les masques de chaque bin
+        sur une référence accumulée (moyenne des enveloppes précédentes).
+        """
+        n_micros, n_freqs, n_times = nspectro.Sxx.shape
+        
+        # 1. Calcul des amplitudes globales (pour le calcul des enveloppes)
+        # On utilise la norme des capteurs pour avoir une enveloppe robuste
+        amplitudes = np.linalg.norm(nspectro.Sxx, axis=0) # Shape: (n_freqs, n_times)
+        
+        # 2. Initialisation des enveloppes de référence (Source x Temps)
+        # On initialise avec le premier bin de fréquence
+        reference_envelopes = np.zeros((self.n_sources, n_times))
+        for i in range(self.n_sources):
+            reference_envelopes[i] = amplitudes[0, :] * self.bin_masks[0][i, :]
+
+        # Liste des indices de permutation possibles (ex: [(0,1), (1,0)] pour 2 sources)
+        perm_list = list(permutations(range(self.n_sources)))
+
+        print("Alignement des fréquences par corrélation d'enveloppe...")
+
+        # 3. Boucle d'alignement (on commence au bin 1)
+        for f in range(1, n_freqs):
+            current_masks = self.bin_masks[f] # Shape: (n_sources, n_times)
+            
+            best_perm = perm_list[0]
+            max_corr = -np.inf
+            
+            # Tester toutes les permutations pour trouver celle qui maximise la corrélation
+            for p in perm_list:
+                total_corr = 0
+                for i_source, j_cluster in enumerate(p):
+                    # Enveloppe du cluster j à la fréquence f
+                    env_j = amplitudes[f, :] * current_masks[j_cluster, :]
+                    
+                    # Corrélation de Pearson avec la référence de la source i
+                    total_corr += self._calculate_correlation(env_j, reference_envelopes[i_source])
+                
+                if total_corr > max_corr:
+                    max_corr = total_corr
+                    best_perm = p
+            
+            # 4. Appliquer la meilleure permutation au bin actuel
+            self.bin_masks[f] = current_masks[list(best_perm), :]
+            
+            # 5. Mise à jour de la référence (Moyenne glissante pour stabilité)
+            # Cela permet de lisser l'évolution temporelle des sources
+            for i in range(self.n_sources):
+                new_env = amplitudes[f, :] * self.bin_masks[f][i, :]
+                # On met à jour la référence (poids faible pour ne pas oublier le passé)
+                reference_envelopes[i] = (f * reference_envelopes[i] + new_env) / (f + 1)
+
+        print("Alignement terminé.")
+
+    def _calculate_correlation(self, v1: np.ndarray, v2: np.ndarray) -> float:
+        """Calcule le coefficient de corrélation de Pearson entre deux enveloppes."""
+        # Soustraction de la moyenne pour centrer les enveloppes
+        v1_c = v1 - np.mean(v1)
+        v2_c = v2 - np.mean(v2)
+        
+        num = np.sum(v1_c * v2_c)
+        den = np.sqrt(np.sum(v1_c**2) * np.sum(v2_c**2))
+        
+        return num / (den + 1e-12)
+
+    def get_final_masks(self) -> np.ndarray:
+        """Retourne le tenseur des masques alignés (Sources, Freqs, Temps)."""
+        n_freqs = len(self.bin_masks)
+        n_times = self.bin_masks[0].shape[1]
+        
+        final_masks = np.zeros((self.n_sources, n_freqs, n_times))
+        for f in range(n_freqs):
+            final_masks[:, f, :] = self.bin_masks[f]
+        return final_masks

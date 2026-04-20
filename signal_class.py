@@ -658,3 +658,19 @@ class NSpectrogram:
             noverlap=self.noverlap, 
             nfft=self.nfft
         )
+        
+    def istft(self) -> 'Signal':
+        """
+        Réalise la transformée de Fourier à court terme inverse (ISTFT).
+        On reconstruit le signal à partir du premier canal (référence).
+        """
+        # On reconstruit à partir du premier capteur (indice 0)
+        _, data = sp_signal.istft(
+            self.Sxx[0], 
+            fs=self.fs, 
+            window=self.window, 
+            nperseg=self.nperseg, 
+            noverlap=self.noverlap,
+            nfft=self.nfft
+        )
+        return Signal(data, self.fs)
