@@ -26,19 +26,23 @@ def wt_brick(audio_arrays : list[AudioArray], parameters: WTDenoiseParameters):
     """
     
     # determine the decomposition level
-    level = level_determination(float(parameters.ff), float(parameters.fs))
+    level = 1
 
     # Create the WaveletDenoising class which runs the full decomposition - thresholding - reconstruction pipeline
     wd = WaveletDenoising(normalize=False,
                           wavelet=parameters.wavelet,
-                          transform='dwt',
-                          level=level,
+                          transform=parameters.transform,
+                          level=1,
                           thr_mode=parameters.thr_mode,
+                          recon_mode=parameters.recon_mode,
                           selected_level=level,
                           method=parameters.method,
-                          energy_perc=parameters.energy_perc,
-                          fs=parameters.fs,
-                          ff=parameters.ff)
+                          energy_perc=parameters.energy_perc
+                          )
+    
+    
+
+
 
     # Deep copy audio_arrays so we can return both denoised and original arrays
     denoised_arrays = deepcopy(audio_arrays)
@@ -48,12 +52,19 @@ def wt_brick(audio_arrays : list[AudioArray], parameters: WTDenoiseParameters):
         wd.sampling_frequency = denoised_arrays[i].metadata.sample_rate
         wd.fundamental_frequency = denoised_arrays[i].metadata.central_frequency
 
+
+        level = level_determination(wd.fundamental_frequency, wd.sampling_frequency)
+
+        wd.level = level 
+        wd.nlevel = level
+        wd.selected_level = level
+
         for j in range(len(denoised_arrays[i].data_array)):
             # Denoise hydrophone j for tetra i 
             array_to_process = denoised_arrays[i].data_array[j]
             denoised_arrays[i].data_array[j] = wd.fit(array_to_process)   
   
-    return denoised_arrays, audio_arrays
+    return denoised_arrays
 
 def wt_denoise(audio_arrays : list[AudioArray], parameters : WTDenoiseParameters):
     """Denoising function using the WT thresholding method.
@@ -63,19 +74,21 @@ def wt_denoise(audio_arrays : list[AudioArray], parameters : WTDenoiseParameters
         parameters (WTDenoiseParameters): Parameters ruling the denoising.
     
     Returns:
-        audio_array(AudioArray) : The filtered audio_array with relevant IMFs
+        audio_array(AudioArray) : The filtered audio_array
     """
-    sample_rate =  audio_arrays[0].metadata.sample_rate
+    if not parameters.use_wt:
+        return audio_arrays
     
-    #TODO: redundent sample and fundamnetal frequency input
-    parameters.fs = sample_rate
-    if audio_arrays[0].metadata.central_frequency is not None:
-        parameters.ff = audio_arrays[0].metadata.central_frequency
-    else:
-        parameters.ff = 2000
+    # sample_rate =  audio_arrays[0].metadata.sample_rate
+    # #TODO: redundent sample and fundamnetal frequency input
+    # parameters.fs = sample_rate
+    # if audio_arrays[0].metadata.central_frequency is not None:
+    #     parameters.ff = audio_arrays[0].metadata.central_frequency
+    # else:
+    #     parameters.ff = 2000
 
-    denoised_arrays, noisy_arrays = wt_brick(audio_arrays, parameters)
-    return denoised_arrays, noisy_arrays
+    denoised_arrays = wt_brick(audio_arrays, parameters)
+    return denoised_arrays
 
 
     

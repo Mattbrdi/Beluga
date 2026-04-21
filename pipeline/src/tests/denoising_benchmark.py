@@ -55,7 +55,7 @@ def butterworth_filtering(audio_arrays : list[AudioArray], parameters : Paramete
 
 def filter(audio_arrays : list[AudioArray], parameters : Parameters):
 
-    denoised_arrays, noisy_array = wt_denoise(audio_arrays, parameters.wt_denoise_parameters)
+    denoised_arrays = wt_denoise(audio_arrays, parameters.wt_denoise_parameters)
     return denoised_arrays
 
 def compute_SNR(audio_arrays : list[AudioArray]):
