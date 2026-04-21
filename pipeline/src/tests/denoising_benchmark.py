@@ -81,6 +81,15 @@ def denoising_iteration(parameters: Parameters, audio_files: list[str], beluga_s
     if parameters.print_level > 0:
         print(f"▒▒▒▒▒▒▒▒▒▒▒▒ Detection made in: {end_detection - start_detection:.2f}s")
 
+    # Compute signal_characteristics frequency:
+
+    central_frequency, frequency_range, snrs_list = signal_characteristics(audio_arrays)
+    for i, snrs in enumerate(snrs_list):
+        audio_arrays[i].metadata.snr_power = snrs
+        audio_arrays[i].update_snr(snrs)
+        audio_arrays[i].metadata.central_frequency = central_frequency
+        audio_arrays[i].metadata.frequency_range = frequency_range
+
     butterworth_arrays = copy.deepcopy(audio_arrays)
     
     filtered_arrays = copy.deepcopy(audio_arrays)
