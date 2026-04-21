@@ -1,5 +1,4 @@
-## THe objecgive of this file is to be able to test diffenrt denoising techniques to increase SNR
-## Only SNR objectives here so we only comptes SNR from audio files that the only thing we wanna do 
+## The objecgive of this file is to be able to test different denoising techniques to increase SNR
 
 import copy
 import os
