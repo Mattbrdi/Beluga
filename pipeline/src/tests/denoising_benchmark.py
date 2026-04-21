@@ -96,9 +96,9 @@ def denoising_iteration(parameters: Parameters, audio_files: list[str], beluga_s
     
     butterworth_filtering(butterworth_arrays, parameters)
 
-    butterworth_filtering(filtered_arrays, parameters)
-
     filtered_arrays = filter(filtered_arrays, parameters)
+
+    butterworth_filtering(filtered_arrays, parameters)
 
     snrs_original = compute_SNR(audio_arrays) # looks like (2, 4 ) array
 
