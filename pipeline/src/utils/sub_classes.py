@@ -106,8 +106,9 @@ class VMDDenoiseParameters:
     cc_threshold : float
     
 @dataclass
-class SWTDenoiseParameters:
-    use_swt : bool = False
+class WTDenoiseParameters:
+    use_wt : bool = False
+    transform : str = 'dwt'
     wavelet : str = 'db3'
     level : int = 3
     thr_mode : str = 'soft'
@@ -162,14 +163,15 @@ class Parameters:
             data["vmd_denoise_parameters"]["compute_noisy_imfs"],
             data["vmd_denoise_parameters"]["cc_threshold"]
         )
-        self.swt_denoise_parameters = SWTDenoiseParameters(
-            use_swt=data["swt_denoise_parameters"]["use_swt"],
-            wavelet=data["swt_denoise_parameters"]["wavelet"],
-            level=data["swt_denoise_parameters"]["level"],
-            thr_mode=data["swt_denoise_parameters"]["thr_mode"],
-            recon_mode=data["swt_denoise_parameters"]["recon_mode"],
-            method=data["swt_denoise_parameters"]["method"],
-            energy_perc=data["swt_denoise_parameters"]["energy_perc"],
+        self.wt_denoise_parameters = WTDenoiseParameters(
+            use_wt=data["wt_denoise_parameters"]["use_wt"],
+            transform=data["wt_denoise_parameters"]["transform"],
+            wavelet=data["wt_denoise_parameters"]["wavelet"],
+            level=data["wt_denoise_parameters"]["level"],
+            thr_mode=data["wt_denoise_parameters"]["thr_mode"],
+            recon_mode=data["wt_denoise_parameters"]["recon_mode"],
+            method=data["wt_denoise_parameters"]["method"],
+            energy_perc=data["wt_denoise_parameters"]["energy_perc"],
             fs=0,
             ff=0,
         )

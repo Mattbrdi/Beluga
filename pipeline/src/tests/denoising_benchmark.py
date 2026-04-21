@@ -17,7 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from main_module import setup_to_detection, signal_characteristics
-from src.denoising_bricks.swt_denoising import swt_denoise
+from src.denoising_bricks.wt_denoising import wt_denoise
 from src.denoising_bricks.vmd_denoising import vmd_denoise
 from src.detection_bricks.mono_audio_detection import (
     MobileNetMultilabel,
@@ -30,7 +30,7 @@ from src.location_bricks.frequencies_filtering import (
     filter_audio_array_from_calltype,
 )
 from src.utils.color_prints import LOG_STYLES, cprint
-from src.utils.sub_classes import AudioArray, AudioMetadata, Environment, Parameters, VMDDenoiseParameters, SWTDenoiseParameters
+from src.utils.sub_classes import AudioArray, Environment, Parameters
 
 from scipy.io.wavfile import write
 
@@ -55,7 +55,7 @@ def butterworth_filtering(audio_arrays : list[AudioArray], parameters : Paramete
 
 def filter(audio_arrays : list[AudioArray], parameters : Parameters):
 
-    denoised_arrays, noisy_array = swt_denoise(audio_arrays, parameters.swt_denoise_parameters)
+    denoised_arrays, noisy_array = wt_denoise(audio_arrays, parameters.wt_denoise_parameters)
     return denoised_arrays
 
 def compute_SNR(audio_arrays : list[AudioArray]):

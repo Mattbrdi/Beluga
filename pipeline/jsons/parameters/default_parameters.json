@@ -33,9 +33,10 @@
     "compute_noisy_imfs": true,
     "cc_threshold": 0.1
   },
-  "swt_denoise_parameters": {
-        "use_swt": true,
+  "wt_denoise_parameters": {
+        "use_wt": true,
         "wavelet": "db3",
+        "transform": "dwt",
         "level": 3,
         "thr_mode": "soft",
         "recon_mode": "smooth",

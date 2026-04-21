@@ -7,19 +7,19 @@ PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from src.utils.sub_classes import Environment, Parameters, AudioMetadata, AudioArray, SWTDenoiseParameters
+from src.utils.sub_classes import Environment, Parameters, AudioMetadata, AudioArray, WTDenoiseParameters
 from wavelet_denoising.denoising import WaveletDenoising
 from wavelet_denoising.src.si_acf.si_acf import level_determination
 from src.utils.color_prints import LOG_STYLES, cprint
 
 from copy import deepcopy
 
-def swt_brick(audio_arrays : list[AudioArray], parameters: SWTDenoiseParameters):
+def wt_brick(audio_arrays : list[AudioArray], parameters: WTDenoiseParameters):
     """Perform Wavelet decomposition and filter components based on the thresholding method used.
 
     Args:
         audio_array (AudioArray): Class containing four channel audio data.
-        parameters (SWTDenoiseParameters): Parameters for denoising.
+        parameters (WTDenoiseParameters): Parameters for denoising.
 
     Returns:
         tuple: denoised_arrays, noisy_array
@@ -55,12 +55,12 @@ def swt_brick(audio_arrays : list[AudioArray], parameters: SWTDenoiseParameters)
   
     return denoised_arrays, audio_arrays
 
-def swt_denoise(audio_arrays : list[AudioArray], parameters : SWTDenoiseParameters):
-    """Denoising function using the SWT thresholding method.
+def wt_denoise(audio_arrays : list[AudioArray], parameters : WTDenoiseParameters):
+    """Denoising function using the WT thresholding method.
 
     Args:
         audio_array (AudioArray): An AudioArray corresponding to one tetrahedra. 
-        parameters (SWTDenoiseParameters): Parameters ruling the denoising.
+        parameters (WTDenoiseParameters): Parameters ruling the denoising.
     
     Returns:
         audio_array(AudioArray) : The filtered audio_array with relevant IMFs
@@ -74,7 +74,7 @@ def swt_denoise(audio_arrays : list[AudioArray], parameters : SWTDenoiseParamete
     else:
         parameters.ff = 2000
 
-    denoised_arrays, noisy_arrays = swt_brick(audio_arrays, parameters)
+    denoised_arrays, noisy_arrays = wt_brick(audio_arrays, parameters)
     return denoised_arrays, noisy_arrays
 
 
