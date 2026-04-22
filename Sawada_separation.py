@@ -164,7 +164,7 @@ class SawadaBSS:
         self.stft_parameters = stft_parameters
         
         # Dictionnaires pour stocker les résultats par bin fréquentiel
-        self.bin_models: Dict[int, EMClustering] = {}
+        self.bin_models: Dict[int, EMClustering] = {} #int is the freq_idx
         self.bin_masks: Dict[int, np.ndarray] = {}
         
         self.whitening = whitening 
@@ -192,9 +192,8 @@ class SawadaBSS:
     def apply_whitening(self, spectro: NSpectrogram) -> NSpectrogram:
         self.eigenvalues_matrix, self.eigenvector_matrix = spectro.decompose_spatial_correlation() 
         whitening_matrix = spectro.compute_whitening_matrix(self.eigenvalues_matrix, self.eigenvector_matrix)
+    
         return spectro.apply_transformation(W = whitening_matrix)
-    
-    
     def fit_bins(self, nspectro: 'NSpectrogram'):
         """
         Exécute le clustering EM pour chaque bin de fréquence indépendamment.
