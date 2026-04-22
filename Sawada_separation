@@ -169,8 +169,23 @@ class SawadaBSS:
         
         self.whitening = whitening 
         self.eigenvalues_matrix : np.ndarray|None = None #(n_sources)
-        self.eigenvector_matrix : np.ndarray|None = None #(n_sources, n_sources)
+        self.eigenvector_matrix : np.ndarray|None = None #(n_sources, n_sources) 
         
+        self.model: EMClustering | None = None
+        self.masks: np.ndarray | None = None
+        
+    def preprocess(self, input: MultiSignal) -> NSpectrogram:
+        """
+        Construit le spectrogramme de travail:
+        1) STFT
+        2) normalisation par bin temps-fréquence
+        3) blanchiment optionnel
+        """
+        spectro = self.get_spectro(input).normalize_each_bin()
+        if self.whitening:
+            spectro = self.apply_whitening(spectro)
+        return spectro
+    
     def get_spectro(self, input: MultiSignal) -> NSpectrogram:
         return input.stft(**asdict(self.stft_parameters))
     
@@ -310,3 +325,5 @@ class SawadaBSS:
         for f in range(n_freqs):
             final_masks[:, f, :] = self.bin_masks[f]
         return final_masks
+    
+    
