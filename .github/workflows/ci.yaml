@@ -1,0 +1,33 @@
+name: Python CI
+
+# Déclenchement lors d'un push ou d'une Pull Request sur la branche main
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  validation:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. On récupère ton code source
+      - name: Checkout du dépôt
+        uses: actions/checkout@v4
+
+      # 2. On installe Python sur la machine virtuelle
+      - name: Configuration de Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 3. On installe Pytest (l'outil de test)
+      - name: Installation de Pytest
+        run: |
+          python -m pip install --upgrade pip
+          pip install pytest
+
+      # 4. On lance la détection et l'exécution des tests
+      - name: Exécution des tests avec Pytest
+        run: pytest
