@@ -8,7 +8,11 @@ from sklearn.preprocessing import MinMaxScaler
 
 from pywt import wavedec, dwt_max_level, Wavelet, threshold, waverec, swt, swt_max_level, iswt
 
-from src.si_acf.si_acf import non_impulsive_noise_filter, level_determination, impulsive_noise_filter
+from wavelet_denoising.src.si_acf.si_acf import (
+    impulsive_noise_filter,
+    level_determination,
+    non_impulsive_noise_filter,
+)
 
 # =====================================================================
 # Auxiliary functions

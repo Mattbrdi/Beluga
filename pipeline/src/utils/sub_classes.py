@@ -106,6 +106,19 @@ class VMDDenoiseParameters:
     cc_threshold : float
     
 @dataclass
+class WTDenoiseParameters:
+    use_wt : bool = False
+    transform : str = 'dwt'
+    wavelet : str = 'db3'
+    level : int = 3
+    thr_mode : str = 'soft'
+    recon_mode : str = 'smooth'
+    method : str = 'universal'
+    energy_perc : float = 0.90
+    fs : int = 0
+    ff : int = 0
+    
+@dataclass
 class LocationParameters:
     use_h4 : bool
     fusion_type : str
@@ -149,6 +162,18 @@ class Parameters:
             data["vmd_denoise_parameters"]["remove_dc"],
             data["vmd_denoise_parameters"]["compute_noisy_imfs"],
             data["vmd_denoise_parameters"]["cc_threshold"]
+        )
+        self.wt_denoise_parameters = WTDenoiseParameters(
+            use_wt=data["wt_denoise_parameters"]["use_wt"],
+            transform=data["wt_denoise_parameters"]["transform"],
+            wavelet=data["wt_denoise_parameters"]["wavelet"],
+            level=data["wt_denoise_parameters"]["level"],
+            thr_mode=data["wt_denoise_parameters"]["thr_mode"],
+            recon_mode=data["wt_denoise_parameters"]["recon_mode"],
+            method=data["wt_denoise_parameters"]["method"],
+            energy_perc=data["wt_denoise_parameters"]["energy_perc"],
+            fs=0,
+            ff=0,
         )
         self.pre_filter_parameters = PreFilterParameters(data["pre_filter_parameters"]["order"], data["pre_filter_parameters"]["filtering_method"])
 

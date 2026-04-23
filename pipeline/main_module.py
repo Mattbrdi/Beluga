@@ -15,6 +15,7 @@ from src.location_bricks.tdoa_brick import tdoas
 from src.location_bricks.low_level_fusion import low_fusion
 from src.location_bricks.high_level_fusion import high_fusion
 from src.utils.plots import plot_spectro
+from src.denoising_bricks.wt_denoising import wt_denoise
 
 
 from src.tests.debug_functions import plot_analysis
@@ -263,6 +264,9 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
         audio_arrays[i].update_snr(snrs)
         audio_arrays[i].metadata.central_frequency = central_frequency
         audio_arrays[i].metadata.frequency_range = frequency_range
+
+    if parameters.wt_denoise_parameters.use_wt:
+        audio_arrays = wt_denoise(audio_arrays, parameters.wt_denoise_parameters)
 
     # Second filtering
     for i in range(len(audio_arrays)):
