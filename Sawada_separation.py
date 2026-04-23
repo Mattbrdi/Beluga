@@ -34,7 +34,7 @@ class EMClustering:
 
     def _initialize(self, X):
         """
-        Etaoe d'initialisation de mes vairances, poids et surout des centroids utilisés ensuite
+        Etape d'initialisation de mes variances, poids et surout des centroids utilisés ensuite
 
         Args:
             X (_type_): _description_
@@ -103,9 +103,10 @@ class EMClustering:
             weighted_X = X * np.sqrt(gamma)
             R_i = weighted_X @ weighted_X.conj().T
             
-            # SVD pour extraire la direction dominante (u1)
-            u, _, _ = np.linalg.svd(R_i)
+            # diagonalisation pour extraire la direction dominante (u1)
+            _, u = np.linalg.eigh(R_i)
             self.centroids[:, i] = u[:, 0]
+            self.centroids /= (np.linalg.norm(self.centroids, axis=0) + self.eps)
             
             #  Mise à jour de la variance sigma_i^2
             # Moyenne pondérée des distances à la nouvelle projection
@@ -252,12 +253,15 @@ class SawadaBSS:
             
         return centroids_tensor
     
-    def align_permutations(self, nspectro: 'NSpectrogram'):
+    def align_permutations(self, nspectro: 'NSpectrogram', memory: str = 'ema'):
         """
         Résout le problème de permutation en utilisant la corrélation d'enveloppe.
         
         L'algorithme parcourt les fréquences et aligne les masques de chaque bin
         sur une référence accumulée (moyenne des enveloppes précédentes).
+        
+        arg: memory(str): 'ema' - l'enveloppe calculé evolue selon une ema
+                          'average' - suit une moyenne arithmétique
         """
         n_micros, n_freqs, n_times = nspectro.Sxx.shape
         
@@ -302,15 +306,30 @@ class SawadaBSS:
             
             # 5. Mise à jour de la référence (Moyenne glissante pour stabilité)
             # Cela permet de lisser l'évolution temporelle des sources
+            
+            Source_energy_threshold = 0.05 #threshold pour savoir si une enveloppe met à jour une enveloppe doit etre prise en compte
+            EMA_COEF = 0.1
             for i in range(self.n_sources):
                 new_env = amplitudes[f, :] * self.bin_masks[f][i, :]
+                source_energy_f = np.sum(new_env**2)
+                
+                if source_energy_f < Source_energy_threshold:
+                    continue
+                
                 # On met à jour la référence (poids faible pour ne pas oublier le passé)
-                reference_envelopes[i] = (f * reference_envelopes[i] + new_env) / (f + 1)
-
+                if memory == 'average':
+                    reference_envelopes[i] = (f * reference_envelopes[i] + new_env) / (f + 1)
+                elif memory == 'ema':
+                    reference_envelopes[i] = (1-EMA_COEF) * reference_envelopes + EMA_COEF * new_env
+                else: 
+                    raise ValueError("memory mode non supporté")
+                
         print("Alignement terminé.")
 
     def _calculate_correlation(self, v1: np.ndarray, v2: np.ndarray) -> float:
         """Calcule le coefficient de corrélation de Pearson entre deux enveloppes."""
+        if np.std(v1) < 1e-6 or np.std(v2) < 1e-6:
+            return 0.0
         # Soustraction de la moyenne pour centrer les enveloppes
         v1_c = v1 - np.mean(v1)
         v2_c = v2 - np.mean(v2)
