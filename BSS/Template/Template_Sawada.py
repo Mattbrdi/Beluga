@@ -3,8 +3,10 @@ os.environ["OMP_NUM_THREADS"] = "1"
 
 import numpy as np
 import matplotlib.pyplot as plt
-from Beluga.BSS.signal_class import Signal, MultiSignal, Mixture
-from Beluga.BSS.Sawada_separation import SawadaBSS, StftParameters
+import numpy as np
+from scipy import signal as sp_signal
+from ..signal_class import Signal, MultiSignal, Mixture
+from ..Sawada_separation import SawadaBSS, StftParameters
 
 def test_sawada_separation():
     # --- 1. Paramètres de simulation ---
@@ -69,6 +71,9 @@ def test_sawada_separation():
     for i, src_multi in enumerate(separated_sources):
         fig, _ = src_multi.plot(overlay=False, figsize=(12, 3))
         fig.suptitle(f"Source Séparée Estimée n°{i}")
+        tdoas_s0 = get_multi_tdoa_matrix(src_multi, ref_channel=0)
+        print("valeur des tdoa entre le micro 0 et les micros: ", tdoas_s0)
+
         
     # Optionnel : Comparaison des spectrogrammes pour voir les masques
     print("Affichage des spectrogrammes de séparation...")
@@ -78,6 +83,49 @@ def test_sawada_separation():
         plt.gcf().suptitle(f"Spectrogramme masqué - Source {i}")
 
     plt.show()
+
+
+def calculate_simple_cross_correlation(sig_ref: np.ndarray, sig_target: np.ndarray):
+    """
+    Calcule la corrélation croisée classique et les retards associés.
+    """
+    # Corrélation classique : on cherche la ressemblance maximale
+    # mode='full' permet de tester tous les décalages possibles
+    correlation = sp_signal.correlate(sig_target, sig_ref, mode='full')
+    
+    # Génère le vecteur des retards (lags) en nombre d'échantillons
+    lags = sp_signal.correlation_lags(len(sig_target), len(sig_ref), mode='full')
+    
+    return correlation, lags
+
+def estimate_tdoa_classic(signal_ref: 'Signal', signal_target: 'Signal') -> float:
+    """
+    Estime le TDOA entre deux objets Signal en secondes.
+    """
+    if signal_ref.freq != signal_target.freq:
+        raise ValueError("Les fréquences d'échantillonnage doivent être identiques.")
+    
+    # 1. Calcul de la corrélation
+    corr, lags = calculate_simple_cross_correlation(signal_ref.data, signal_target.data)
+    
+    # 2. Recherche du maximum (le pic de ressemblance)
+    idx_max = np.argmax(np.abs(corr)) 
+    delay_samples = lags[idx_max]
+    
+    # 3. Conversion en secondes
+    return delay_samples 
+
+def get_multi_tdoa_matrix(multi_signal: 'MultiSignal', ref_channel: int = 0):
+    """
+    Calcule les TDOA pour tout le MultiSignal par rapport à un canal de référence.
+    """
+    tdoas = {}
+    for i in range(multi_signal.num_signals):
+        delay = estimate_tdoa_classic(multi_signal.signals[ref_channel], multi_signal.signals[i])
+        tdoas[i] = delay
+    return tdoas
+
+
 
 if __name__ == "__main__":
     test_sawada_separation()
