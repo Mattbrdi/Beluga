@@ -203,6 +203,7 @@ class Signal:
             t (np.ndarray): Tableau des temps de segments.
             Zxx (np.ndarray): STFT du signal (valeurs complexes).
         """
+        
         f, t, Zxx = sp_signal.stft(
             self.data, 
             fs=self.freq, 
@@ -213,7 +214,8 @@ class Signal:
             boundary='zeros',
             padded=True
         )
-        return NSpectrogram(f, t, Zxx, self.freq, window, nperseg, noverlap ) 
+        Zxx_3d = Zxx[np.newaxis, :, :]
+        return NSpectrogram(f, t, Zxx_3d, self.freq, window, nperseg, noverlap ) 
 
     def plot(self, ax=None, title="Signal", **kwargs):
         """Affiche le signal dans le domaine temporel."""
@@ -236,7 +238,7 @@ class Signal:
             return spectro.plot(db=db, **kwargs)
     
 class MultiSignal:
-    def __init__(self, signals: list):
+    def __init__(self, signals: list[Signal]):
         """
         Conteneur pour un vecteur de signaux (X).
         
@@ -254,6 +256,24 @@ class MultiSignal:
         self.signals = signals
         self.num_signals = len(signals) #nombre de signal
 
+    @classmethod
+    def from_array(cls, data: np.ndarray, fs: float) -> 'MultiSignal':
+        """
+        Crée une instance de MultiSignal à partir d'une matrice de données.
+        
+        Args:
+            data (np.ndarray): Matrice de forme (n_signals, longueur_signal)
+            fs (float): Fréquence d'échantillonnage pour tous les signaux.
+            
+        Returns:
+            MultiSignal: Une instance contenant la liste des objets Signal.
+        """
+        if data.ndim != 2:
+            raise ValueError(f"Les données doivent avoir 2 dimensions (n_signals, longueur), reçu {data.ndim}D.")
+        
+        signals_list = [Signal(row, fs) for row in data]
+        return cls(signals_list)
+    
     @property
     def data(self) -> np.ndarray:
         """
@@ -482,7 +502,7 @@ class NSpectrogram:
         
         Args:
             f, t, Sxx, fs : Données classiques. 
-            Sxx matrice de taille (Num_signals, f, t)
+            Sxx matrice de taille (Num_signals, F, T)
             window (str) : Type de fenêtre (ex: 'hann').
             nperseg (int) : Longueur de la fenêtre (points). Détermine la résolution fréquentielle (fs/nperseg).
             noverlap (int) : Nombre de points de recouvrement. Détermine la résolution temporelle.
@@ -490,7 +510,6 @@ class NSpectrogram:
         """
         if (Sxx.shape[1], Sxx.shape[2]) != (len(f), len(t)):
             raise ValueError(f"Incohérence : Sxx {Sxx.shape} != (f:{len(f)}, t:{len(t)})")
-        self.num_signals = Sxx.shape[0]
         self.f = f
         self.t = t
         self.Sxx = Sxx #
@@ -500,7 +519,9 @@ class NSpectrogram:
         self.noverlap = noverlap
         self.nfft = nfft
         
-
+    @property
+    def num_signals(self) -> int:
+        return self.Sxx.shape[0]
     @property
     def delta_f(self) -> float:
         """Résolution fréquentielle théorique (Hz)."""
@@ -659,18 +680,25 @@ class NSpectrogram:
             nfft=self.nfft
         )
         
-    def istft(self) -> 'Signal':
+    def istft_to_multisignal(self) -> 'MultiSignal':
         """
-        Réalise la transformée de Fourier à court terme inverse (ISTFT).
-        On reconstruit le signal à partir du premier canal (référence).
+        Reconstruit un MultiSignal (2D) à partir du tenseur Sxx (3D).
         """
-        # On reconstruit à partir du premier capteur (indice 0)
-        _, data = sp_signal.istft(
-            self.Sxx[0], 
-            fs=self.fs, 
-            window=self.window, 
-            nperseg=self.nperseg, 
-            noverlap=self.noverlap,
-            nfft=self.nfft
-        )
-        return Signal(data, self.fs)
+        # On boucle sur l'axe des signaux (E)
+        reconstructed_list = []
+        print(self.Sxx.shape, self.num_signals)
+        for i in range(self.num_signals):
+            # istft renvoie (vecteur_temps, vecteur_signal)
+            _, x = sp_signal.istft(
+                self.Sxx[i], # On passe une matrice 2D (F, T)
+                fs=self.fs,
+                window=self.window,
+                nperseg=self.nperseg,
+                noverlap=self.noverlap,
+                nfft=self.nfft
+            )
+            reconstructed_list.append(Signal(x, self.fs))
+        
+        
+        # On utilise votre méthode de classe pour créer l'objet final
+        return MultiSignal(reconstructed_list)

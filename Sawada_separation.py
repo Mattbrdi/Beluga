@@ -2,7 +2,7 @@ from __future__ import annotations
 import numpy as np 
 from scipy import signal as sp_signal 
 import matplotlib.pyplot as plt
-from signal_class import Signal, MultiSignal, NSpectrogram
+from .signal_class import Signal, MultiSignal, NSpectrogram
 from dataclasses import dataclass, field, asdict
 from sklearn.cluster import KMeans # Utilisé uniquement pour l'initialisation rapide
 from typing import List, Dict
@@ -10,7 +10,6 @@ from itertools import permutations
 
 @dataclass
 class StftParameters:
-    fs : float 
     window: str = 'hann'
     nperseg: int = 256
     noverlap: int|None = None
@@ -151,10 +150,17 @@ class SawadaBSS:
     """
     Algorithme de Sawada: 
     
+    préprocess:
     - Apllique la stft pour obtenir le NSpectrogram
     - Normalise par bin le Nspectrogram
     - Blanchiment 
+    
+    algo:
     - clustering
+    - alignement des cluster entre les fréquence
+    
+    - utilisation des mask obtenue pour obtenir le Nspectrogram pour une source donnée
+    - retour dans le domaine temporel
 
     """ 
     def __init__(self, n_sources: int, stft_parameters: StftParameters, n_iter_em: int = 20, whitening: bool = False ):
@@ -164,15 +170,13 @@ class SawadaBSS:
         self.stft_parameters = stft_parameters
         
         # Dictionnaires pour stocker les résultats par bin fréquentiel
+        self.signal : MultiSignal|None = None
         self.bin_models: Dict[int, EMClustering] = {} #int is the freq_idx
         self.bin_masks: Dict[int, np.ndarray] = {}
         
         self.whitening = whitening 
         self.eigenvalues_matrix : np.ndarray|None = None #(n_sources)
         self.eigenvector_matrix : np.ndarray|None = None #(n_sources, n_sources) 
-        
-        self.model: EMClustering | None = None
-        self.masks: np.ndarray | None = None
         
     def preprocess(self, input: MultiSignal) -> NSpectrogram:
         """
@@ -192,8 +196,9 @@ class SawadaBSS:
     def apply_whitening(self, spectro: NSpectrogram) -> NSpectrogram:
         self.eigenvalues_matrix, self.eigenvector_matrix = spectro.decompose_spatial_correlation() 
         whitening_matrix = spectro.compute_whitening_matrix(self.eigenvalues_matrix, self.eigenvector_matrix)
-    
         return spectro.apply_transformation(W = whitening_matrix)
+    
+    
     def fit_bins(self, nspectro: 'NSpectrogram'):
         """
         Exécute le clustering EM pour chaque bin de fréquence indépendamment.
@@ -324,5 +329,76 @@ class SawadaBSS:
         for f in range(n_freqs):
             final_masks[:, f, :] = self.bin_masks[f]
         return final_masks
+        
+    def process_signal(self, multi_signal: MultiSignal) :
+        """
+        Exécute le pipeline complet : STFT -> Normalisation -> Blanchiment -> EM -> Alignement.
+        Rempli les arguments         self.bin_models et self.bin_masks
+        
+        Args:
+            multi_signal (MultiSignal): Le signal multicanal d'entrée.
+            
+        Returns:
+            NSpectrogram: Le spectrogramme blanchi utilisé pour les calculs.
+        """
+        self.signal = multi_signal
+        # 1. Prétraitement (STFT + Normalisation + Blanchiment)
+        nspectro_whitened = self.preprocess(multi_signal)
+        
+        # 2. Algo : Clustering par bin (EM)
+        print("Démarrage du clustering EM par bin...")
+        self.fit_bins(nspectro_whitened)
+        
+        # 3. Algo : Alignement des permutations entre les fréquences
+        print("Alignement des permutations...")
+        self.align_permutations(nspectro_whitened)
+        
+        return None
     
-    
+    def separate_source(self) -> List[MultiSignal]:
+        """
+        Isole les sources à partir des masques et revient dans le domaine temporel.
+        
+        Args:
+            original_nspectro (NSpectrogram): Le spectrogramme original (NON blanchi).
+            source_idx (int): L'indice de la source à reconstruire (0 à n_sources-1).
+            
+        Returns:
+            Signal: Le signal temporel de la source extraite.
+        """
+        
+        list_separated_sources = [] #list des sources separés
+        
+        for source_idx in range(self.n_sources):
+            multi_sig_src_i = self._separate_source_i(source_idx)
+            list_separated_sources.append(multi_sig_src_i)
+
+        return list_separated_sources
+    def get_spectro_source_i(self, source_idx: int) -> NSpectrogram: 
+        
+        if source_idx >= self.n_sources:
+            raise ValueError(f"Indice {source_idx} invalide pour {self.n_sources} sources.")
+        if self.signal == None: 
+            raise ValueError("Aucun signal n'a été process")
+        
+        Nspectro = self.get_spectro(self.signal)
+        masks = self.get_final_masks() # Shape: (n_sources, n_freqs, n_times)
+        mask_source = masks[source_idx][np.newaxis, :, :]
+        masked_Sxx = Nspectro.Sxx * mask_source
+        
+        return NSpectrogram(
+            f=Nspectro.f,
+            t=Nspectro.t,
+            Sxx=masked_Sxx,
+            fs=Nspectro.fs,
+            window=Nspectro.window,
+            nperseg=Nspectro.nperseg,
+            noverlap=Nspectro.noverlap,
+            nfft=Nspectro.nfft
+        )
+        
+    def _separate_source_i(self, source_idx) -> MultiSignal: 
+        return self.get_spectro_source_i(source_idx).istft_to_multisignal()  
+        
+        
+        
