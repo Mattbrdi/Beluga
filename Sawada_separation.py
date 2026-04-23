@@ -320,7 +320,7 @@ class SawadaBSS:
                 if memory == 'average':
                     reference_envelopes[i] = (f * reference_envelopes[i] + new_env) / (f + 1)
                 elif memory == 'ema':
-                    reference_envelopes[i] = (1-EMA_COEF) * reference_envelopes + EMA_COEF * new_env
+                    reference_envelopes[i] = (1-EMA_COEF) * reference_envelopes[i] + EMA_COEF * new_env
                 else: 
                     raise ValueError("memory mode non supporté")
                 

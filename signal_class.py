@@ -686,7 +686,6 @@ class NSpectrogram:
         """
         # On boucle sur l'axe des signaux (E)
         reconstructed_list = []
-        print(self.Sxx.shape, self.num_signals)
         for i in range(self.num_signals):
             # istft renvoie (vecteur_temps, vecteur_signal)
             _, x = sp_signal.istft(
