@@ -4,16 +4,10 @@ from scipy import signal as sp_signal
 import matplotlib.pyplot as plt
 from .signal_class import Signal, MultiSignal, NSpectrogram
 from dataclasses import dataclass, field, asdict
+from .associated_dataclasses import StftParameters, EMClusteringParameters
 from sklearn.cluster import KMeans # Utilisé uniquement pour l'initialisation rapide
-from typing import List, Dict
+from typing import List, Dict, Optional
 from itertools import permutations
-
-@dataclass
-class StftParameters:
-    window: str = 'hann'
-    nperseg: int = 256
-    noverlap: int|None = None
-    nfft: int |None = None
 
 
 @dataclass
@@ -145,7 +139,8 @@ class EMClustering:
         for i in range(self.n_sources):
             masks[i, best_source == i] = 1
         return masks
-
+    
+@dataclass
 class SawadaBSS:
         
     """
@@ -164,21 +159,24 @@ class SawadaBSS:
     - retour dans le domaine temporel
 
     """ 
-    def __init__(self, n_sources: int, stft_parameters: StftParameters, n_iter_em: int = 20, whitening: bool = False ):
-        self.n_sources = n_sources
-        self.n_iter_em = n_iter_em
-        
-        self.stft_parameters = stft_parameters
-        
-        # Dictionnaires pour stocker les résultats par bin fréquentiel
-        self.signal : MultiSignal|None = None
-        self.bin_models: Dict[int, EMClustering] = {} #int is the freq_idx
-        self.bin_masks: Dict[int, np.ndarray] = {}
-        
-        self.whitening = whitening 
-        self.eigenvalues_matrix : np.ndarray|None = None #(n_sources)
-        self.eigenvector_matrix : np.ndarray|None = None #(n_sources, n_sources) 
-        
+    n_sources: int
+    stft_parameters: StftParameters = field(default_factory= StftParameters)
+    em_clustering_parameters : EMClusteringParameters = field(default_factory= EMClusteringParameters)
+    
+    # Paramètres avec valeurs par défaut
+    whitening: bool = True 
+    
+    # État de l'algorithme (Champs calculés plus tard)
+    # On utilise default_factory pour les dictionnaires vides
+    signal: Optional['MultiSignal'] = None
+    bin_models: Dict[int, 'EMClustering'] = field(default_factory=dict)
+    bin_masks: Dict[int, np.ndarray] = field(default_factory=dict)
+    
+    eigenvalues_matrix: Optional[np.ndarray] = None
+    eigenvector_matrix: Optional[np.ndarray] = None
+    
+    
+    
     def preprocess(self, input: MultiSignal) -> NSpectrogram:
         """
         Construit le spectrogramme de travail:
@@ -221,7 +219,9 @@ class SawadaBSS:
             # On utilise les paramètres de la classe Sawada
             model = EMClustering(
                 n_sources=self.n_sources, 
-                n_iter=self.n_iter_em
+                n_iter=self.em_clustering_parameters.n_iter, 
+                phi= self.em_clustering_parameters.phi,
+                eps = self.em_clustering_parameters.eps
             )
             
             # 3. Entraînement (M-Step et E-Step alternés)
