@@ -19,11 +19,11 @@ def test_sawada_separation():
         duration, fs, start_time=0.2, end_time=1.0, 
         frequencies=[500, 1200, 1600], window_type='hann'
     )
-    
+    s1 = s1 + s1 
     # Création de la Source 2 : Basses fréquences à la fin
     s2 = Signal.generate_multi_freq_signal(
-        duration, fs, start_time=0.7, end_time=1.8, 
-        frequencies=[300, 450, 1300], window_type='hann'
+        duration, fs, start_time=0.6, end_time=1.5, 
+        frequencies=[300, 450, 600], window_type='hann'
     )
     
     # Regroupement en MultiSignal (Sources propres)
@@ -90,6 +90,11 @@ def test_sawada_separation():
 
     plt.show()
 
+    a  = np.array([0,0,0,0,0,0,0,0,0,0,1,2,3,4,5,4,3,2,1,0,0,0,0,0,0,0])
+    b  = np.array([0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,2,3,4,5,4,3,2,1,0,0,0]) 
+    a = Signal(a, 10)
+    b = Signal(b, 10)
+    print("false signal tdoa : ", estimate_tdoa_classic(a,b))
 
 def calculate_simple_cross_correlation(sig_ref: np.ndarray, sig_target: np.ndarray):
     """
@@ -125,7 +130,7 @@ def get_multi_tdoa_matrix(multi_signal: 'MultiSignal', ref_channel: int = 0):
     """
     Calcule les TDOA pour tout le MultiSignal par rapport à un canal de référence.
     """
-    tdoas = {}
+    tdoas = np.zeros(multi_signal.num_signals)
     for i in range(multi_signal.num_signals):
         delay = estimate_tdoa_classic(multi_signal.signals[ref_channel], multi_signal.signals[i])
         tdoas[i] = delay

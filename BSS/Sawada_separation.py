@@ -139,7 +139,8 @@ class EMClustering:
         for i in range(self.n_sources):
             masks[i, best_source == i] = 1
         return masks
-    
+
+
 @dataclass
 class SawadaBSS:
         
@@ -169,6 +170,7 @@ class SawadaBSS:
     # État de l'algorithme (Champs calculés plus tard)
     # On utilise default_factory pour les dictionnaires vides
     signal: Optional['MultiSignal'] = None
+    nspectro_preprocessed: Optional[NSpectrogram] = None
     bin_models: Dict[int, 'EMClustering'] = field(default_factory=dict)
     bin_masks: Dict[int, np.ndarray] = field(default_factory=dict)
     
@@ -232,7 +234,6 @@ class SawadaBSS:
             # mask_f shape: (n_sources, n_times)
             mask_f = model.predict(X_f)
             
-            # 5. Stockage des résultats pour le réalignement futur
             self.bin_models[f_idx] = model
             self.bin_masks[f_idx] = mask_f
 
@@ -253,7 +254,7 @@ class SawadaBSS:
             
         return centroids_tensor
     
-    def align_permutations(self, nspectro: 'NSpectrogram', memory: str = 'ema'):
+    def align_permutations(self, memory: str = 'ema'):
         """
         Résout le problème de permutation en utilisant la corrélation d'enveloppe.
         
@@ -262,7 +263,11 @@ class SawadaBSS:
         
         arg: memory(str): 'ema' - l'enveloppe calculé evolue selon une ema
                           'average' - suit une moyenne arithmétique
+            nspecto(Nspectrogram):  Spectrogram utilisé pour calculer l'enveloppe en utilisant les masks
+                                    calculés précedemment
         """
+        assert self.nspectro_preprocessed is not None, "Aucun signal processed"
+        nspectro = self.nspectro_preprocessed
         n_micros, n_freqs, n_times = nspectro.Sxx.shape
         
         # 1. Calcul des amplitudes globales (pour le calcul des enveloppes)
@@ -363,27 +368,23 @@ class SawadaBSS:
         self.signal = multi_signal
         # 1. Prétraitement (STFT + Normalisation + Blanchiment)
         nspectro_whitened = self.preprocess(multi_signal)
-        
+        self.nspectro_preprocessed = self.preprocess(multi_signal)
         # 2. Algo : Clustering par bin (EM)
         print("Démarrage du clustering EM par bin...")
         self.fit_bins(nspectro_whitened)
         
         # 3. Algo : Alignement des permutations entre les fréquences
         print("Alignement des permutations...")
-        self.align_permutations(nspectro_whitened)
+        self.align_permutations()
         
         return None
     
     def separate_source(self) -> List[MultiSignal]:
         """
         Isole les sources à partir des masques et revient dans le domaine temporel.
-        
-        Args:
-            original_nspectro (NSpectrogram): Le spectrogramme original (NON blanchi).
-            source_idx (int): L'indice de la source à reconstruire (0 à n_sources-1).
             
         Returns:
-            Signal: Le signal temporel de la source extraite.
+            list MultiSignal: Le signal temporel de chaque source extraite pour l'ensemble des canaux.
         """
         
         list_separated_sources = [] #list des sources separés
@@ -393,6 +394,18 @@ class SawadaBSS:
             list_separated_sources.append(multi_sig_src_i)
 
         return list_separated_sources
+
+    def _separate_source_i(self, source_idx) -> MultiSignal: 
+        """
+
+        Args:
+            source_idx (_type_): _description_
+
+        Returns:
+            MultiSignal: MultiSignal de la source i sur tout les canaux
+        """
+        return self.get_spectro_source_i(source_idx).istft_to_multisignal()  
+        
     def get_spectro_source_i(self, source_idx: int) -> NSpectrogram: 
         
         if source_idx >= self.n_sources:
@@ -415,9 +428,6 @@ class SawadaBSS:
             noverlap=Nspectro.noverlap,
             nfft=Nspectro.nfft
         )
-        
-    def _separate_source_i(self, source_idx) -> MultiSignal: 
-        return self.get_spectro_source_i(source_idx).istft_to_multisignal()  
         
         
         
