@@ -10,3 +10,4 @@ pipeline/src/tests/debug_wavs/
 pipeline/src/utils/__pycache__/
 pipeline/test_data/
 spectrogram_analysis/
+ignore_folder/
