@@ -5,3 +5,6 @@
 /pipeline/__pycache__/
 /pipeline/test_data/results/
 __pycache__/
+pipeline/debug_wavs/
+pipeline/src/utils/__pycache__/
+
