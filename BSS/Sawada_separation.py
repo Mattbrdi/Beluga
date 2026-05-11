@@ -238,7 +238,6 @@ class SawadaBSS:
             self.bin_masks[f_idx] = mask_f
 
         print("Clustering par bin terminé.")
-
     @property
     def all_centroids(self) -> np.ndarray:
         """
