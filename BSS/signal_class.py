@@ -215,7 +215,7 @@ class Signal:
             padded=True
         )
         Zxx_3d = Zxx[np.newaxis, :, :]
-        return NSpectrogram(f, t, Zxx_3d, self.freq, window, nperseg, noverlap ) 
+        return NSpectrogram(f, t, Zxx_3d, self.freq, window, nperseg, noverlap, nfft) 
 
     def plot(self, ax=None, title="Signal", **kwargs):
         """Affiche le signal dans le domaine temporel."""

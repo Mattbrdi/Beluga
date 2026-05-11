@@ -256,7 +256,15 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
     end_denoising = time()
     if parameters.print_level > 0:
         print(f"▒▒▒▒▒▒▒▒▒▒▒▒ Denoising made in: {end_denoising - end_detection:.2f}s")
-
+    ######
+    ######
+    #####
+    # (mb55) ZONE OU PLACER LA DETECTION DU NOMBRE DE SOURCE ET LA SEPARATION DE SOURCES 
+    #ici c'est les audio pour une seconde de temps, il faut traiter audio_arrays qui contient les différend tétraèdre
+    #######
+    ######
+    ########
+    
     # Signal characteristics
     central_frequency, frequency_range, snrs_list = signal_characteristics(audio_arrays)
     for i, snrs in enumerate(snrs_list):
@@ -379,7 +387,7 @@ def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_fi
 
         if parameters.print_level >0:
             print(f"▒▒▒▒▒▒▒▒▒▒▒▒ {audio_start_time}")
-
+        #donne le dataframe avec les resultats pour chaque 
         results_df = run_pipeline_overlaps_long_spects(
             long_audio,
             audio_start_time,
