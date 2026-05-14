@@ -1,6 +1,8 @@
 numpy>=2.1.2
 matplotlib>=3.10.0
 scipy >= 1.15.2
+streamlit
+streamlit-image-coordinates
 torch
 torchvision
 librosa
@@ -10,3 +12,7 @@ dash
 plotly
 folium
 pyproj
+tqdm
+seaborn
+dash-leaflet
+lightning
