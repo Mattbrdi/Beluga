@@ -1,7 +1,9 @@
+from __future__ import annotations # Permet d'utiliser Spectrogram comme type même s'il est défini plus loin
 import numpy as np 
 from scipy import signal as sp_signal 
 import matplotlib.pyplot as plt
-print("hello")
+
+
 class Signal:
     def __init__(self, data: np.ndarray, freq: float):
         self.data = np.array(data)
@@ -185,7 +187,7 @@ class Signal:
         """Calcule l'énergie du signal : E = sum(|x[n]|^2)"""
         return np.sum(np.square(self.data)) 
     
-    def stft(self, window: str = 'hann', nperseg: int = 256, noverlap: int|None = None, nfft: int|None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def stft(self, window: str = 'hann', nperseg: int = 256, noverlap: int|None = None, nfft: int|None = None) -> NSpectrogram:
         """
         Calcule la STFT.
         
@@ -201,6 +203,7 @@ class Signal:
             t (np.ndarray): Tableau des temps de segments.
             Zxx (np.ndarray): STFT du signal (valeurs complexes).
         """
+        
         f, t, Zxx = sp_signal.stft(
             self.data, 
             fs=self.freq, 
@@ -211,7 +214,8 @@ class Signal:
             boundary='zeros',
             padded=True
         )
-        return f, t, Zxx
+        Zxx_3d = Zxx[np.newaxis, :, :]
+        return NSpectrogram(f, t, Zxx_3d, self.freq, window, nperseg, noverlap, nfft) 
 
     def plot(self, ax=None, title="Signal", **kwargs):
         """Affiche le signal dans le domaine temporel."""
@@ -225,42 +229,16 @@ class Signal:
         ax.grid(True)
         return ax
     
-    def plot_spectrogram(self, nperseg=256, ax=None, db=True):
+    def plot_spectrogram(self, nperseg=256, db=False, **kwargs):
             """
-            Affiche le spectrogramme d'un signal unique.
-            db : Utilise une échelle logarithmique (dB) pour la dynamique.
+            Calcule et affiche le spectrogramme pour un signal unique.
             """
-            
-            f, t, Zxx = self.stft(nperseg=nperseg)
-            
-            if ax is None:
-                fig, ax = plt.subplots(figsize=(10, 6))
-            
-            # Calcul de la magnitude
-            magnitude = np.abs(Zxx)
-            if db:
-                # Ajout d'un epsilon pour éviter log(0)
-                display_data = 10 * np.log10(magnitude + 1e-10)
-                label = "Magnitude (dB)"
-            else:
-                display_data = magnitude
-                label = "Magnitude (linéaire)"
-
-            im = ax.pcolormesh(t, f, display_data, shading='gouraud', cmap='viridis')
-            ax.set_title(f"Spectrogramme - fs={self.freq}Hz")
-            ax.set_ylabel("Fréquence (Hz)")
-            ax.set_xlabel("Temps (s)")
-            
-            # Gestion de la colorbar avec vérification de la figure
-            fig = ax.get_figure()
-            if fig is not None:
-                # On ajoute la colorbar à la figure associée à l'axe
-                fig.colorbar(im, ax=ax, label=label)
-                
-            return im
+            # On utilise la méthode stft qui renvoie déjà l'objet Spectrogram
+            spectro = self.stft(nperseg=nperseg)
+            return spectro.plot(db=db, **kwargs)
     
 class MultiSignal:
-    def __init__(self, signals: list):
+    def __init__(self, signals: list[Signal]):
         """
         Conteneur pour un vecteur de signaux (X).
         
@@ -278,6 +256,24 @@ class MultiSignal:
         self.signals = signals
         self.num_signals = len(signals) #nombre de signal
 
+    @classmethod
+    def from_array(cls, data: np.ndarray, fs: float) -> 'MultiSignal':
+        """
+        Crée une instance de MultiSignal à partir d'une matrice de données.
+        
+        Args:
+            data (np.ndarray): Matrice de forme (n_signals, longueur_signal)
+            fs (float): Fréquence d'échantillonnage pour tous les signaux.
+            
+        Returns:
+            MultiSignal: Une instance contenant la liste des objets Signal.
+        """
+        if data.ndim != 2:
+            raise ValueError(f"Les données doivent avoir 2 dimensions (n_signals, longueur), reçu {data.ndim}D.")
+        
+        signals_list = [Signal(row, fs) for row in data]
+        return cls(signals_list)
+    
     @property
     def data(self) -> np.ndarray:
         """
@@ -305,7 +301,7 @@ class MultiSignal:
     def time(self) -> np.ndarray:
         return np.arange(0, self.duration, 1/self.freq)
     
-    def stft(self, window: str = 'hann', nperseg: int = 256, noverlap: int|None = None, nfft: int|None = None) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    def stft(self, window: str = 'hann', nperseg: int = 256, noverlap: int|None = None, nfft: int|None = None) -> NSpectrogram:
         """
         Calcule la STFT de manière vectorisée sur la matrice de données.
         
@@ -334,8 +330,7 @@ class MultiSignal:
             nfft=nfft,
             axis=-1
         )
-        
-        return f, t, Zxx
+        return NSpectrogram(f,t,Zxx,self.freq, window =window, nperseg=nperseg, noverlap=noverlap, nfft = nfft)
     
     def plot(self, overlay: bool = False, sharex: bool = True, figsize: tuple = (12, 6)):
         """
@@ -375,41 +370,14 @@ class MultiSignal:
             plt.tight_layout()
             return fig, axes
         
-    def plot_spectrograms(self, nperseg=256, figsize=(12, 10), db=True):
+    def plot_spectrograms(self, nperseg=256, db=True, **kwargs):
             """
-            Affiche une grille de spectrogrammes pour comparer les signaux (E).
-            Rigueur : Calcul vectorisé et partage des axes pour comparaison directe.
+            Calcule et affiche la grille de spectrogrammes pour tous les signaux.
+            Rigueur : Utilise l'affichage vectorisé et normalisé de la classe Spectrogram.
             """
-            # Utilisation du calcul vectorisé sur la matrice data (E, N)
-            f, t, Zxx_multi = self.stft(nperseg=nperseg)
-            
-            magnitude_globale = np.abs(Zxx_multi)
-            vmax = 10 * np.log10(np.max(magnitude_globale) + 1e-10)
-            vmin = vmax - 80 # Dynamique de 80 dB par exemple
-            # Création de subplots verticaux (un par signal)
-            fig, axes = plt.subplots(self.num_signals, 1, figsize=figsize, sharex=True, sharey=True)
-            
-            # Sécurité si E=1
-            if self.num_signals == 1:
-                axes = [axes]
-                
-            for i in range(self.num_signals):
-                magnitude = np.abs(Zxx_multi[i])
-                if db:
-                    display_data = 10 * np.log10(magnitude + 1e-10)
-                else:
-                    display_data = magnitude
-                    
-                im = axes[i].pcolormesh(t, f, display_data, shading='gouraud', cmap='magma', vmax = vmax, vmin = vmin)
-                axes[i].set_title(f"Spectrogramme - Signal {i}")
-                axes[i].set_ylabel("Freq (Hz)")
-                
-                # Une colorbar par signal pour voir les différences de gain
-                fig.colorbar(im, ax=axes[i], label="Magnitude")
-                
-            axes[-1].set_xlabel("Temps (s)")
-            plt.tight_layout()
-            return fig, axes
+            # On récupère l'objet Spectrogram (contenant les données E x F x T)
+            spectro = self.stft(nperseg=nperseg)
+            return spectro.plot(db=db, **kwargs) 
         
     def __repr__(self):
         n_samples = self.data.shape[1]
@@ -525,3 +493,211 @@ class Mixture:
     
     def __repr__(self):
         return f"Mixture(Entrées={self.E}, Sorties={self.S}, Longueur du filtre={self.L})"
+
+class NSpectrogram:
+    def __init__(self, f: np.ndarray, t: np.ndarray, Sxx: np.ndarray, fs: float, 
+                 window: str, nperseg: int, noverlap: int|None = None, nfft: int|None = None):
+        """
+        Conteneur pour les données de temps-fréquence de plusieurs signaux avec métadonnées de construction.
+        
+        Args:
+            f, t, Sxx, fs : Données classiques. 
+            Sxx matrice de taille (Num_signals, F, T)
+            window (str) : Type de fenêtre (ex: 'hann').
+            nperseg (int) : Longueur de la fenêtre (points). Détermine la résolution fréquentielle (fs/nperseg).
+            noverlap (int) : Nombre de points de recouvrement. Détermine la résolution temporelle.
+            nfft (int) : nombre de point utilisé pour calculé la fft (indépendemment de nperseg car ca rajoute juste des zero et pas du signal)
+        """
+        if (Sxx.shape[1], Sxx.shape[2]) != (len(f), len(t)):
+            raise ValueError(f"Incohérence : Sxx {Sxx.shape} != (f:{len(f)}, t:{len(t)})")
+        self.f = f
+        self.t = t
+        self.Sxx = Sxx #
+        self.fs = fs
+        self.window = window
+        self.nperseg = nperseg
+        self.noverlap = noverlap
+        self.nfft = nfft
+        
+    @property
+    def num_signals(self) -> int:
+        return self.Sxx.shape[0]
+    @property
+    def delta_f(self) -> float:
+        """Résolution fréquentielle théorique (Hz)."""
+        return self.fs / self.nperseg
+
+    @property
+    def delta_t(self) -> float:
+        """Résolution temporelle (pas entre deux colonnes en secondes)."""
+        if self.noverlap == None: 
+            return self.nperseg/(2*self.fs)
+        else:
+            return (self.nperseg - self.noverlap) / self.fs
+
+    def plot(self, figsize=(12, 10), db=False):
+            # Création de subplots verticaux (un par signal)
+            f,t ,Zxx_multi = self.f, self.t, self.Sxx 
+            fig, axes = plt.subplots(self.num_signals, 1, figsize=figsize, sharex=True, sharey=True)
+            
+            # Sécurité si E=1
+            if self.num_signals == 1:
+                axes = [axes]
+                
+            for i in range(self.num_signals):
+                magnitude = np.abs(Zxx_multi[i])
+                magnitude_globale = np.abs(Zxx_multi)
+                if db:
+                    display_data = 10 * np.log10(magnitude + 1e-10)
+                    vmax = 10 * np.log10(np.max(magnitude_globale) + 1e-10)
+                    vmin = vmax - 80 # Dynamique de 80 dB par exemple
+                else:
+                    display_data = magnitude
+                    vmax = np.max(magnitude_globale)
+                    vmin =0 
+                    
+                    
+                im = axes[i].pcolormesh(t, f, display_data, shading='gouraud', cmap='magma', vmax = vmax, vmin = vmin)
+                axes[i].set_title(f"Spectrogramme - Signal {i}")
+                axes[i].set_ylabel("Freq (Hz)")
+                
+                # Une colorbar par signal pour voir les différences de gain
+                fig.colorbar(im, ax=axes[i], label="Magnitude")
+                
+            axes[-1].set_xlabel("Temps (s)")
+            plt.tight_layout()
+            return fig, axes
+        
+    def normalize_each_bin(self) -> 'NSpectrogram':
+        """
+        Normalise les vecteurs d'observation unitaires pour chaque point (t, f).
+        
+        Cette opération projette chaque vecteur complexe sur l'hypersphère unité,
+        ce qui est l'étape préliminaire au clustering de Sawada pour s'affranchir
+        de la puissance absolue des sources.
+        
+        Returns:
+            NSpectrogram: Une nouvelle instance contenant les vecteurs normalisés.
+        """
+        # Sxx a pour dimensions (E, F, T) où E est le nombre de signaux (capteurs)
+        
+        norms = np.linalg.norm(self.Sxx, axis=0)
+        
+        norms_safe = np.where(norms == 0, 1.0, norms)
+
+        new_Sxx = self.Sxx / norms_safe
+        
+        return NSpectrogram(
+            f=self.f, 
+            t=self.t, 
+            Sxx=new_Sxx, 
+            fs=self.fs, 
+            window=self.window, 
+            nperseg=self.nperseg, 
+            noverlap=self.noverlap, 
+            nfft=self.nfft
+        )
+    
+    def decompose_spatial_correlation(self) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Calcule la décomposition spectrale (Eigendecomposition) de la corrélation spatiale.
+        
+        Returns:
+            tuple: (eigenvalues, eigenvectors) 
+                eigenvalues: vecteur (E,) des variances sur les axes principaux.
+                eigenvectors: matrice (E, E) des directions spatiales.
+        """
+        # E_num: nombre de capteurs (micros)
+        E_num = self.Sxx.shape[0]
+        
+        # Passage en 2D (E, F*T) pour traiter tous les points temps-fréquence
+        X_flat = self.Sxx.reshape(E_num, -1)
+        n_observations = X_flat.shape[1]
+        
+        # Calcul de la matrice de corrélation hermitienne R
+        R = (X_flat @ X_flat.conj().T) / n_observations
+        
+        # Décomposition : eigh garantit des valeurs propres réelles pour une matrice hermitienne
+        eigenvalues, eigenvectors = np.linalg.eigh(R)
+        
+        return eigenvalues, eigenvectors # D and E
+    
+    def compute_whitening_matrix(self, eigenvalues: np.ndarray, eigenvectors: np.ndarray) -> np.ndarray:
+        """
+        Construit la matrice de blanchiment W à partir de la décomposition.
+        
+        Args:
+            eigenvalues: Valeurs propres matrice (E) 
+            eigenvectors: Vecteurs propres (E,E)
+            
+        Returns:
+            np.ndarray: Matrice W de dimension (Entrée, Entrée)
+        """
+        # Protection numérique contre les divisions par zéro ou valeurs négatives
+        eps = 1e-12
+        
+        # Calcul de D^(-1/2)
+        # On travaille sur un vecteur pour l'efficacité, puis on transforme en diagonale
+        inv_sqrt_diag = 1.0 / np.sqrt(np.maximum(eigenvalues, eps))
+        D_inv_sqrt = np.diag(inv_sqrt_diag)
+        
+        # W = D^(-1/2) @ E^H
+        # E.conj().T est la transposée hermitienne
+        W = D_inv_sqrt @ eigenvectors.conj().T
+        
+        return W 
+    def apply_transformation(self, W: np.ndarray) -> 'NSpectrogram':
+        """
+        Applique une matrice de transformation linéaire W sur chaque vecteur 
+        d'observation (t, f) du spectrogramme.
+        
+        Args:
+            W (np.ndarray): Matrice de transformation (ex: blanchiment) de dimension (E, E).
+            
+        Returns:
+            NSpectrogram: Une nouvelle instance contenant les données transformées.
+        """
+        E_num, F_num, T_num = self.Sxx.shape
+        
+        # Vérification de la cohérence des dimensions
+        if W.shape != (E_num, E_num):
+            raise ValueError(f"La matrice W doit être de taille ({E_num}, {E_num}).")
+
+        # Application de la transformation : X_new = W @ X
+        # On aplatit pour le calcul matriciel efficace, puis on redimensionne
+        X_flat = self.Sxx.reshape(E_num, -1)
+        X_transformed_flat = W @ X_flat
+        new_Sxx = X_transformed_flat.reshape(E_num, F_num, T_num)
+        
+        return NSpectrogram(
+            f=self.f, 
+            t=self.t, 
+            Sxx=new_Sxx, 
+            fs=self.fs, 
+            window=self.window, 
+            nperseg=self.nperseg, 
+            noverlap=self.noverlap, 
+            nfft=self.nfft
+        )
+        
+    def istft_to_multisignal(self) -> 'MultiSignal':
+        """
+        Reconstruit un MultiSignal (2D) à partir du tenseur Sxx (3D).
+        """
+        # On boucle sur l'axe des signaux (E)
+        reconstructed_list = []
+        for i in range(self.num_signals):
+            # istft renvoie (vecteur_temps, vecteur_signal)
+            _, x = sp_signal.istft(
+                self.Sxx[i], # On passe une matrice 2D (F, T)
+                fs=self.fs,
+                window=self.window,
+                nperseg=self.nperseg,
+                noverlap=self.noverlap,
+                nfft=self.nfft
+            )
+            reconstructed_list.append(Signal(x, self.fs))
+        
+        
+        # On utilise votre méthode de classe pour créer l'objet final
+        return MultiSignal(reconstructed_list)
