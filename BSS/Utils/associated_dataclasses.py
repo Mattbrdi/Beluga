@@ -7,6 +7,8 @@ class StftParameters:
     nperseg: int = 256
     noverlap: int|None = None
     nfft: int |None = None
+    boundary: str | None = 'zeros'
+    padded: bool = True
     
 @dataclass
 class EMClusteringParameters:
