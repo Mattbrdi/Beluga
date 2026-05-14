@@ -122,8 +122,8 @@ def plot_multisignal_comparison(
         fig_orig_spec, _ = original_source.plot_spectrograms(
             nperseg=stft_params.nperseg,
             figsize=(12, 4), 
-            magnitude_scale = "Linear",
-            frequency_scale="db"
+            magnitude_scale = "linear",
+            frequency_scale="log",
         )
         fig_orig_spec.suptitle(f"Source originale {idx} - spectrogrammes")
 
@@ -133,6 +133,8 @@ def plot_multisignal_comparison(
         fig_est_spec, _ = estimated_source.plot_spectrograms(
             nperseg=stft_params.nperseg,
             db=False,
+            magnitude_scale='linear',
+            frequency_scale='log',
             figsize=(12, 4)
         )
         fig_est_spec.suptitle(f"Source separee {idx} - spectrogrammes")

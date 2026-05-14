@@ -202,7 +202,15 @@ class Signal:
         """Calcule l'énergie du signal : E = sum(|x[n]|^2)"""
         return np.sum(np.square(self.data)) 
     
-    def stft(self, window: str = 'hann', nperseg: int = 256, noverlap: int|None = None, nfft: int|None = None) -> NSpectrogram:
+    def stft(
+        self,
+        window: str = 'hann',
+        nperseg: int = 256,
+        noverlap: int|None = None,
+        nfft: int|None = None,
+        boundary: str |None = 'zeros',
+        padded: bool = True
+    ) -> NSpectrogram:
         """
         Calcule la STFT.
         
@@ -212,6 +220,8 @@ class Signal:
             noverlap (int, optional): Nombre de points de recouvrement entre segments. 
                                       Par défaut, nperseg // 2.
             nfft (int, optional): Longueur de la FFT utilisée, si un zero-padding est souhaité.
+            boundary (str | None, optional): Stratégie d'extension aux bords transmise à `scipy.signal.stft`.
+            padded (bool, optional): Si True, complète la fin du signal pour couvrir une dernière trame.
 
         Returns:
             f (np.ndarray): Tableau des fréquences d'échantillonnage.
@@ -226,11 +236,23 @@ class Signal:
             nperseg=nperseg, 
             noverlap=noverlap, 
             nfft=nfft,
-            boundary='zeros',
-            padded=True
+            boundary=boundary, # type: ignore
+            padded=padded
         )
         Zxx_3d = Zxx[np.newaxis, :, :]
-        return NSpectrogram(f, t, Zxx_3d, self.freq, window, nperseg, noverlap, nfft) 
+        return NSpectrogram(
+            f,
+            t,
+            Zxx_3d,
+            self.freq,
+            window,
+            nperseg,
+            noverlap,
+            nfft,
+            boundary=boundary,
+            padded=padded,
+            signal_lengths=np.array([len(self.data)], dtype=int)
+        )
 
     def plot(self, ax=None, title="Signal", **kwargs):
         """Affiche le signal dans le domaine temporel."""
@@ -378,7 +400,12 @@ class Signal:
     
     def plot_spectrogram(
         self,
+        window: str = 'hann',
         nperseg=256,
+        noverlap: int | None = None,
+        nfft: int | None = None,
+        boundary: str | None = 'zeros',
+        padded: bool = True,
         db=False,
         magnitude_scale: str | None = None,
         frequency_scale: str = 'linear',
@@ -388,7 +415,12 @@ class Signal:
             Calcule et affiche le spectrogramme pour un signal unique.
 
             Args:
+                window: Fenêtre STFT utilisée.
                 nperseg: Longueur des fenêtres de STFT.
+                noverlap: Recouvrement entre fenêtres STFT.
+                nfft: Taille de FFT utilisée pour la STFT.
+                boundary: Mode d'extension aux bords transmis à la STFT.
+                padded: Si True, complète la fin du signal pour couvrir la dernière trame.
                 db: Compatibilité ascendante. Si True, utilise `magnitude_scale='db'`
                     quand `magnitude_scale` n'est pas renseigné.
                 magnitude_scale: Échelle de couleur pour la magnitude.
@@ -398,7 +430,14 @@ class Signal:
                 **kwargs: Arguments supplémentaires transmis à `NSpectrogram.plot()`.
             """
             # On utilise la méthode stft qui renvoie déjà l'objet Spectrogram
-            spectro = self.stft(nperseg=nperseg)
+            spectro = self.stft(
+                window=window,
+                nperseg=nperseg,
+                noverlap=noverlap,
+                nfft=nfft,
+                boundary=boundary,
+                padded=padded
+            )
             return spectro.plot(
                 db=db,
                 magnitude_scale=magnitude_scale,
@@ -530,7 +569,15 @@ class MultiSignal:
     def time(self) -> np.ndarray:
         return np.arange(0, self.duration, 1/self.freq)
     
-    def stft(self, window: str = 'hann', nperseg: int = 256, noverlap: int|None = None, nfft: int|None = None) -> NSpectrogram:
+    def stft(
+        self,
+        window: str = 'hann',
+        nperseg: int = 256,
+        noverlap: int|None = None,
+        nfft: int|None = None,
+        boundary: str | None = 'zeros',
+        padded: bool = True
+    ) -> NSpectrogram:
         """
         Calcule la STFT de manière vectorisée sur la matrice de données.
         
@@ -539,6 +586,8 @@ class MultiSignal:
             nperseg (int): Longueur de chaque segment.
             noverlap (int, optional): Nombre de points de recouvrement.
             nfft (int, optional): Longueur de la FFT.
+            boundary (str | None, optional): Stratégie d'extension aux bords transmise à `scipy.signal.stft`.
+            padded (bool, optional): Si True, complète la fin du signal pour couvrir une dernière trame.
 
         Returns:
             f (np.ndarray): Fréquences.
@@ -557,11 +606,23 @@ class MultiSignal:
             nperseg=nperseg, 
             noverlap=noverlap, 
             nfft=nfft,
-            boundary='zeros',
-            padded=True,
+            boundary=boundary, # type: ignore
+            padded=padded,
             axis=-1
         )
-        return NSpectrogram(f,t,Zxx,self.freq, window =window, nperseg=nperseg, noverlap=noverlap, nfft = nfft)
+        return NSpectrogram(
+            f,
+            t,
+            Zxx,
+            self.freq,
+            window=window,
+            nperseg=nperseg,
+            noverlap=noverlap,
+            nfft=nfft,
+            boundary=boundary,
+            padded=padded,
+            signal_lengths=np.array([len(s.data) for s in self.signals], dtype=int)
+        )
     
     def plot(self, overlay: bool = False, sharex: bool = True, figsize: tuple = (12, 6)):
         """
@@ -670,7 +731,12 @@ class MultiSignal:
         
     def plot_spectrograms(
         self,
+        window: str = 'hann',
         nperseg=256,
+        noverlap: int | None = None,
+        nfft: int | None = None,
+        boundary: str | None = 'zeros',
+        padded: bool = True,
         db=True,
         magnitude_scale: str | None = None,
         frequency_scale: str = 'linear',
@@ -681,7 +747,12 @@ class MultiSignal:
             Rigueur : Utilise l'affichage vectorisé et normalisé de la classe Spectrogram.
 
             Args:
+                window: Fenêtre STFT utilisée.
                 nperseg: Longueur des fenêtres de STFT.
+                noverlap: Recouvrement entre fenêtres STFT.
+                nfft: Taille de FFT utilisée pour la STFT.
+                boundary: Mode d'extension aux bords transmis à la STFT.
+                padded: Si True, complète la fin du signal pour couvrir la dernière trame.
                 db: Compatibilité ascendante. Si True, utilise `magnitude_scale='db'`
                     quand `magnitude_scale` n'est pas renseigné.
                 magnitude_scale: Échelle de couleur pour la magnitude.
@@ -691,7 +762,14 @@ class MultiSignal:
                 **kwargs: Arguments supplémentaires transmis à `NSpectrogram.plot()`.
             """
             # On récupère l'objet Spectrogram (contenant les données E x F x T)
-            spectro = self.stft(nperseg=nperseg)
+            spectro = self.stft(
+                window=window,
+                nperseg=nperseg,
+                noverlap=noverlap,
+                nfft=nfft,
+                boundary=boundary,
+                padded=padded
+            )
             return spectro.plot(
                 db=db,
                 magnitude_scale=magnitude_scale,
@@ -815,8 +893,20 @@ class Mixture:
         return f"Mixture(Entrées={self.E}, Sorties={self.S}, Longueur du filtre={self.L})"
 
 class NSpectrogram:
-    def __init__(self, f: np.ndarray, t: np.ndarray, Sxx: np.ndarray, fs: float, 
-                 window: str, nperseg: int, noverlap: int|None = None, nfft: int|None = None):
+    def __init__(
+        self,
+        f: np.ndarray,
+        t: np.ndarray,
+        Sxx: np.ndarray,
+        fs: float,
+        window: str,
+        nperseg: int,
+        noverlap: int|None = None,
+        nfft: int|None = None,
+        boundary: str | None = 'zeros',
+        padded: bool = True,
+        signal_lengths: np.ndarray | None = None
+    ):
         """
         Conteneur pour les données de temps-fréquence de plusieurs signaux avec métadonnées de construction.
         
@@ -827,9 +917,16 @@ class NSpectrogram:
             nperseg (int) : Longueur de la fenêtre (points). Détermine la résolution fréquentielle (fs/nperseg).
             noverlap (int) : Nombre de points de recouvrement. Détermine la résolution temporelle.
             nfft (int) : nombre de point utilisé pour calculé la fft (indépendemment de nperseg car ca rajoute juste des zero et pas du signal)
+            boundary (str | None) : mode d'extension utilisé pour construire la STFT.
+            padded (bool) : indique si la STFT a été complétée en fin de signal.
+            signal_lengths (np.ndarray | None) : longueurs originales, utiles pour retirer le padding artificiel à la reconstruction.
         """
         if (Sxx.shape[1], Sxx.shape[2]) != (len(f), len(t)):
             raise ValueError(f"Incohérence : Sxx {Sxx.shape} != (f:{len(f)}, t:{len(t)})")
+        if signal_lengths is not None and len(signal_lengths) != Sxx.shape[0]:
+            raise ValueError(
+                f"Incohérence : signal_lengths contient {len(signal_lengths)} longueurs pour {Sxx.shape[0]} signaux."
+            )
         self.f = f
         self.t = t
         self.Sxx = Sxx #
@@ -838,6 +935,9 @@ class NSpectrogram:
         self.nperseg = nperseg
         self.noverlap = noverlap
         self.nfft = nfft
+        self.boundary = boundary
+        self.padded = padded
+        self.signal_lengths = signal_lengths #utile à la reconstruction quand il y a du padding, permet de récuperer la taille exacte du signal de base 
         
     @property
     def num_signals(self) -> int:
@@ -958,7 +1058,10 @@ class NSpectrogram:
             window=self.window, 
             nperseg=self.nperseg, 
             noverlap=self.noverlap, 
-            nfft=self.nfft
+            nfft=self.nfft,
+            boundary=self.boundary,
+            padded=self.padded,
+            signal_lengths=self.signal_lengths
         )
     
     def decompose_spatial_correlation(self) -> tuple[np.ndarray, np.ndarray]:
@@ -1009,6 +1112,8 @@ class NSpectrogram:
         W = D_inv_sqrt @ eigenvectors.conj().T
         
         return W 
+    
+    
     def apply_transformation(self, W: np.ndarray) -> 'NSpectrogram':
         """
         Applique une matrice de transformation linéaire W sur chaque vecteur 
@@ -1040,10 +1145,13 @@ class NSpectrogram:
             window=self.window, 
             nperseg=self.nperseg, 
             noverlap=self.noverlap, 
-            nfft=self.nfft
+            nfft=self.nfft,
+            boundary=self.boundary,
+            padded=self.padded,
+            signal_lengths=self.signal_lengths
         )
-        
-    def istft_to_multisignal(self) -> 'MultiSignal':
+    
+    def istft(self) -> 'MultiSignal':
         """
         Reconstruit un MultiSignal (2D) à partir du tenseur Sxx (3D).
         """
@@ -1057,10 +1165,24 @@ class NSpectrogram:
                 window=self.window,
                 nperseg=self.nperseg,
                 noverlap=self.noverlap,
-                nfft=self.nfft
+                nfft=self.nfft,
+                boundary=self.boundary is not None
             )
+
+            if self.signal_lengths is not None:
+                target_length = int(self.signal_lengths[i])
+                if len(x) > target_length:
+                    x = x[:target_length]
+                elif len(x) < target_length:
+                    x = np.pad(x, (0, target_length - len(x)))
             reconstructed_list.append(Signal(x, self.fs))
         
         
         # On utilise votre méthode de classe pour créer l'objet final
         return MultiSignal(reconstructed_list)
+
+    def istft_to_multisignal(self) -> 'MultiSignal':
+        """
+        Alias conservé pour compatibilité ascendante.
+        """
+        return self.istft()

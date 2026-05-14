@@ -90,7 +90,7 @@ def test_sawada_separation():
     print("Affichage des spectrogrammes de séparation...")
     for i in range(2):
         spec_i = bss.get_spectro_source_i(i)
-        spec_i.plot(db=True)
+        spec_i.plot(db=False)
         plt.gcf().suptitle(f"Spectrogramme masqué - Source {i}")
 
     plt.show()

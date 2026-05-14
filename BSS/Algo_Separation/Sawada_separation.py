@@ -426,7 +426,10 @@ class SawadaBSS:
             window=Nspectro.window,
             nperseg=Nspectro.nperseg,
             noverlap=Nspectro.noverlap,
-            nfft=Nspectro.nfft
+            nfft=Nspectro.nfft,
+            boundary=Nspectro.boundary,
+            padded=Nspectro.padded,
+            signal_lengths=Nspectro.signal_lengths
         )
         
         

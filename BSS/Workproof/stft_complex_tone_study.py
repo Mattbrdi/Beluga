@@ -82,6 +82,8 @@ def _get_stft_kwargs(stft_parameters: StftParameters) -> dict:
         "nperseg": stft_parameters.nperseg,
         "noverlap": stft_parameters.noverlap,
         "nfft": stft_parameters.nfft,
+        "boundary": stft_parameters.boundary,
+        "padded": stft_parameters.padded,
     }
 
 
