@@ -5,8 +5,14 @@
 /pipeline/__pycache__/
 /pipeline/test_data/results/
 __pycache__/
-
-__pycache__/
+pipeline/debug_wavs/
+pipeline/src/tests/debug_wavs/
+pipeline/src/utils/__pycache__/
+pipeline/test_data/
+spectrogram_analysis/
+ignore_folder/
+impulsive_noise_denoising/ml_denoising/data/
+impulsive_noise_denoising/ml_denoising/runs/
+runs/
 *.py[cod]
-
 test*/
