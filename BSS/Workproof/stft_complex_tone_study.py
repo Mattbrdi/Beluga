@@ -8,8 +8,8 @@ import numpy as np
 from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 
-from .associated_dataclasses import StftParameters
-from .signal_class import NSpectrogram, Signal
+from ..Utils.associated_dataclasses import StftParameters
+from ..Utils.signal_class import NSpectrogram, Signal
 """
 Ce script sert à justifier l'utilisation de SAWADA, notamment le fait qu'un clustering par bande de fréquence est possible 
 cad que l'angle de la stft ne varie pas trop dans le temps et que l'angle general du vecteur contenant les stft des différends
@@ -17,6 +17,7 @@ signaux translatée ne varie pas non plus (rapport des modules et différence de
 
 Pour le moment, chaque composante est stable dans le temps en terme de direction dans C (on peut le montrer par le calcul également)
 Pour ce qui est du module, il n'y a pas de raisons qu'elles evoluent différement
+
 
 """
 
@@ -270,6 +271,13 @@ def _apply_plot_zoom(ax: Axes, zoom: PlotZoom | None) -> None:
         ax.set_ylim(*zoom.ylim)
 
 
+def _style_axis(ax: Axes) -> None:
+    ax.tick_params(axis="both", labelsize=8)
+    ax.title.set_fontsize(10)
+    ax.xaxis.label.set_fontsize(9)
+    ax.yaxis.label.set_fontsize(9)
+
+
 def _get_signal_and_window(
     result: ComplexToneStftStudyResult,
     signal_name: str,
@@ -327,6 +335,7 @@ def plot_time_signal(
     ax.set_ylabel("Amplitude")
     ax.grid(True)
     ax.legend()
+    _style_axis(ax)
     _apply_plot_zoom(ax, zoom)
     return ax
 
@@ -353,6 +362,7 @@ def plot_phase_vs_time(
     ax.set_ylabel("Phase (rad)")
     ax.grid(True)
     ax.legend()
+    _style_axis(ax)
     _apply_plot_zoom(ax, zoom)
     return ax
 
@@ -379,6 +389,7 @@ def plot_phase_vs_frequency(
     ax.set_ylabel("Phase (rad)")
     ax.grid(True)
     ax.legend()
+    _style_axis(ax)
     _apply_plot_zoom(ax, zoom)
     return ax
 
@@ -402,6 +413,7 @@ def plot_magnitude_vs_time(
     ax.set_ylabel("|STFT|")
     ax.grid(True)
     ax.legend()
+    _style_axis(ax)
     _apply_plot_zoom(ax, zoom)
     return ax
 
@@ -427,6 +439,7 @@ def plot_magnitude_vs_frequency(
     ax.set_ylabel("|STFT|")
     ax.grid(True)
     ax.legend()
+    _style_axis(ax)
     _apply_plot_zoom(ax, zoom)
     return ax
 
@@ -455,6 +468,7 @@ def plot_phase_difference_vs_time(
     ax.set_ylabel("Phase (rad)")
     ax.grid(True)
     ax.legend()
+    _style_axis(ax)
     _apply_plot_zoom(ax, zoom)
     return ax
 
@@ -490,6 +504,7 @@ def plot_magnitude_ratio_vs_time(
     ax.set_ylabel("|S2| / |S1|")
     ax.grid(True)
     ax.legend()
+    _style_axis(ax)
     _apply_plot_zoom(ax, zoom)
     return ax
 
@@ -519,9 +534,12 @@ def plot_all_study_figures(
     fig.suptitle(
         "Etude STFT d'une exponentielle complexe "
         f"(f_c={result.fc:.2f} Hz, bin={result.target_bin_index}, "
-        f"T={active_duration:.3f} s, retard={result.time_shift_seconds:.6f} s)"
+        f"T={active_duration:.3f} s, retard={result.time_shift_seconds:.6f} s)",
+        fontsize=13,
+        y=0.995,
     )
-    fig.tight_layout()
+    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.975), h_pad=2.2, w_pad=1.2)
+    fig.subplots_adjust(hspace=0.7)
     return fig, axes
 
 

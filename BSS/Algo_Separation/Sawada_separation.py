@@ -2,9 +2,9 @@ from __future__ import annotations
 import numpy as np 
 from scipy import signal as sp_signal 
 import matplotlib.pyplot as plt
-from .signal_class import Signal, MultiSignal, NSpectrogram
+from ..Utils.signal_class import Signal, MultiSignal, NSpectrogram
 from dataclasses import dataclass, field, asdict
-from .associated_dataclasses import StftParameters, EMClusteringParameters
+from ..Utils.associated_dataclasses import StftParameters, EMClusteringParameters
 from sklearn.cluster import KMeans # Utilisé uniquement pour l'initialisation rapide
 from typing import List, Dict, Optional
 from itertools import permutations
@@ -236,7 +236,8 @@ class SawadaBSS:
             
             self.bin_models[f_idx] = model
             self.bin_masks[f_idx] = mask_f
-
+            print(f"\r frequence numéro {f_idx} terminée", end="", flush=True )
+        print(" ")
         print("Clustering par bin terminé.")
     @property
     def all_centroids(self) -> np.ndarray:

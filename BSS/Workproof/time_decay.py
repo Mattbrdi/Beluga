@@ -5,16 +5,21 @@ import numpy as np
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy import signal as sp_signal
-from ..signal_class import Signal, MultiSignal, Mixture
-from ..Sawada_separation import SawadaBSS
-from ..associated_dataclasses import StftParameters, EMClusteringParameters
+from ..Utils.signal_class import Signal, MultiSignal, Mixture
+from ..Algo_Separation.Sawada_separation import SawadaBSS
+from ..Utils.associated_dataclasses import StftParameters, EMClusteringParameters
 
+"""
+Ce script sert de template à Sawada ainsi que de 
+"""
 def test_sawada_separation():
     # --- 1. Paramètres de simulation ---
     fs = 8000
     duration = 2.0
     
     # Création de la Source 1 : Hautes fréquences au début
+    
+    
     s1 = Signal.generate_multi_freq_signal(
         duration, fs, start_time=0.2, end_time=1.0, 
         frequencies=[500, 1200, 1600], window_type='hann'

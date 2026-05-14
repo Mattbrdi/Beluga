@@ -2,10 +2,25 @@ from __future__ import annotations # Permet d'utiliser Spectrogram comme type m�
 import numpy as np 
 from scipy import signal as sp_signal 
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Button
+import io
+import threading
+import tempfile
+import wave
+from scipy.signal import resample
+"""
+Ce module comprend les classes : 
+    -Signal : signal 1d ayant une fréquence d'échantillonage
+    -Multisignal : Plusieurs signaux mis dans un tableau 
+    -Mixture : applique une transformation sous forme de matrice de filtre à un multisignal
+    -Nspectrogram : spectrogram 3D contenant les spectro de N signaux et ayant toutes les infos necessaires pour reconstitué le signal avec ca 
 
+"""
 
 class Signal:
     def __init__(self, data: np.ndarray, freq: float):
+        if data.ndim != 1: 
+            raise AttributeError("Dimension des data non supportée")
         self.data = np.array(data)
         self.freq = freq 
         
@@ -220,22 +235,176 @@ class Signal:
     def plot(self, ax=None, title="Signal", **kwargs):
         """Affiche le signal dans le domaine temporel."""
         if ax is None:
-            _, ax = plt.subplots(figsize=(10, 4))
+            fig, ax = plt.subplots(figsize=(10, 4))
+        else:
+            fig = ax.figure
         
         ax.plot(self.time, self.data, **kwargs)
         ax.set_title(title)
         ax.set_xlabel("Temps (s)")
         ax.set_ylabel("Amplitude")
         ax.grid(True)
-        return ax
+        return fig, ax
+#Trois fonction pour pouvoir écouter le fichier audio notamment dans le debbugage
+    def _to_wav_bytes(self, normalize: bool = False) -> bytes:
+        """
+        Convertit le signal en WAV PCM 16 bits en mémoire.
+        """
+        data = np.asarray(self.data, dtype=np.float64).squeeze()
+        if data.ndim != 1:
+            raise ValueError("plot_with_sounds ne supporte que les signaux 1D.")
+        if len(data) == 0:
+            raise ValueError("Impossible de lire un signal vide.")
+
+        peak = np.max(np.abs(data))
+        if normalize and peak > 0:
+            data = data / peak
+
+        pcm = np.clip(data, -1.0, 1.0)
+        pcm = (pcm * np.iinfo(np.int16).max).astype(np.int16)
+
+        buffer = io.BytesIO()
+        with wave.open(buffer, "wb") as wav_file:
+            wav_file.setnchannels(1)
+            wav_file.setsampwidth(2)
+            wav_file.setframerate(int(self.freq))
+            wav_file.writeframes(pcm.tobytes())
+
+        return buffer.getvalue()
+
+    def _play_audio(self, normalize: bool = True) -> None:
+        """
+        Lance la lecture du signal.
+        Utilise `sounddevice` si disponible, sinon `winsound` sous Windows.
+        """
+        # try:
+        #     import sounddevice as sd
+
+        #     data = np.asarray(self.data, dtype=np.float64).squeeze()
+        #     if data.ndim != 1:
+        #         raise ValueError("plot_with_sounds ne supporte que les signaux 1D.")
+
+        #     peak = np.max(np.abs(data))
+        #     if normalize and peak > 0:
+        #         data = data / peak
+
+        #     sd.stop()
+        #     try:
+        #         sd.play(data.astype(np.float32), int(self.freq), blocking=False)
+        #     except sd.PortAudioError as exc:
+        #         device_info = sd.query_devices(kind="output")
+        #         fallback_freq = int(device_info["default_samplerate"])
+        #         if fallback_freq <= 0:
+        #             raise
+
+        #         target_len = max(1, int(round(len(data) * fallback_freq / self.freq)))
+        #         resampled_data = resample(data, target_len).astype(np.float32) # type: ignore 
+        #         sd.play(resampled_data, fallback_freq, blocking=False)
+        #     return
+        # except ImportError:
+        #     pass
+
+        try:
+            import winsound
+
+            winsound.PlaySound(None, winsound.SND_PURGE)
+            wav_bytes = self._to_wav_bytes(normalize=normalize)
+
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_wav:
+                tmp_wav.write(wav_bytes)
+                tmp_path = tmp_wav.name
+
+            self._last_temp_wav_path = getattr(self, "_last_temp_wav_path", None)
+            previous_tmp_path = self._last_temp_wav_path
+            self._last_temp_wav_path = tmp_path
+
+            if previous_tmp_path is not None:
+                try:
+                    import os
+                    os.remove(previous_tmp_path)
+                except OSError:
+                    pass
+
+            winsound.PlaySound(tmp_path, winsound.SND_FILENAME | winsound.SND_ASYNC)
+            return
+        except ImportError as exc:
+            raise ImportError(
+                "Aucun backend audio disponible. Installe `sounddevice` ou utilise Windows."
+            ) from exc
+
+    def attach_audio_button(
+        self,
+        fig,
+        label: str = "Play",
+        normalize_audio: bool = True,
+    ):
+        """
+        Ajoute un bouton de lecture audio à une figure existante.
+        """
+        fig.subplots_adjust(bottom=0.22)
+        button_ax = fig.add_axes([0.42, 0.05, 0.16, 0.08]) # type: ignore
+        play_button = Button(button_ax, label)
+
+        def _on_click(_event):
+            threading.Thread(
+                target=self._play_audio,
+                kwargs={"normalize": normalize_audio},
+                daemon=True
+            ).start()
+
+        play_button.on_clicked(_on_click)
+        if not hasattr(fig, "_signal_audio_buttons"):
+            fig._signal_audio_buttons = []
+        fig._signal_audio_buttons.append(play_button)
+        return play_button
+
+    def plot_with_sounds(
+        self,
+        title: str = "Signal",
+        figsize: tuple[float, float] = (10, 4),
+        normalize_audio: bool = True,
+        **plot_kwargs
+    ):
+        """
+        Affiche le signal avec un bouton permettant de l'écouter.
+
+        Returns:
+            tuple(fig, ax, button)
+        """
+        fig, ax = plt.subplots(figsize=figsize)
+        fig, ax = self.plot(ax=ax, title=title, **plot_kwargs)
+        play_button = self.attach_audio_button(fig, normalize_audio=normalize_audio)
+        return fig, ax, play_button
     
-    def plot_spectrogram(self, nperseg=256, db=False, **kwargs):
+    def plot_spectrogram(
+        self,
+        nperseg=256,
+        db=False,
+        magnitude_scale: str | None = None,
+        frequency_scale: str = 'linear',
+        **kwargs
+    ):
             """
             Calcule et affiche le spectrogramme pour un signal unique.
+
+            Args:
+                nperseg: Longueur des fenêtres de STFT.
+                db: Compatibilité ascendante. Si True, utilise `magnitude_scale='db'`
+                    quand `magnitude_scale` n'est pas renseigné.
+                magnitude_scale: Échelle de couleur pour la magnitude.
+                    Valeurs possibles : 'linear', 'db', ou None.
+                frequency_scale: Échelle de l'axe des fréquences.
+                    Valeurs possibles : 'linear' ou 'log'.
+                **kwargs: Arguments supplémentaires transmis à `NSpectrogram.plot()`.
             """
             # On utilise la méthode stft qui renvoie déjà l'objet Spectrogram
             spectro = self.stft(nperseg=nperseg)
-            return spectro.plot(db=db, **kwargs)
+            return spectro.plot(
+                db=db,
+                magnitude_scale=magnitude_scale,
+                frequency_scale=frequency_scale,
+                **kwargs
+            )
     
 class MultiSignal:
     def __init__(self, signals: list[Signal]):
@@ -255,6 +424,66 @@ class MultiSignal:
         
         self.signals = signals
         self.num_signals = len(signals) #nombre de signal
+
+    def _validate_compatible_multisignal(self, other: 'MultiSignal') -> np.ndarray:
+        """
+        Vérifie qu'un autre MultiSignal est compatible pour une opération
+        terme à terme et retourne ses données matricielles.
+        """
+        if not isinstance(other, MultiSignal):
+            raise TypeError(
+                "L'opération terme à terme n'est définie qu'entre deux instances de MultiSignal."
+            )
+
+        if self.freq != other.freq:
+            raise ValueError(
+                "Impossible d'opérer sur des MultiSignal de fréquences d'échantillonnage différentes."
+            )
+
+        self_data = self.data
+        other_data = other.data
+        if self_data.shape != other_data.shape:
+            raise ValueError(
+                f"Shapes incohérentes pour une opération terme à terme : "
+                f"{self_data.shape} != {other_data.shape}."
+            )
+
+        return other_data
+
+    def add(self, other: 'MultiSignal') -> 'MultiSignal':
+        """
+        Additionne deux MultiSignal terme à terme.
+        """
+        other_data = self._validate_compatible_multisignal(other)
+        return MultiSignal.from_array(self.data + other_data, self.freq)
+
+    def multiply_elementwise(self, other: 'MultiSignal') -> 'MultiSignal':
+        """
+        Multiplie deux MultiSignal terme à terme.
+        """
+        other_data = self._validate_compatible_multisignal(other)
+        return MultiSignal.from_array(self.data * other_data, self.freq)
+
+    def scale(self, factor: int | float | np.number) -> 'MultiSignal':
+        """
+        Applique un gain scalaire Ã  tous les signaux du MultiSignal.
+        """
+        if not isinstance(factor, (int, float, np.number)):
+            raise TypeError("Le facteur multiplicatif doit Ãªtre un scalaire numÃ©rique.")
+        return MultiSignal.from_array(self.data * factor, self.freq)
+
+    def __add__(self, other: 'MultiSignal') -> 'MultiSignal':
+        return self.add(other)
+
+    def __mul__(self, other: 'MultiSignal | int | float | np.number') -> 'MultiSignal':
+        if isinstance(other, MultiSignal):
+            return self.multiply_elementwise(other)
+        if isinstance(other, (int, float, np.number)):
+            return self.scale(other)
+        return NotImplemented
+
+    def __rmul__(self, other: int | float | np.number) -> 'MultiSignal':
+        return self.__mul__(other)
 
     @classmethod
     def from_array(cls, data: np.ndarray, fs: float) -> 'MultiSignal':
@@ -328,6 +557,8 @@ class MultiSignal:
             nperseg=nperseg, 
             noverlap=noverlap, 
             nfft=nfft,
+            boundary='zeros',
+            padded=True,
             axis=-1
         )
         return NSpectrogram(f,t,Zxx,self.freq, window =window, nperseg=nperseg, noverlap=noverlap, nfft = nfft)
@@ -369,15 +600,104 @@ class MultiSignal:
             axes[-1].set_xlabel("Temps (s)")
             plt.tight_layout()
             return fig, axes
+
+    def attach_audio_buttons(
+        self,
+        fig,
+        axes,
+        normalize_audio: bool = True,
+    ):
+        """
+        Ajoute un bouton Play à côté de chaque canal affiché.
+
+        Returns:
+            list[Button]
+        """
+        if self.num_signals == 1 and not isinstance(axes, (list, tuple)):
+            axes = [axes]
+
+        fig.subplots_adjust(right=0.86)
+        play_buttons = []
+
+        for i, ax in enumerate(axes):
+            bbox = ax.get_position()
+            button_width = 0.10
+            button_height = min(0.05, bbox.height * 0.45)
+            button_x = min(0.88, bbox.x1 + 0.02)
+            button_y = bbox.y0 + (bbox.height - button_height) / 2
+
+            button_ax = fig.add_axes([button_x, button_y, button_width, button_height]) # type: ignore
+            play_button = Button(button_ax, f"Play {i}")
+
+            def _on_click(_event, signal_index=i):
+                threading.Thread(
+                    target=self.signals[signal_index]._play_audio,
+                    kwargs={"normalize": normalize_audio},
+                    daemon=True
+                ).start()
+
+            play_button.on_clicked(_on_click)
+            play_buttons.append(play_button)
+
+        if not hasattr(fig, "_multisignal_audio_buttons"):
+            fig._multisignal_audio_buttons = []
+        fig._multisignal_audio_buttons.extend(play_buttons)
+        return play_buttons
+
+    def plot_with_sounds(
+        self,
+        overlay: bool = False,
+        sharex: bool = True,
+        figsize: tuple = (12, 6),
+        normalize_audio: bool = True,
+    ):
+        """
+        Affiche les canaux avec un bouton Play par signal.
+
+        Returns:
+            tuple(fig, axes, buttons)
+        """
+        if overlay:
+            raise ValueError("plot_with_sounds pour MultiSignal nécessite overlay=False.")
+
+        fig, axes = self.plot(overlay=False, sharex=sharex, figsize=figsize)
+        play_buttons = self.attach_audio_buttons(
+            fig,
+            axes,
+            normalize_audio=normalize_audio,
+        )
+        return fig, axes, play_buttons
         
-    def plot_spectrograms(self, nperseg=256, db=True, **kwargs):
+    def plot_spectrograms(
+        self,
+        nperseg=256,
+        db=True,
+        magnitude_scale: str | None = None,
+        frequency_scale: str = 'linear',
+        **kwargs
+    ):
             """
             Calcule et affiche la grille de spectrogrammes pour tous les signaux.
             Rigueur : Utilise l'affichage vectorisé et normalisé de la classe Spectrogram.
+
+            Args:
+                nperseg: Longueur des fenêtres de STFT.
+                db: Compatibilité ascendante. Si True, utilise `magnitude_scale='db'`
+                    quand `magnitude_scale` n'est pas renseigné.
+                magnitude_scale: Échelle de couleur pour la magnitude.
+                    Valeurs possibles : 'linear', 'db', ou None.
+                frequency_scale: Échelle de l'axe des fréquences.
+                    Valeurs possibles : 'linear' ou 'log'.
+                **kwargs: Arguments supplémentaires transmis à `NSpectrogram.plot()`.
             """
             # On récupère l'objet Spectrogram (contenant les données E x F x T)
             spectro = self.stft(nperseg=nperseg)
-            return spectro.plot(db=db, **kwargs) 
+            return spectro.plot(
+                db=db,
+                magnitude_scale=magnitude_scale,
+                frequency_scale=frequency_scale,
+                **kwargs
+            ) 
         
     def __repr__(self):
         n_samples = self.data.shape[1]
@@ -535,35 +855,78 @@ class NSpectrogram:
         else:
             return (self.nperseg - self.noverlap) / self.fs
 
-    def plot(self, figsize=(12, 10), db=False):
+    def plot(
+        self,
+        figsize=(12, 10),
+        db=False,
+        magnitude_scale: str | None = None,
+        frequency_scale: str = 'linear'
+    ):
+            """
+            Affiche le spectrogramme de chaque signal.
+
+            Args:
+                figsize: Taille de la figure.
+                db: Compatibilité ascendante. Si True, affiche la magnitude en dB.
+                magnitude_scale: Échelle de couleur pour la magnitude.
+                    Valeurs possibles : 'linear', 'db', ou None.
+                    Si None, la valeur est déduite à partir de `db`.
+                    Prioritaire sur `db` si renseigné.
+                frequency_scale: Échelle de l'axe des fréquences.
+                    Valeurs possibles : 'linear' ou 'log'.
+            """
+            if magnitude_scale is None:
+                magnitude_scale = 'db' if db else 'linear'
+
+            if magnitude_scale not in ('linear', 'db'):
+                raise ValueError("magnitude_scale doit valoir 'linear' ou 'db'.")
+
+            if frequency_scale not in ('linear', 'log'):
+                raise ValueError("frequency_scale doit valoir 'linear' ou 'log'.")
+
             # Création de subplots verticaux (un par signal)
-            f,t ,Zxx_multi = self.f, self.t, self.Sxx 
+            f, t, Zxx_multi = self.f, self.t, self.Sxx
             fig, axes = plt.subplots(self.num_signals, 1, figsize=figsize, sharex=True, sharey=True)
-            
+
             # Sécurité si E=1
             if self.num_signals == 1:
                 axes = [axes]
-                
+
+            magnitude_globale = np.abs(Zxx_multi)
+            freq_mask = np.ones_like(f, dtype=bool)
+            if frequency_scale == 'log':
+                freq_mask = f > 0
+                if not np.any(freq_mask):
+                    raise ValueError("Impossible d'utiliser une échelle fréquentielle logarithmique sans fréquences strictement positives.")
+
+            f_plot = f[freq_mask]
+
             for i in range(self.num_signals):
                 magnitude = np.abs(Zxx_multi[i])
-                magnitude_globale = np.abs(Zxx_multi)
-                if db:
-                    display_data = 10 * np.log10(magnitude + 1e-10)
-                    vmax = 10 * np.log10(np.max(magnitude_globale) + 1e-10)
-                    vmin = vmax - 80 # Dynamique de 80 dB par exemple
+                if magnitude_scale == 'db':
+                    # La STFT contient ici des amplitudes complexes, donc on convertit
+                    # une magnitude en dB avec 20*log10 et une protection numérique.
+                    display_data = 20 * np.log10(np.maximum(magnitude, 1e-10))
+                    vmax = 20 * np.log10(np.maximum(np.percentile(magnitude_globale, 99.5), 1e-10))
+                    vmin = vmax - 80
+                    colorbar_label = "Magnitude (dB)"
                 else:
                     display_data = magnitude
-                    vmax = np.max(magnitude_globale)
-                    vmin =0 
-                    
-                    
-                im = axes[i].pcolormesh(t, f, display_data, shading='gouraud', cmap='magma', vmax = vmax, vmin = vmin)
+                    vmax = np.percentile(magnitude_globale, 99.5)
+                    vmin = 0
+                    colorbar_label = "Magnitude"
+
+                display_data = display_data[freq_mask, :]
+
+                im = axes[i].pcolormesh(t, f_plot, display_data, shading='gouraud', cmap='magma', vmax=vmax, vmin=vmin)
+                if frequency_scale == 'log':
+                    axes[i].set_yscale('log')
                 axes[i].set_title(f"Spectrogramme - Signal {i}")
                 axes[i].set_ylabel("Freq (Hz)")
-                
+
                 # Une colorbar par signal pour voir les différences de gain
-                fig.colorbar(im, ax=axes[i], label="Magnitude")
-                
+                fig.colorbar(im, ax=axes[i], label=colorbar_label)
+
             axes[-1].set_xlabel("Temps (s)")
             plt.tight_layout()
             return fig, axes
