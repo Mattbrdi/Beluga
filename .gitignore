@@ -16,4 +16,6 @@ impulsive_noise_denoising/ml_denoising/runs/
 runs/
 *.py[cod]
 test*/
-result
+test*.py
+results*/
+results*.py 
