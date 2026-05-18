@@ -36,7 +36,7 @@ class Signal:
         res2 = np.pad(other.data, (0, max_len - len2))
         return Signal(res1 + res2, self.freq)
     
-    def __mul__(self, other: 'Signal') -> 'Signal':
+    def __mul__(self, other: 'Signal | int | float | np.number') -> 'Signal':
         """Surcharge de l'opérateur * (multiplication)"""
         # Cas 1 : Multiplication par un nombre (Gain / Scalaire)
         if isinstance(other, (int, float, np.number)):
@@ -53,6 +53,9 @@ class Signal:
             return Signal(new_data, self.freq)
         
         return NotImplemented
+
+    def __rmul__(self, other: int | float | np.number) -> 'Signal':
+        return self.__mul__(other)
     
     @property
     def duration(self) -> float:
