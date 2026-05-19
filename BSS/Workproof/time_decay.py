@@ -27,8 +27,8 @@ def test_sawada_separation():
     s1 = s1 + s1 
     # Création de la Source 2 : Basses fréquences à la fin
     s2 = Signal.generate_multi_freq_signal(
-        duration, fs, start_time=0.6, end_time=1.5, 
-        frequencies=[300, 450, 600], window_type='hann'
+        duration, fs, start_time=0., end_time=2, 
+        frequencies=[300, 450, 600], window_type='boxcar'
     )
     
     # Regroupement en MultiSignal (Sources propres)
@@ -69,6 +69,7 @@ def test_sawada_separation():
     print("Démarrage de la séparation (cela peut prendre quelques secondes)...")
     bss.process_signal(mixture_signal)
     
+    fig_init, axe_init = mixture_signal.plot_spectrograms(boundary=None, padded=False)
     # Récupération des signaux séparés
     separated_sources = bss.separate_source()
     

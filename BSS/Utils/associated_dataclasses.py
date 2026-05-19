@@ -7,7 +7,7 @@ class StftParameters:
     nperseg: int = 256
     noverlap: int|None = None
     nfft: int |None = None
-    boundary: str | None = 'zeros'
+    boundary: str | None = None
     padded: bool = True
     
 @dataclass

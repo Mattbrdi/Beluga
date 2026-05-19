@@ -9,16 +9,18 @@ from scipy.io import wavfile
 from ..Utils.signal_class import Signal, MultiSignal, Mixture
 from ..Algo_Separation.Sawada_separation import SawadaBSS
 from ..Utils.associated_dataclasses import StftParameters, EMClusteringParameters
+from dataclasses import asdict 
 
 PATH_SIGNAL_1: str = "C:/Users/BORDERIES/Desktop/Cours/Stage canada/Beluga/BSS/test_data/8296.240729000543_son_beluga.wav"
 PATH_SIGNAL_2 :str = "C:/Users/BORDERIES/Desktop/Cours/Stage canada/Beluga/BSS/test_data/8295.240727103412.wav"
 
-decay = 0 
+decay1 = 32768*3*0
+decay2 = 32768*3*0
 time_lenght = 300000
-START_IDX_1 : int = 185278182 +decay #Beluga
-END_IDX_1 : int = START_IDX_1+time_lenght +decay
-START_IDX_2: int = 40284782 #boat
-END_IDX_2: int = START_IDX_2+time_lenght
+START_IDX_1 : int = 185278182 +decay1 #Beluga
+END_IDX_1 : int = START_IDX_1+time_lenght +decay1
+START_IDX_2: int = 40284782 + decay2 #boat
+END_IDX_2: int = START_IDX_2+time_lenght +decay2
 
 
 def multisignal_correlation(ms_ref: MultiSignal, ms_est: MultiSignal) -> float:
@@ -109,8 +111,9 @@ def plot_multisignal_comparison(
     fig_mix.suptitle("Melange d'entree - signaux temporels")
 
     fig_mix_spec, _ = input_mixture.plot_spectrograms(
-        nperseg=stft_params.nperseg,
-        db=False,
+        **asdict(stft_params),
+        magnitude_scale='linear',
+        frequency_scale='log',
         figsize=(12, 4)
     )
     fig_mix_spec.suptitle("Melange d'entree - spectrogrammes")
@@ -131,8 +134,7 @@ def plot_multisignal_comparison(
         fig_est.suptitle(f"Source separee {idx} - signaux temporels")
 
         fig_est_spec, _ = estimated_source.plot_spectrograms(
-            nperseg=stft_params.nperseg,
-            db=False,
+            **asdict(stft_params),
             magnitude_scale='linear',
             frequency_scale='log',
             figsize=(12, 4)
@@ -160,7 +162,9 @@ def sawada_on_data():
         window='hann',
         nperseg=32768,
         noverlap=24576, # 75% de recouvrement pour une meilleure résolution
-        nfft=None
+        nfft=None, 
+        boundary=None, 
+        padded = False
     )
 
     em_clustering_params = EMClusteringParameters(

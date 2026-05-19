@@ -240,8 +240,7 @@ class Signal:
             noverlap=noverlap, 
             nfft=nfft,
             boundary=boundary, # type: ignore
-            padded=padded
-        )
+            padded=padded  )
         Zxx_3d = Zxx[np.newaxis, :, :]
         return NSpectrogram(
             f,

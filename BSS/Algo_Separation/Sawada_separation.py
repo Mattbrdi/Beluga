@@ -194,6 +194,9 @@ class SawadaBSS:
     def get_spectro(self, input: MultiSignal) -> NSpectrogram:
         return input.stft(**asdict(self.stft_parameters))
     
+    def cut_polluted_spectro(self, spectro: NSpectrogram):
+        return 
+        
     def apply_whitening(self, spectro: NSpectrogram) -> NSpectrogram:
         self.eigenvalues_matrix, self.eigenvector_matrix = spectro.decompose_spatial_correlation() 
         whitening_matrix = spectro.compute_whitening_matrix(self.eigenvalues_matrix, self.eigenvector_matrix)

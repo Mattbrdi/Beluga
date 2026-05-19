@@ -76,6 +76,45 @@ class ComplexToneStftStudyResult:
     selected_time_indices_s2: np.ndarray
 
 
+@dataclass
+class NSpectrogramStudyConfig:
+    signal_index: int = 0
+    target_bin_index: int | None = None
+    target_frequency_hz: float | None = None
+    n_neighbor_bins: int = 2
+    n_time_slices: int = 5
+    time_range: tuple[float, float] | None = None
+    time_indices: np.ndarray | None = None
+    unwrap_phase: bool = True
+
+
+@dataclass
+class NSpectrogramStudyResult:
+    config: NSpectrogramStudyConfig
+    spectrogram: NSpectrogram
+    signal_index: int
+    target_bin_index: int
+    target_frequency_hz: float
+    selected_freq_indices: np.ndarray
+    selected_time_indices: np.ndarray
+
+
+@dataclass
+class NSpectrogramStudyPlotZoom:
+    phase_vs_time: PlotZoom = field(default_factory=PlotZoom)
+    phase_vs_frequency: PlotZoom = field(default_factory=PlotZoom)
+    magnitude_vs_time: PlotZoom = field(default_factory=PlotZoom)
+    magnitude_vs_frequency: PlotZoom = field(default_factory=PlotZoom)
+
+
+@dataclass
+class NSpectrogramPairStudyPlotZoom:
+    first: NSpectrogramStudyPlotZoom = field(default_factory=NSpectrogramStudyPlotZoom)
+    second: NSpectrogramStudyPlotZoom = field(default_factory=NSpectrogramStudyPlotZoom)
+    phase_difference_vs_time: PlotZoom = field(default_factory=PlotZoom)
+    magnitude_ratio_vs_time: PlotZoom = field(default_factory=PlotZoom)
+
+
 def _get_stft_kwargs(stft_parameters: StftParameters) -> dict:
     return {
         "window": stft_parameters.window,
@@ -257,6 +296,112 @@ def _get_phase(values: np.ndarray, unwrap_phase: bool) -> np.ndarray:
     if unwrap_phase:
         return np.unwrap(phase)
     return phase
+
+
+def _validate_signal_index(spectrogram: NSpectrogram, signal_index: int) -> None:
+    if signal_index < 0 or signal_index >= spectrogram.num_signals:
+        raise ValueError(
+            f"signal_index={signal_index} hors bornes pour {spectrogram.num_signals} signaux."
+        )
+
+
+def _validate_frequency_bin_index(spectrogram: NSpectrogram, bin_index: int) -> int:
+    if bin_index < 0 or bin_index >= spectrogram.Sxx.shape[1]:
+        raise ValueError(
+            f"target_bin_index={bin_index} hors bornes pour {spectrogram.Sxx.shape[1]} bins."
+        )
+    return int(bin_index)
+
+
+def _select_target_bin_from_spectrogram(
+    spectrogram: NSpectrogram,
+    config: NSpectrogramStudyConfig,
+) -> int:
+    if config.target_bin_index is not None:
+        return _validate_frequency_bin_index(spectrogram, config.target_bin_index)
+
+    if config.target_frequency_hz is not None:
+        return int(np.argmin(np.abs(spectrogram.f - config.target_frequency_hz)))
+
+    positive_indices = _get_positive_frequency_indices(spectrogram.f)
+    mean_magnitudes = np.mean(
+        np.abs(spectrogram.Sxx[config.signal_index, positive_indices, :]),
+        axis=1,
+    )
+    best_positive_index = int(np.argmax(mean_magnitudes))
+    return int(positive_indices[best_positive_index])
+
+
+def _select_time_indices_from_range(
+    spectrogram: NSpectrogram,
+    start_time: float,
+    end_time: float,
+    n_time_slices: int,
+) -> np.ndarray:
+    start_time, end_time = sorted((start_time, end_time))
+    return select_time_indices(
+        spectrogram=spectrogram,
+        signal_window_start=start_time,
+        signal_window_end=end_time,
+        n_time_slices=n_time_slices,
+    )
+
+
+def _select_time_indices_from_config(
+    spectrogram: NSpectrogram,
+    config: NSpectrogramStudyConfig,
+) -> np.ndarray:
+    if config.time_indices is not None:
+        time_indices = np.asarray(config.time_indices, dtype=int)
+        if time_indices.ndim != 1:
+            raise ValueError("time_indices doit etre un tableau 1D d'indices.")
+        if time_indices.size == 0:
+            raise ValueError("time_indices ne peut pas etre vide.")
+        if np.any(time_indices < 0) or np.any(time_indices >= spectrogram.t.size):
+            raise ValueError("Certains time_indices sont hors bornes.")
+        return np.unique(time_indices)
+
+    if spectrogram.t.size == 0:
+        raise ValueError("Le spectrogramme ne contient aucune trame temporelle.")
+
+    if config.time_range is not None:
+        start_time, end_time = config.time_range
+    else:
+        start_time, end_time = float(spectrogram.t[0]), float(spectrogram.t[-1])
+
+    return _select_time_indices_from_range(
+        spectrogram=spectrogram,
+        start_time=start_time,
+        end_time=end_time,
+        n_time_slices=config.n_time_slices,
+    )
+
+
+def analyze_nspectrogram(
+    spectrogram: NSpectrogram,
+    config: NSpectrogramStudyConfig | None = None,
+) -> NSpectrogramStudyResult:
+    if config is None:
+        config = NSpectrogramStudyConfig()
+
+    _validate_signal_index(spectrogram, config.signal_index)
+    target_bin_index = _select_target_bin_from_spectrogram(spectrogram, config)
+    selected_freq_indices = select_frequency_indices(
+        target_bin_index=target_bin_index,
+        n_frequencies=spectrogram.Sxx.shape[1],
+        n_neighbor_bins=config.n_neighbor_bins,
+    )
+    selected_time_indices = _select_time_indices_from_config(spectrogram, config)
+
+    return NSpectrogramStudyResult(
+        config=config,
+        spectrogram=spectrogram,
+        signal_index=config.signal_index,
+        target_bin_index=target_bin_index,
+        target_frequency_hz=float(spectrogram.f[target_bin_index]),
+        selected_freq_indices=selected_freq_indices,
+        selected_time_indices=selected_time_indices,
+    )
 
 
 def _get_sorted_frequency_view(spectrogram: NSpectrogram) -> tuple[np.ndarray, np.ndarray]:
@@ -541,6 +686,271 @@ def plot_all_study_figures(
         y=0.995,
     )
     fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.975), h_pad=2.2, w_pad=1.2)
+    fig.subplots_adjust(hspace=0.7)
+    return fig, axes
+
+
+def _get_nspectrogram_values(result: NSpectrogramStudyResult) -> np.ndarray:
+    return result.spectrogram.Sxx[result.signal_index]
+
+
+def _get_nspectrogram_label(result: NSpectrogramStudyResult, label: str | None) -> str:
+    if label is not None:
+        return label
+    return f"signal {result.signal_index}"
+
+
+def plot_nspectrogram_phase_vs_time(
+    result: NSpectrogramStudyResult,
+    ax: Axes | None = None,
+    zoom: PlotZoom | None = None,
+    label: str | None = None,
+) -> Axes:
+    if ax is None:
+        _, ax = plt.subplots(figsize=(10, 4))
+
+    values = _get_nspectrogram_values(result)
+    for freq_index in result.selected_freq_indices:
+        phase = _get_phase(values[freq_index, :], unwrap_phase=result.config.unwrap_phase)
+        ax.plot(result.spectrogram.t, phase, label=f"f={result.spectrogram.f[freq_index]:.2f} Hz")
+
+    ax.set_title(f"Argument de la STFT de {_get_nspectrogram_label(result, label)} en fonction du temps")
+    ax.set_xlabel("Temps (s)")
+    ax.set_ylabel("Phase (rad)")
+    ax.grid(True)
+    ax.legend()
+    _style_axis(ax)
+    _apply_plot_zoom(ax, zoom)
+    return ax
+
+
+def plot_nspectrogram_phase_vs_frequency(
+    result: NSpectrogramStudyResult,
+    ax: Axes | None = None,
+    zoom: PlotZoom | None = None,
+    label: str | None = None,
+) -> Axes:
+    if ax is None:
+        _, ax = plt.subplots(figsize=(10, 4))
+
+    sorted_frequencies, sort_indices = _get_sorted_frequency_view(result.spectrogram)
+    values = _get_nspectrogram_values(result)
+    for time_index in result.selected_time_indices:
+        phase = _get_phase(values[:, time_index][sort_indices], unwrap_phase=result.config.unwrap_phase)
+        ax.plot(sorted_frequencies, phase, label=f"t={result.spectrogram.t[time_index]:.4f} s")
+
+    ax.set_title(f"Argument de la STFT de {_get_nspectrogram_label(result, label)} en fonction de la frequence")
+    ax.set_xlabel("Frequence (Hz)")
+    ax.set_ylabel("Phase (rad)")
+    ax.grid(True)
+    ax.legend()
+    _style_axis(ax)
+    _apply_plot_zoom(ax, zoom)
+    return ax
+
+
+def plot_nspectrogram_magnitude_vs_time(
+    result: NSpectrogramStudyResult,
+    ax: Axes | None = None,
+    zoom: PlotZoom | None = None,
+    label: str | None = None,
+) -> Axes:
+    if ax is None:
+        _, ax = plt.subplots(figsize=(10, 4))
+
+    values = _get_nspectrogram_values(result)
+    for freq_index in result.selected_freq_indices:
+        ax.plot(
+            result.spectrogram.t,
+            np.abs(values[freq_index, :]),
+            label=f"f={result.spectrogram.f[freq_index]:.2f} Hz",
+        )
+
+    ax.set_title(f"Module de la STFT de {_get_nspectrogram_label(result, label)} en fonction du temps")
+    ax.set_xlabel("Temps (s)")
+    ax.set_ylabel("|STFT|")
+    ax.grid(True)
+    ax.legend()
+    _style_axis(ax)
+    _apply_plot_zoom(ax, zoom)
+    return ax
+
+
+def plot_nspectrogram_magnitude_vs_frequency(
+    result: NSpectrogramStudyResult,
+    ax: Axes | None = None,
+    zoom: PlotZoom | None = None,
+    label: str | None = None,
+) -> Axes:
+    if ax is None:
+        _, ax = plt.subplots(figsize=(10, 4))
+
+    sorted_frequencies, sort_indices = _get_sorted_frequency_view(result.spectrogram)
+    values = _get_nspectrogram_values(result)
+    for time_index in result.selected_time_indices:
+        magnitude = np.abs(values[:, time_index][sort_indices])
+        ax.plot(sorted_frequencies, magnitude, label=f"t={result.spectrogram.t[time_index]:.4f} s")
+
+    ax.set_title(f"Module de la STFT de {_get_nspectrogram_label(result, label)} en fonction de la frequence")
+    ax.set_xlabel("Frequence (Hz)")
+    ax.set_ylabel("|STFT|")
+    ax.grid(True)
+    ax.legend()
+    _style_axis(ax)
+    _apply_plot_zoom(ax, zoom)
+    return ax
+
+
+def plot_nspectrogram_study_figures(
+    result: NSpectrogramStudyResult,
+    zoom: NSpectrogramStudyPlotZoom | None = None,
+    label: str | None = None,
+) -> tuple[Figure, np.ndarray]:
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
+    if zoom is None:
+        zoom = NSpectrogramStudyPlotZoom()
+
+    plot_nspectrogram_phase_vs_time(result, ax=axes[0, 0], zoom=zoom.phase_vs_time, label=label)
+    plot_nspectrogram_phase_vs_frequency(result, ax=axes[0, 1], zoom=zoom.phase_vs_frequency, label=label)
+    plot_nspectrogram_magnitude_vs_time(result, ax=axes[1, 0], zoom=zoom.magnitude_vs_time, label=label)
+    plot_nspectrogram_magnitude_vs_frequency(result, ax=axes[1, 1], zoom=zoom.magnitude_vs_frequency, label=label)
+
+    fig.suptitle(
+        f"Etude STFT sur {_get_nspectrogram_label(result, label)} "
+        f"(bin cible={result.target_bin_index}, f={result.target_frequency_hz:.2f} Hz)",
+        fontsize=13,
+        y=0.99,
+    )
+    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.96), h_pad=2.0, w_pad=1.2)
+    return fig, axes
+
+
+def _validate_compatible_nspectrogram_results(
+    first: NSpectrogramStudyResult,
+    second: NSpectrogramStudyResult,
+) -> None:
+    if first.spectrogram.Sxx.shape[1:] != second.spectrogram.Sxx.shape[1:]:
+        raise ValueError("Les deux spectrogrammes doivent partager la meme grille (frequences, temps).")
+    if not np.allclose(first.spectrogram.f, second.spectrogram.f):
+        raise ValueError("Les axes de frequences des deux spectrogrammes diffèrent.")
+    if not np.allclose(first.spectrogram.t, second.spectrogram.t):
+        raise ValueError("Les axes temporels des deux spectrogrammes diffèrent.")
+
+
+def plot_nspectrogram_phase_difference_vs_time(
+    first: NSpectrogramStudyResult,
+    second: NSpectrogramStudyResult,
+    ax: Axes | None = None,
+    zoom: PlotZoom | None = None,
+) -> Axes:
+    _validate_compatible_nspectrogram_results(first, second)
+    if ax is None:
+        _, ax = plt.subplots(figsize=(10, 4))
+
+    first_values = _get_nspectrogram_values(first)
+    second_values = _get_nspectrogram_values(second)
+    freq_indices = np.unique(np.concatenate((first.selected_freq_indices, second.selected_freq_indices)))
+
+    unwrap_phase = first.config.unwrap_phase or second.config.unwrap_phase
+    for freq_index in freq_indices:
+        phase_first = _get_phase(first_values[freq_index, :], unwrap_phase=unwrap_phase)
+        phase_second = _get_phase(second_values[freq_index, :], unwrap_phase=unwrap_phase)
+        ax.plot(
+            first.spectrogram.t,
+            phase_second - phase_first,
+            label=f"f={first.spectrogram.f[freq_index]:.2f} Hz",
+        )
+
+    ax.set_title("Difference des arguments arg(S2)-arg(S1) en fonction du temps")
+    ax.set_xlabel("Temps (s)")
+    ax.set_ylabel("Phase (rad)")
+    ax.grid(True)
+    ax.legend()
+    _style_axis(ax)
+    _apply_plot_zoom(ax, zoom)
+    return ax
+
+
+def plot_nspectrogram_magnitude_ratio_vs_time(
+    first: NSpectrogramStudyResult,
+    second: NSpectrogramStudyResult,
+    ax: Axes | None = None,
+    zoom: PlotZoom | None = None,
+) -> Axes:
+    _validate_compatible_nspectrogram_results(first, second)
+    if ax is None:
+        _, ax = plt.subplots(figsize=(10, 4))
+
+    eps = 1e-12
+    relative_threshold = 1e-3
+    line_styles = ["-", "--", "-.", ":"]
+    first_values = _get_nspectrogram_values(first)
+    second_values = _get_nspectrogram_values(second)
+    freq_indices = np.unique(np.concatenate((first.selected_freq_indices, second.selected_freq_indices)))
+
+    for curve_idx, freq_index in enumerate(freq_indices):
+        magnitude_first = np.abs(first_values[freq_index, :])
+        magnitude_second = np.abs(second_values[freq_index, :])
+        valid = magnitude_first > relative_threshold * np.max(magnitude_first)
+        ratio = np.full_like(magnitude_first, np.nan, dtype=float)
+        ratio[valid] = magnitude_second[valid] / np.maximum(magnitude_first[valid], eps)
+        ax.plot(
+            first.spectrogram.t,
+            ratio,
+            label=f"f={first.spectrogram.f[freq_index]:.2f} Hz",
+            linestyle=line_styles[curve_idx % len(line_styles)],
+        )
+
+    ax.set_title("Rapport des modules |S2| / |S1| en fonction du temps")
+    ax.set_xlabel("Temps (s)")
+    ax.set_ylabel("|S2| / |S1|")
+    ax.grid(True)
+    ax.legend()
+    _style_axis(ax)
+    _apply_plot_zoom(ax, zoom)
+    return ax
+
+
+def plot_nspectrogram_pair_study_figures(
+    first: NSpectrogramStudyResult,
+    second: NSpectrogramStudyResult,
+    zoom: NSpectrogramPairStudyPlotZoom | None = None,
+    first_label: str = "s1",
+    second_label: str = "s2",
+) -> tuple[Figure, np.ndarray]:
+    _validate_compatible_nspectrogram_results(first, second)
+    fig, axes = plt.subplots(5, 2, figsize=(14, 20))
+    if zoom is None:
+        zoom = NSpectrogramPairStudyPlotZoom()
+
+    plot_nspectrogram_phase_vs_time(first, ax=axes[0, 0], zoom=zoom.first.phase_vs_time, label=first_label)
+    plot_nspectrogram_phase_vs_frequency(first, ax=axes[0, 1], zoom=zoom.first.phase_vs_frequency, label=first_label)
+    plot_nspectrogram_magnitude_vs_time(first, ax=axes[1, 0], zoom=zoom.first.magnitude_vs_time, label=first_label)
+    plot_nspectrogram_magnitude_vs_frequency(first, ax=axes[1, 1], zoom=zoom.first.magnitude_vs_frequency, label=first_label)
+    plot_nspectrogram_phase_vs_time(second, ax=axes[2, 0], zoom=zoom.second.phase_vs_time, label=second_label)
+    plot_nspectrogram_phase_vs_frequency(second, ax=axes[2, 1], zoom=zoom.second.phase_vs_frequency, label=second_label)
+    plot_nspectrogram_magnitude_vs_time(second, ax=axes[3, 0], zoom=zoom.second.magnitude_vs_time, label=second_label)
+    plot_nspectrogram_magnitude_vs_frequency(second, ax=axes[3, 1], zoom=zoom.second.magnitude_vs_frequency, label=second_label)
+    plot_nspectrogram_phase_difference_vs_time(
+        first,
+        second,
+        ax=axes[4, 0],
+        zoom=zoom.phase_difference_vs_time,
+    )
+    plot_nspectrogram_magnitude_ratio_vs_time(
+        first,
+        second,
+        ax=axes[4, 1],
+        zoom=zoom.magnitude_ratio_vs_time,
+    )
+
+    fig.suptitle(
+        "Etude comparee de deux NSpectrogram compatibles "
+        f"(f cible 1={first.target_frequency_hz:.2f} Hz, f cible 2={second.target_frequency_hz:.2f} Hz)",
+        fontsize=13,
+        y=0.995,
+    )
+    fig.tight_layout(rect=(0.0, 0.0, 1.0, 0.975), h_pad=2.0, w_pad=1.2)
     fig.subplots_adjust(hspace=0.7)
     return fig, axes
 
