@@ -13,7 +13,7 @@ from wavelet_denoising.src.si_acf.si_acf import (
     level_determination,
     non_impulsive_noise_filter,
 )
-
+from impulsive_noise_denoising.plotter import plot_1D_signal, plot_spectro_1D
 # =====================================================================
 # Auxiliary functions
 # =====================================================================
@@ -209,6 +209,8 @@ class WaveletDenoising:
         coeffs = self.WavTransform(tmp_signal)
         if self.method == "si_acf":
             denoised_signal = self.Denoise_SI_ACF(tmp_signal, coeffs)
+        elif self.method == "wiener":
+            return self.denoise_wiener(tmp_signal, coeffs) 
         else:
             denoised_signal = self.Denoise(tmp_signal, coeffs)
         return denoised_signal
@@ -312,14 +314,8 @@ class WaveletDenoising:
 
         elif self.transform == 'swt':
             if self.nlevel == 0:
-                level = swt_max_level(signal.shape[0])
-                self.nlevel = level
-
-            if self.method == "si_acf":
-                #TODO: link it and add both frenquency parameters when creating the class
                 level = level_determination(self.fundamental_frequency, self.sampling_frequency)
                 self.nlevel = level
-                print("uwu", self.nlevel)
             coeffs = swt(signal[:size], self.filter_, level=self.nlevel)
 
         else:
@@ -373,6 +369,10 @@ class WaveletDenoising:
             
         if self.transform == "swt":
             details_coeffs = [cd for ca, cd in coeffs]
+            for i in range(len(details_coeffs)):
+                plot_spectro_1D(details_coeffs[i][1000:-1000], 380000, is_db=True, fmin=500, fmax=20000)
+                plot_1D_signal(details_coeffs[i][1000:-1000], 380000)
+
 
             sigma = self.std(details_coeffs, level=self.selected_level)
 
@@ -396,6 +396,94 @@ class WaveletDenoising:
             denoised_signal = self.scaler.inverse_transform(
                     denoised_signal.reshape(-1, 1))[:, 0]
         return denoised_signal
+    
+    def denoise_time(self, denoised_coeff, original_coeff, sigma):
+        # We do /2 overlap and we want 100 batches:
+        
+        denoised_coeff_copy = denoised_coeff.copy()
+        N = len(denoised_coeff_copy)
+
+        chunk_size = int(np.ceil(N / 100))
+        step = max(1, chunk_size // 2)
+
+        for i in range(0, N, step):
+            chunk = denoised_coeff_copy[i: i + chunk_size]
+            chunk_original = original_coeff[i: i + chunk_size]
+            chunk_energy = np.sum(chunk_original * chunk_original)
+            noise_energy = len(chunk) * sigma * sigma
+
+
+            if chunk_energy <= 100 * noise_energy:
+                denoised_coeff_copy[i:i + chunk_size] = threshold(
+                    denoised_coeff_copy[i:i + chunk_size],
+                    value=sigma * np.sqrt(2 * np.log(len(chunk))),
+                    mode=self.thr_mode,
+                )
+
+        return denoised_coeff_copy
+    
+    def denoise_wiener(self, signal, coeffs):
+        if self.transform == "swt":
+            details_coeffs = np.array([cd for ca, cd in coeffs])
+            details_coeffs_unnoised = details_coeffs.copy()
+            sigma = np.ones(shape=(len(coeffs)))*self.gaussian_noise_deviation(coeffs, self.fundamental_frequency)
+
+            # Determine the threshold for the coefficients based on the level of
+            # WAVEDEC
+            thr = [self.DetermineThreshold(details_coeffs[level] / sigma[level],
+                                        self.energy_perc) * sigma[level]
+                for level in range(self.nlevel)]
+            # print("thr array", list(thr))
+            # Apply the threshold to all the coefficients
+            details_coeffs = [threshold(c, value=thr[i], mode=self.thr_mode)
+                        for i, c in enumerate(details_coeffs)]
+            
+
+            # noise_energy =  sigma[0] * sigma[0] * len(details_coeffs[0])
+            # print(f"sigma2 {sigma[0] * sigma[0]}")
+            # print(f"noise energy: {noise_energy}")
+            # for i, coeff in enumerate(details_coeffs_unnoised):
+            #     print(f"level energy: {np.sum(coeff*coeff)}")
+            #     if np.sum(coeff * coeff) > noise_energy:
+            #         print("test")
+            #         details_coeffs[i] = self.denoise_time(details_coeffs[i], coeff, sigma[0])
+
+            coeffs = [(ca, details_coeffs[i]) for i, (ca, cd) in enumerate(coeffs)]
+
+            # coeffs[0] = (self.denoise_time(coeffs[0][0], coeffs[0][0], sigma[0]), coeffs[0][1])
+
+            # Apply the WAVEREC to reconstruct the signal
+            denoised_signal = iswt(coeffs, self.filter_)
+        
+        return denoised_signal, sigma[0]
+
+    def gaussian_noise_deviation(self, coeffs, central_frequency):
+        
+        fs = self.sampling_frequency
+
+        if central_frequency <= 10000:
+            noise_central_frequency = 15000
+
+        else: 
+            noise_central_frequency = 5000
+        
+        noisy_level_index = int(np.ceil(np.log2(fs/(2*noise_central_frequency))))
+        # noisy_level_index = int(round(np.log2(3 * fs / (4 * noise_central_frequency))))
+
+
+        if noisy_level_index <= 0:
+            raise ValueError(f"got incoherent noisy_level_index lesser or equal to 0. noisy_level_index: {noisy_level_index}")
+
+        noisy_level_index = min(noisy_level_index, len(coeffs))
+
+        if self.transform == "swt":
+            noise_detail = coeffs[-noisy_level_index][1]
+
+        if self.transform == "dwt":
+            noise_detail = coeffs[-noisy_level_index]
+    
+        # return np.var(noise_detail)     
+        return np.median(np.abs(noise_detail)) / 0.6745    
     
     def Denoise_SI_ACF(self, signal, coeffs):
         """! Denoises the input signal based on the heuristic from Zhou et al 2025.
@@ -458,6 +546,8 @@ class WaveletDenoising:
             thr = self.UniversalThreshold(signal)
         elif self.method == 'sqtwolog':
             thr = self.UniversalThreshold(signal, sigma=False)
+        elif self.method == "wiener":
+            thr = self.UniversalThreshold(signal)
         elif self.method == 'stein':
             thr = self.SteinThreshold(signal)
         elif self.method == 'heurstein':
