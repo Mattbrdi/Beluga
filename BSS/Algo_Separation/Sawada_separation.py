@@ -4,7 +4,7 @@ from scipy import signal as sp_signal
 import matplotlib.pyplot as plt
 from ..Utils.signal_class import Signal, MultiSignal, NSpectrogram
 from dataclasses import dataclass, field, asdict
-from ..Utils.associated_dataclasses import StftParameters, EMClusteringParameters
+from ..Utils.associated_dataclasses import StftParameters, EMClusteringParameters, SawadaBssParameters
 from sklearn.cluster import KMeans # Utilisé uniquement pour l'initialisation rapide
 from typing import List, Dict, Optional
 from itertools import permutations
@@ -176,6 +176,15 @@ class SawadaBSS:
     
     eigenvalues_matrix: Optional[np.ndarray] = None
     eigenvector_matrix: Optional[np.ndarray] = None
+    
+    @property
+    def parameters(self) -> SawadaBssParameters:
+        return SawadaBssParameters(
+            n_sources=self.n_sources,
+            stft_parameters=self.stft_parameters,
+            em_clustering_parameters=self.em_clustering_parameters,
+            whitening=self.whitening,
+        )
     
     
     
@@ -431,6 +440,3 @@ class SawadaBSS:
             padded=Nspectro.padded,
             signal_lengths=Nspectro.signal_lengths
         )
-        
-        
-        
