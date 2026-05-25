@@ -34,7 +34,7 @@
     "cc_threshold": 0.1
   },
   "wt_denoise_parameters": {
-        "use_wt": true,
+        "use_wt": false ,
         "wavelet": "db3",
         "transform": "dwt",
         "level": 3,

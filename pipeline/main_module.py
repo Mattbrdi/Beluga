@@ -160,8 +160,8 @@ def setup_to_detection(
         event_start_dt = max(ref_start_times)
         event_end_dt   = min([st + timedelta(seconds=d) for st, d in zip(ref_start_times, durations)])
         event_duration = (event_end_dt - event_start_dt).total_seconds()
-        if event_duration <= 0:
-            return None, None, None
+        # if event_duration <= 0: #mb55 modif, j'ai mis en commentaire
+        #     return None, None, None
     
     ##### Debug the outputs #####
     if parameters.print_level > 1:
@@ -437,7 +437,7 @@ def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_fi
             print(f"Itération : {iters}")
         try :        
             for sound_mask, call_type in zip([whistle_mask, hfpc_mask, echo_mask, cc_mask],["Whistle","HFPC","ECHO","CC"]):
-                if np.sum(sound_mask) >= 2:
+                if np.sum(sound_mask) >= 2: 
                     if call_type in ['Whistle','HFPC']:
                         # TODO AJOUTER QQC POUR CHOISIR LES CANAUX A PARSER EN FONCTION DU MASQUE? PEUT ETRE UN SOUS ENVIRONNEMENT ?
                         sounds_lines = [result_df.loc[iters] for result_df in results_dfs]

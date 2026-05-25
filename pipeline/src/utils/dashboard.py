@@ -493,7 +493,7 @@ def set_dashboard(audio_files, positions, errors, timestamps, durations, call_ty
         if DISPLAY_MODE == "spl":
             z1 = PSD1_filtered
             z2 = PSD2_filtered
-            zmin, zmax = 40, 130
+            zmin, zmax = 40, 160
             cbar_title = "PSD [dB re 1 µPa²/Hz]"
         else:
             baseline1 = np.percentile(PSD1_filtered, 20, axis=1, keepdims=True)

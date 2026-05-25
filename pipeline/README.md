@@ -83,7 +83,7 @@ beluga-watch/
 audio_path = ['path_to_wav_8296.wav','path_to_wav_8295.wav']
 model_path = 'jsons/models/mobile_net_overlaps.pt'
 param_path = 'jsons/parameters/default_parameters.json'
-env_path = 'jsons/environments/env_cacouna.json'
+enV_PAth = 'jsons/environments/env_cacouna.json'
 
 positions, errors, timestamps, durations, call_types = positions_from_audio(model_path, env_path, param_path, audio_path)
 ```
@@ -238,8 +238,7 @@ heatmap(estimated_tdoa_std,
     bandwidth = 300
     duration = 1.0
     npy_folder = os.listdir("test_data/zivzakai_outputs")
-    central_frequencies = np.unique([float(extract_frequency(file)) for file in npy_folder if (file.endswith('.npy') and extract_frequency(file))])
-    nb_points = 20
+    central_frequencies = np.unique([float(extract_frequency(file)) for file in npy_folder if (file.endswith('.npy') and extract_frequency(file))]) nb_points = 20
     central_frequencies = [750.0, 1000.0, 3000.0, 10000.0, 18000.0]
     pos = np.zeros(3)
     #nb_samples_fs = 8 # Discretises the -fs/2, fs/2 segment to reach approx fs^2/12 in average

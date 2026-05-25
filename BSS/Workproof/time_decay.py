@@ -86,6 +86,7 @@ def test_sawada_separation():
         tdoas_s0 = get_multi_tdoa_matrix(src_multi, ref_channel=0)
         print("valeur des tdoa entre le micro 0 et les micros: ", tdoas_s0)
 
+
         
     # Optionnel : Comparaison des spectrogrammes pour voir les masques
     print("Affichage des spectrogrammes de séparation...")
@@ -93,7 +94,6 @@ def test_sawada_separation():
         spec_i = bss.get_spectro_source_i(i)
         spec_i.plot(db=False)
         plt.gcf().suptitle(f"Spectrogramme masqué - Source {i}")
-
     plt.show()
 
     a  = np.array([0,0,0,0,0,0,0,0,0,0,1,2,3,4,5,4,3,2,1,0,0,0,0,0,0,0])

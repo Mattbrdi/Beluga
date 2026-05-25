@@ -1036,7 +1036,7 @@ def run_pipeline_overlaps_long_spects(
             
 
             # Cut the long spectrogram into windows
-            for i in range(actual_windows):
+            for i in range(actual_windows): 
                 start_bin = i * time_bins_per_window
                 end_bin = (i + 1) * time_bins_per_window
                 
@@ -1073,6 +1073,7 @@ def run_pipeline_overlaps_long_spects(
                 inference_time += time.time() - time_calc_start
 
                 # Process predictions
+          
                 for (pred, probs), dB_spect, start_time_single in zip(batch_predictions, batch_db_spects, batch_start_times):
                     time_calc_start = time.time()
 
@@ -1087,7 +1088,7 @@ def run_pipeline_overlaps_long_spects(
                         print(probs)
                         spect_generator.plot_spect(dB_spect, title=f"ECHO: {pred['ECHO']}, HFPC: {pred['HFPC']}, CC: {pred['CC']}, Whistle: {pred['Whistle']}, Call: {pred['Call_Detection']}", figsize=(5, 2.5), vmax=160, vmin=70)
                         
-                    if probs["Call_Detection"] < 0.1 :
+                    if probs["Call_Detection"] < 0.1 :  
                         # We remove the first and last bits of the spectrogram to avoid edge effects of spectrogram generation
                         new_noise_spect = dB_spect[:, 10:-10]
 
@@ -1120,14 +1121,45 @@ def run_pipeline_overlaps_long_spects(
                         "Timestamp": start_time_single,
                         "seconds_since_file_start": (start_time_single - audio_start_time).total_seconds(),
                         "noise_calc_method": noise_calculation_method,
-                        "Call_Detection": probs.get("Call_Detection", 0.0),
+                        "Call_Detection": probs.get("Call_Detection", 0.0),  
                     }
-
                     # Add call presence and probabilities
                     for label in ["ECHO", "HFPC", "CC", "Whistle"]:
                         result[f"{label}"] = pred.get(label, False)
                         result[f"{label}_prob"] = probs.get(label, 0.0)
+                    
 
+                    #mb55 Here if I want to modify the results to the detection it's here 
+
+
+                    # if  True : # i == 0:
+                    #     result['HFPC'] = True
+                    #     result['HFPC_prob']= 1.0
+                    #     result['Call_Detection'] = 1.0
+                    #     for label in ["ECHO", "CC", "Whistle"]:
+                    #         result[f"{label}"] = False
+                    #         result[f"{label}_prob"] = 0.0
+                    # # else: 
+                    #     result['HFPC'] = False
+                    #     result['HFPC_prob']= 0.0
+                    
+                    if True : # i%5 == 0:
+                        result['Whistle'] = True
+                        result['Whistle_prob']= 1.0
+                        result['Call_Detection'] = 1.0
+
+                        for label in ["HFPC", "CC", "ECHO"]:
+                            result[f"{label}"] = False
+                            result[f"{label}_prob"] = 0.0
+                    
+                    # else: 
+                    #     result['Whistle'] = False
+                    #     result['Whistle_prob']= 0.0
+                     
+
+                        
+                    #end of modification mb55
+                    
                     # Add dB window and noise values
                     for band in ["w_range", "hf_range"]:
                         for stat in db_window[band].keys():
