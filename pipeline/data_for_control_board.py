@@ -3,6 +3,7 @@ from src.utils.dashboard import set_dashboard
 from src.utils.sub_classes import Environment, Parameters
 import numpy as np
 from pyproj import Transformer
+import csv
 
 from math import radians, sin, cos, sqrt, atan2
 
@@ -12,9 +13,18 @@ from math import radians, sin, cos, sqrt, atan2
 #                ]
 
 audio_path =  [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8295.260511123039.wav", 
-               r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8296.260511123136.wav",
+               r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8296.260511123039.wav",
                ]    
+# audio_path = [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8295.260511132236.wav", 
+#               r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8296.260511132236.wav"]
 
+# audio_path = [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8295.260511141242.wav", 
+#               r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8296.260511141242.wav"]
+# audio_path = [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511134902.wav", 
+#               r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511134902.wav"]
+
+ground_truth_path = r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\ground_truth\trace_gps_calibration.csv"
+#ces fichier n'ont pas exactrement la bonne date 
 model_path = 'jsons/models/mobile_net_8_layers_qat.pt'
 param_path = 'jsons/parameters/default_parameters.json'
 # env_path = 'jsons/environments/env_cacouna.json'
@@ -30,6 +40,37 @@ environment = Environment(env_path, parameters.location_parameters.use_h4)
     detections_dfs
 ) = positions_from_audio(model_path, env_path, param_path, audio_path)
 
+def lat_long(csv_path, datetime_str):
+    with open(csv_path, newline="", encoding="utf-8") as csv_file:
+        reader = csv.DictReader(csv_file, skipinitialspace=True)
+
+        if reader.fieldnames is None:
+            raise ValueError(f"CSV vide ou invalide : {csv_path}")
+
+        normalized_fieldnames = [field.strip() for field in reader.fieldnames]
+        reader.fieldnames = normalized_fieldnames
+
+        required_columns = {"datetime_correct", "lat", "long"}
+        missing_columns = required_columns.difference(normalized_fieldnames)
+        if missing_columns:
+            raise ValueError(
+                f"Colonnes manquantes dans {csv_path}: {', '.join(sorted(missing_columns))}"
+            )
+
+        for row in reader:
+            normalized_row = {key.strip(): value.strip() for key, value in row.items()}
+            if normalized_row["datetime_correct"] == datetime_str:
+                return (
+                    float(normalized_row["lat"]),
+                    float(normalized_row["long"]),
+                )
+
+    raise ValueError(
+        f"Aucune ligne trouvée pour datetime_correct = '{datetime_str}' dans {csv_path}"
+    )
+
+
+#WARNIGN, fichier audio doivent avoir le meme nom de début et de fin 
 if __name__ == "__main__":
     app = set_dashboard(
         audio_path,
@@ -54,9 +95,9 @@ if __name__ == "__main__":
         #[(47.943012, -69.518671)],
 
         #2024-07-29 [07h00-07h10]
-        [(47.940056, -69.530229), (47.939948, -69.530897), (47.939373, -69.531312),
-        (47.938277, -69.533283), (47.937416, -69.535017), (47.937167, -69.535564),
-        (47.939913, -69.534175)],
+        # [(47.940056, -69.530229), (47.939948, -69.530897), (47.939373, -69.531312),
+        # (47.938277, -69.533283), (47.937416, -69.535017), (47.937167, -69.535564),
+        # (47.939913, -69.534175)],
 
         #2024-07-29 [11h40-12h40]
         #[(47.939973, -69.528317), (47.941761, -69.522871), (47.941849, -69.522566),
@@ -69,6 +110,18 @@ if __name__ == "__main__":
         #  (47.945017, -69.524993), (47.944608, -69.526129), (47.941017, -69.533308),
         #  (47.935525, -69.535717), (47.935611, -69.535486), (47.936317, -69.530894),
         #  (47.937244, -69.528370)],
+        #
+        #2026 test_data 12h30
+        [(47.9440129827708,-69.5248331129551), (47.9440762661397,-69.524761447683),(47.9441651981324,-69.5246633794159)],
+        
+        # point 12 
+        # [(47.9440129827708,-69.5248331129551)] + [lat_long(ground_truth_path, f"2026/05/11 13:22:{50+i}") for i in range(9)] + [ lat_long(ground_truth_path, f"2026/05/11 13:23:{i}") for i in range(10,60)] ,
+        # point 17
+        # [(47.9440129827708,-69.5248331129551)] + [lat_long(ground_truth_path, f"2026/05/11 14:04:{37+i}") for i in range(20)],  
+
+        # [(47.9440129827708,-69.5248331129551)] + [lat_long(ground_truth_path, f"2026/05/11 14:12:{42+i}") for i in range(15)],  
+       
+        # [(47.9440129827708,-69.5248331129551)] + [lat_long(ground_truth_path, f"2026/05/11 13:49:{10+i}") for i in range(15)],  
         
         # dummy (modifier le code pour pouvoir utiliser sans ground truth?)
         #[(47.942531, -69.528000)],
@@ -81,3 +134,5 @@ if __name__ == "__main__":
         detection_threshold=0.5,
     )
     app.run(debug=False)
+    
+    

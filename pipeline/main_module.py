@@ -178,6 +178,7 @@ def setup_to_detection(
         print(f"Shape des sliced_audios : {sliced_audios[0].shape}, {sliced_audios[1].shape}")
 
     if sliced_audios[0].shape[0] == 0 or sliced_audios[1].shape == 0:
+        print("sliced_audios shape[0] == 0 or truc")
         return None, None, None
     
     ##### Cut the overduration of sliced_audios #####
@@ -286,6 +287,7 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
     tdoas_mask = []
     for audio_array in audio_arrays:
         new_tdoa, new_crb, new_mask, _ = tdoas(audio_array, use_gcc=False, compute_scores=False)
+        #new _mask dépend de si le snr est trop gros et de si les tdoa calculé sont impossibles 
         tdoas_measured.append(new_tdoa)
         tdoas_error_variance.append(new_crb)
         tdoas_mask.append(new_mask)
@@ -433,7 +435,7 @@ def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_fi
     
     ##### Beginning of the loop #####
     for whistle_mask, hfpc_mask, echo_mask, cc_mask, noise_mask in zip(iterable_dict['Whistle'], iterable_dict['HFPC'], iterable_dict['ECHO'], iterable_dict['CC'], iterable_dict['Noise']):
-        if parameters.print_level > 1:
+        if True : #  parameters.print_level > 1: #mb55
             print(f"Itération : {iters}")
         try :        
             for sound_mask, call_type in zip([whistle_mask, hfpc_mask, echo_mask, cc_mask],["Whistle","HFPC","ECHO","CC"]):
@@ -449,7 +451,8 @@ def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_fi
                             event_times.append(associated_time)
                             event_durations.append(duration)
                             event_call_types.append(call_type)
-                            event_status.append(status)         
+                            event_status.append(status)   
+                            print("time oui")      
 
                         if position_enu is not None:
                             positions_enu.append(position_enu)
@@ -457,7 +460,9 @@ def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_fi
                             associated_times.append(associated_time)
                             durations.append(duration)
                             call_types.append(call_type)
-                    
+                            print("pos oui")
+                        else : 
+                            print(f"iter num {iters} ne fonctionne pas")
         except Exception as e:
             
             print(f"▒▒▒▒▒▒▒▒▒▒▒▒ Attention erreur: {e}")

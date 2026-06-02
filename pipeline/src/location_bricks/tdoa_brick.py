@@ -377,7 +377,8 @@ def tdoas(audio_array: AudioArray, use_gcc : bool = False, compute_scores : bool
         ##### Agregating #####
         tdoa_vector.append(tdoa)
         crb_vector.append(crb)
-        tdoas_mask.append(use_tdoa & use_crb)
+        tdoas_mask.append(use_tdoa & use_crb) #mb55 on enlève pas meme si bruit trop grand
+        
         ###################################################################
         #tdoas_mask.append(True)
         ###################################################################

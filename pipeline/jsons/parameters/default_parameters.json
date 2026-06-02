@@ -2,7 +2,7 @@
   "debug_mode": false,
   "print_level": 0,
   "max_position_frames": null,
-  "use_gcc": false,
+  "use_gcc": true,
   "location_parameters": {
     "use_h4": true,
     "fusion_type": "low",
@@ -34,7 +34,7 @@
     "cc_threshold": 0.1
   },
   "wt_denoise_parameters": {
-        "use_wt": false ,
+        "use_wt": false,
         "wavelet": "db3",
         "transform": "dwt",
         "level": 3,
