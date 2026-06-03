@@ -3,6 +3,40 @@
 Ce module sert à sauvegarder les résultats d'une séparation de source et représente la manière standard de le faire ici
 Lire une séparation de source se fait donc de la manière inverse avec ces noms de fichier etc
 """
+# Petit tuto rapide du module.
+# Fonctions simples:
+# - save_signal(signal, path): sauvegarde un Signal seul.
+# - load_signal(path): recharge un Signal seul.
+# - save_multisignal(multisignal, path): sauvegarde un MultiSignal.
+# - load_multisignal(path): recharge un MultiSignal.
+# - save_mixture(mixture, path): sauvegarde l'objet Mixture applique.
+# - load_mixture(path): recharge un objet Mixture.
+#
+# Fonctions principales pour un run BSS:
+# - save_separation_result(...): sauvegarde manuellement un bundle complet
+#   avec sources originales, signal melange, sources separees, parametres,
+#   Mixture appliquee optionnelle, modele Sawada optionnel et metadata.
+# - load_separation_result(path): recharge le bundle complet et retourne
+#   un SeparationResultBundle.
+# - save_sawada_result(sawada_model, ...): helper le plus pratique quand
+#   on a deja une instance de SawadaBSS executee.
+#
+# Usage typique:
+#     save_sawada_result(
+#         sawada_model=bss,
+#         output_dir="output/mon_run",
+#         original_sources=[src1, src2],
+#         mixture=mixture_signal,
+#         applied_mixture=mixer,
+#         separated_sources=separated_sources,
+#         metadata={"experience": "test_01"},
+#         overwrite=True,
+#     )
+#
+# Puis rechargement:
+#     bundle = load_separation_result("output/mon_run")
+#     separated_sources = bundle.separated_sources
+#     bss_loaded = bundle.sawada_model
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, is_dataclass
