@@ -195,10 +195,12 @@ class AudioArray:
     The output of Emmanuel is an AudioArray.
     The audio array also contains info about the SNR and the call type (one call type, four SNR)"""
     def __init__(self, audio_metadata : AudioMetadata, tetra_data : Tetrahedra, use_h4 : bool, data_array : np.ndarray):
-        self.data_array = data_array
+        #mb55
         self.metadata = audio_metadata
+        self.tetra_data = tetra_data
         self.use_h4 = use_h4
-        self.pairs_dict = self.generate_pairs_dict(tetra_data, self.use_h4) # A dict with HydrophonePair id (8295_H1H2 for instance) matching a reference (array[0], array[h1])
+        self.set_data_array(data_array)
+        #mb55
     
     def generate_pairs_dict(self, tetra_data:Tetrahedra, use_h4 : bool):
         pairs_dict = {}
@@ -212,6 +214,12 @@ class AudioArray:
             for j in range(i+1,self.data_array.shape[0]-h4_remover):
                 pairs_dict[f'{self.metadata.tetra_id}_H{i+1}H{j+1}'] = HydrophonePair(hydrophones[i],hydrophones[j], max_delay_idx)
         return pairs_dict
+
+    #mb55
+    def set_data_array(self, data_array: np.ndarray):
+        self.data_array = data_array
+        self.pairs_dict = self.generate_pairs_dict(self.tetra_data, self.use_h4)
+    #mb55
     
     def update_snr(self, snr_power):
         h4_remover = int(1-self.use_h4) # 0 if we use h4, 1 else

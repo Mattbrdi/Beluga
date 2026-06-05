@@ -23,6 +23,9 @@ audio_path =  [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\t
 # audio_path = [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511134902.wav", 
 #               r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511134902.wav"]
 
+# audio_path = [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8295.260511133808.wav", 
+#               r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8296.260511133808.wav"]
+
 ground_truth_path = r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\ground_truth\trace_gps_calibration.csv"
 #ces fichier n'ont pas exactrement la bonne date 
 model_path = 'jsons/models/mobile_net_8_layers_qat.pt'

@@ -36,13 +36,19 @@ def cc_filter_four_canals(ordered_imfs, audio_array, parameters):
     if np.sum(modes_mask) == 0:
         print("WARNING : No correlated modes, returning original array")
         if parameters.compute_noisy_imfs and noisy_array is not None:
-            noisy_array.data_array = np.array([np.sum(imf, axis = 0) for imf in ordered_imfs])
+            #mb55
+            noisy_array.set_data_array(np.array([np.sum(imf, axis = 0) for imf in ordered_imfs]))
+            #mb55
         return audio_array, noisy_array
     
     ##### Otherwise there is at least one mode 
-    audio_array.data_array = np.array([np.sum(imf[modes_mask,:], axis = 0) for imf in ordered_imfs])
+    #mb55
+    audio_array.set_data_array(np.array([np.sum(imf[modes_mask,:], axis = 0) for imf in ordered_imfs]))
+    #mb55
     if parameters.compute_noisy_imfs and noisy_array is not None:
-        noisy_array.data_array = np.array([np.sum(imf[np.logical_not(modes_mask),:], axis = 0) for imf in ordered_imfs])
+        #mb55
+        noisy_array.set_data_array(np.array([np.sum(imf[np.logical_not(modes_mask),:], axis = 0) for imf in ordered_imfs]))
+        #mb55
     return audio_array, noisy_array
     
 ###################################

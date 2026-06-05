@@ -231,12 +231,31 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
         audio_arrays, duration, event_start_dt = setup_to_detection(
             parameters, audio_files, beluga_sounds, call_type, offset, environment, sound_mask
         )
+       
         if audio_arrays is None:
             print("WARNING : Audio arrays is None, indicating a setup to detection issue")
             return None, None, None, None, "reject_setup"
     except Exception as e:
         print(f"▒▒▒▒▒▒▒▒▒▒▒▒ Pas de béluga ou erreur: {e}")
         return None, None, None, None, "reject_setup"
+    #mb55
+    # from src.utils.four_can_generator import generate_correlated_array_from_nparray_int_tdoas
+    # audio_data1 = audio_arrays[0].data_array[0:1, :]
+    # audio_data1 = np.repeat(audio_data1, 4, axis=0)
+    # out1, _, _ = generate_correlated_array_from_nparray_int_tdoas(
+    #     environment,
+    #     0.0,
+    #     np.array([1000, 500, 0]),
+    #     audio_data1,
+    #     audio_arrays[0].metadata.sample_rate,
+    #     audio_arrays[0].metadata.call_duration,
+    # )
+
+    # audio_arrays[0].set_data_array(out1[0])
+    # audio_arrays[1].set_data_array(out1[1])
+    
+    # #mb55 end 
+        
 
     end_detection = time()
     if parameters.print_level > 0:
