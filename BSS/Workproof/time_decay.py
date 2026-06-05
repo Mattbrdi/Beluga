@@ -27,7 +27,7 @@ def test_sawada_separation():
     s1 = s1 + s1 
     # Création de la Source 2 : Basses fréquences à la fin
     s2 = Signal.generate_multi_freq_signal(
-        duration, fs, start_time=0., end_time=2, 
+        duration, fs, start_time=0.8, end_time=1.6, 
         frequencies=[300, 450, 600], window_type='boxcar'
     )
     
