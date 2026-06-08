@@ -16,9 +16,7 @@ Fonctions principales:
 
 Pour ajouter un nouvel algo BSS:
 1. creer une dataclass de parametres heritant de BssParameters
-2. enregistrer son rebuilder avec register_parameter_type(...)
-3. enregistrer ses fonctions de save/load model avec
-   register_model_handler(...)
+2. enregistrer un BssSerializationHandler pour cet algo
 """
 from __future__ import annotations
 
@@ -47,8 +45,10 @@ ModelLoader = Callable[[Path, BssParameters], Any]
 
 
 @dataclass
-class ModelSerializationHandler:
+class BssSerializationHandler:
+    parameters_type: type[BssParameters]
     model_type_name: str
+    rebuild_parameters: ParameterRebuilder
     save_model: ModelSaver
     load_model: ModelLoader
 
@@ -68,25 +68,20 @@ class SeparationResultBundle:
         return self.model
 
 
-_PARAMETER_REBUILDERS: dict[str, ParameterRebuilder] = {}
-_MODEL_HANDLERS: dict[str, ModelSerializationHandler] = {}
+_BSS_SERIALIZATION_HANDLERS: dict[str, BssSerializationHandler] = {}
 
 
-def register_parameter_type(
-    parameters_type: type[BssParameters],
-    rebuilder: ParameterRebuilder,
-) -> None:
-    _PARAMETER_REBUILDERS[parameters_type.__name__] = rebuilder
-
-
-def register_model_handler(
+def register_bss_serialization_handler(
     parameters_type: type[BssParameters],
     model_type_name: str,
+    rebuild_parameters: ParameterRebuilder,
     save_model: ModelSaver,
     load_model: ModelLoader,
 ) -> None:
-    _MODEL_HANDLERS[parameters_type.__name__] = ModelSerializationHandler(
+    _BSS_SERIALIZATION_HANDLERS[parameters_type.__name__] = BssSerializationHandler(
+        parameters_type=parameters_type,
         model_type_name=model_type_name,
+        rebuild_parameters=rebuild_parameters,
         save_model=save_model,
         load_model=load_model,
     )
@@ -120,12 +115,12 @@ def _rebuild_sawada_parameters(raw_parameters: dict[str, Any]) -> SawadaBssParam
 
 
 def _rebuild_parameters(parameters_type_name: str, raw_parameters: dict[str, Any]) -> BssParameters:
-    rebuilder = _PARAMETER_REBUILDERS.get(parameters_type_name)
-    if rebuilder is None:
+    handler = _BSS_SERIALIZATION_HANDLERS.get(parameters_type_name)
+    if handler is None:
         raise ValueError(
             f"Aucun rebuilder enregistre pour les parametres '{parameters_type_name}'."
         )
-    return rebuilder(raw_parameters)
+    return handler.rebuild_parameters(raw_parameters)
 
 
 def _validate_output_dir(output_dir: str | Path, overwrite: bool) -> Path:
@@ -407,8 +402,8 @@ def _load_sawada_model(model_dir: Path, parameters: BssParameters) -> Any:
     return sawada_model
 
 
-def _get_model_handler(parameters: BssParameters) -> ModelSerializationHandler | None:
-    return _MODEL_HANDLERS.get(type(parameters).__name__)
+def _get_serialization_handler(parameters: BssParameters) -> BssSerializationHandler | None:
+    return _BSS_SERIALIZATION_HANDLERS.get(type(parameters).__name__)
 
 
 def save_separation_result(
@@ -438,13 +433,13 @@ def save_separation_result(
     if applied_mixture is not None:
         save_mixture(applied_mixture, target_dir / "applied_mixture.npz")
 
-    model_handler = _get_model_handler(parameters)
+    serialization_handler = _get_serialization_handler(parameters)
     if model is not None:
-        if model_handler is None:
+        if serialization_handler is None:
             raise ValueError(
-                f"Aucun handler de model enregistre pour '{type(parameters).__name__}'."
+                f"Aucun handler de serialisation enregistre pour '{type(parameters).__name__}'."
             )
-        model_handler.save_model(target_dir / "model", model)
+        serialization_handler.save_model(target_dir / "model", model)
 
     manifest = {
         "format": "bss_separation_result",
@@ -455,7 +450,9 @@ def save_separation_result(
         "has_model": model is not None,
         "parameters_type": type(parameters).__name__,
         "model_type": (
-            None if model is None or model_handler is None else model_handler.model_type_name
+            None
+            if model is None or serialization_handler is None
+            else serialization_handler.model_type_name
         ),
         "parameters": _normalize_json_value(parameters),
         "metadata": _normalize_json_value(metadata or {}),
@@ -566,16 +563,16 @@ def load_separation_result(input_dir: str | Path) -> SeparationResultBundle:
     model = None
     has_model = manifest.get("has_model", manifest.get("has_sawada_model", False))
     if has_model:
-        model_handler = _MODEL_HANDLERS.get(parameters_type_name)
-        if model_handler is None:
+        serialization_handler = _BSS_SERIALIZATION_HANDLERS.get(parameters_type_name)
+        if serialization_handler is None:
             raise ValueError(
-                f"Aucun handler de model enregistre pour '{parameters_type_name}'."
+                f"Aucun handler de serialisation enregistre pour '{parameters_type_name}'."
             )
 
         model_dir = source_dir / "model"
         if not model_dir.exists():
             model_dir = source_dir / "sawada_model"
-        model = model_handler.load_model(model_dir, parameters)
+        model = serialization_handler.load_model(model_dir, parameters)
 
     return SeparationResultBundle(
         original_sources=original_sources,
@@ -588,10 +585,10 @@ def load_separation_result(input_dir: str | Path) -> SeparationResultBundle:
     )
 
 
-register_parameter_type(SawadaBssParameters, _rebuild_sawada_parameters)
-register_model_handler(
+register_bss_serialization_handler(
     SawadaBssParameters,
     model_type_name="SawadaBSS",
+    rebuild_parameters=_rebuild_sawada_parameters,
     save_model=_save_sawada_model,
     load_model=_load_sawada_model,
 )

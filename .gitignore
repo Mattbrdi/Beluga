@@ -19,3 +19,4 @@ test*/
 test*.py
 results*/
 results*.py 
+.vscode/*
