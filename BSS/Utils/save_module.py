@@ -1,52 +1,36 @@
+"""
+Module de sauvegarde generique pour les resultats BSS.
 
+Fonctions simples:
+- save_signal / load_signal
+- save_multisignal / load_multisignal
+- save_mixture / load_mixture
+
+Fonctions principales:
+- save_separation_result(...): sauvegarde un bundle complet a partir de
+  BSSParameters et d'un model optionnel.
+- load_separation_result(path): recharge un bundle complet.
+- save_bss_result(model, ...): helper generique si le model expose
+  `parameters`, `signal` et `separate_source()`.
+- save_sawada_result(...): alias de confort pour Sawada.
+
+Pour ajouter un nouvel algo BSS:
+1. creer une dataclass de parametres heritant de BssParameters
+2. enregistrer son rebuilder avec register_parameter_type(...)
+3. enregistrer ses fonctions de save/load model avec
+   register_model_handler(...)
 """
-Ce module sert à sauvegarder les résultats d'une séparation de source et représente la manière standard de le faire ici
-Lire une séparation de source se fait donc de la manière inverse avec ces noms de fichier etc
-"""
-# Petit tuto rapide du module.
-# Fonctions simples:
-# - save_signal(signal, path): sauvegarde un Signal seul.
-# - load_signal(path): recharge un Signal seul.
-# - save_multisignal(multisignal, path): sauvegarde un MultiSignal.
-# - load_multisignal(path): recharge un MultiSignal.
-# - save_mixture(mixture, path): sauvegarde l'objet Mixture applique.
-# - load_mixture(path): recharge un objet Mixture.
-#
-# Fonctions principales pour un run BSS:
-# - save_separation_result(...): sauvegarde manuellement un bundle complet
-#   avec sources originales, signal melange, sources separees, parametres,
-#   Mixture appliquee optionnelle, modele Sawada optionnel et metadata.
-# - load_separation_result(path): recharge le bundle complet et retourne
-#   un SeparationResultBundle.
-# - save_sawada_result(sawada_model, ...): helper le plus pratique quand
-#   on a deja une instance de SawadaBSS executee.
-#
-# Usage typique:
-#     save_sawada_result(
-#         sawada_model=bss,
-#         output_dir="output/mon_run",
-#         original_sources=[src1, src2],
-#         mixture=mixture_signal,
-#         applied_mixture=mixer,
-#         separated_sources=separated_sources,
-#         metadata={"experience": "test_01"},
-#         overwrite=True,
-#     )
-#
-# Puis rechargement:
-#     bundle = load_separation_result("output/mon_run")
-#     separated_sources = bundle.separated_sources
-#     bss_loaded = bundle.sawada_model
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, is_dataclass
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Callable
 
 import numpy as np
 
 from .associated_dataclasses import (
+    BssParameters,
     EMClusteringParameters,
     SawadaBssParameters,
     StftParameters,
@@ -57,15 +41,55 @@ if TYPE_CHECKING:
     from ..Algo_Separation.Sawada_separation import SawadaBSS
 
 
+ParameterRebuilder = Callable[[dict[str, Any]], BssParameters]
+ModelSaver = Callable[[Path, Any], None]
+ModelLoader = Callable[[Path, BssParameters], Any]
+
+
+@dataclass
+class ModelSerializationHandler:
+    model_type_name: str
+    save_model: ModelSaver
+    load_model: ModelLoader
+
+
 @dataclass
 class SeparationResultBundle:
     original_sources: list[MultiSignal]
     mixture: MultiSignal
-    parameters: SawadaBssParameters
+    parameters: BssParameters
     separated_sources: list[MultiSignal]
     applied_mixture: Mixture | None = None
     metadata: dict[str, Any] | None = None
-    sawada_model: "SawadaBSS | None" = None
+    model: Any | None = None
+
+    @property
+    def sawada_model(self) -> "SawadaBSS | None":
+        return self.model
+
+
+_PARAMETER_REBUILDERS: dict[str, ParameterRebuilder] = {}
+_MODEL_HANDLERS: dict[str, ModelSerializationHandler] = {}
+
+
+def register_parameter_type(
+    parameters_type: type[BssParameters],
+    rebuilder: ParameterRebuilder,
+) -> None:
+    _PARAMETER_REBUILDERS[parameters_type.__name__] = rebuilder
+
+
+def register_model_handler(
+    parameters_type: type[BssParameters],
+    model_type_name: str,
+    save_model: ModelSaver,
+    load_model: ModelLoader,
+) -> None:
+    _MODEL_HANDLERS[parameters_type.__name__] = ModelSerializationHandler(
+        model_type_name=model_type_name,
+        save_model=save_model,
+        load_model=load_model,
+    )
 
 
 def _normalize_json_value(value: Any) -> Any:
@@ -93,6 +117,15 @@ def _rebuild_sawada_parameters(raw_parameters: dict[str, Any]) -> SawadaBssParam
         ),
         whitening=raw_parameters["whitening"],
     )
+
+
+def _rebuild_parameters(parameters_type_name: str, raw_parameters: dict[str, Any]) -> BssParameters:
+    rebuilder = _PARAMETER_REBUILDERS.get(parameters_type_name)
+    if rebuilder is None:
+        raise ValueError(
+            f"Aucun rebuilder enregistre pour les parametres '{parameters_type_name}'."
+        )
+    return rebuilder(raw_parameters)
 
 
 def _validate_output_dir(output_dir: str | Path, overwrite: bool) -> Path:
@@ -234,7 +267,8 @@ def _load_nspectrogram(npz_path: Path) -> Any:
         )
 
 
-def _save_sawada_model(model_dir: Path, sawada_model: "SawadaBSS") -> None:
+def _save_sawada_model(model_dir: Path, model: Any) -> None:
+    sawada_model = model
     model_dir.mkdir(parents=True, exist_ok=True)
 
     model_state: dict[str, Any] = {
@@ -247,7 +281,10 @@ def _save_sawada_model(model_dir: Path, sawada_model: "SawadaBSS") -> None:
     }
 
     if sawada_model.nspectro_preprocessed is not None:
-        _save_nspectrogram(model_dir / "nspectro_preprocessed.npz", sawada_model.nspectro_preprocessed)
+        _save_nspectrogram(
+            model_dir / "nspectro_preprocessed.npz",
+            sawada_model.nspectro_preprocessed,
+        )
 
     if sawada_model.signal is not None:
         save_multisignal(sawada_model.signal, model_dir / "signal.npz")
@@ -260,7 +297,10 @@ def _save_sawada_model(model_dir: Path, sawada_model: "SawadaBSS") -> None:
 
     if sawada_model.bin_masks:
         sorted_mask_indices = sorted(int(idx) for idx in sawada_model.bin_masks.keys())
-        mask_stack = np.stack([sawada_model.bin_masks[idx] for idx in sorted_mask_indices], axis=0)
+        mask_stack = np.stack(
+            [sawada_model.bin_masks[idx] for idx in sorted_mask_indices],
+            axis=0,
+        )
         np.savez(
             model_dir / "bin_masks.npz",
             indices=np.array(sorted_mask_indices, dtype=int),
@@ -296,8 +336,11 @@ def _save_sawada_model(model_dir: Path, sawada_model: "SawadaBSS") -> None:
     )
 
 
-def _load_sawada_model(model_dir: Path, parameters: SawadaBssParameters) -> "SawadaBSS":
+def _load_sawada_model(model_dir: Path, parameters: BssParameters) -> Any:
     from ..Algo_Separation.Sawada_separation import EMClustering, SawadaBSS
+
+    if not isinstance(parameters, SawadaBssParameters):
+        raise TypeError("Le loader Sawada attend des SawadaBssParameters.")
 
     state_path = model_dir / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
@@ -364,14 +407,18 @@ def _load_sawada_model(model_dir: Path, parameters: SawadaBssParameters) -> "Saw
     return sawada_model
 
 
+def _get_model_handler(parameters: BssParameters) -> ModelSerializationHandler | None:
+    return _MODEL_HANDLERS.get(type(parameters).__name__)
+
+
 def save_separation_result(
     output_dir: str | Path,
     original_sources: list[MultiSignal],
     mixture: MultiSignal,
     separated_sources: list[MultiSignal],
-    parameters: SawadaBssParameters,
+    parameters: BssParameters,
     applied_mixture: Mixture | None = None,
-    sawada_model: "SawadaBSS | None" = None,
+    model: Any | None = None,
     metadata: dict[str, Any] | None = None,
     overwrite: bool = False,
 ) -> Path:
@@ -390,16 +437,26 @@ def save_separation_result(
     )
     if applied_mixture is not None:
         save_mixture(applied_mixture, target_dir / "applied_mixture.npz")
-    if sawada_model is not None:
-        _save_sawada_model(target_dir / "sawada_model", sawada_model)
+
+    model_handler = _get_model_handler(parameters)
+    if model is not None:
+        if model_handler is None:
+            raise ValueError(
+                f"Aucun handler de model enregistre pour '{type(parameters).__name__}'."
+            )
+        model_handler.save_model(target_dir / "model", model)
 
     manifest = {
         "format": "bss_separation_result",
-        "version": 2,
+        "version": 3,
         "original_sources_count": len(original_sources),
         "separated_sources_count": len(separated_sources),
         "has_applied_mixture": applied_mixture is not None,
-        "has_sawada_model": sawada_model is not None,
+        "has_model": model is not None,
+        "parameters_type": type(parameters).__name__,
+        "model_type": (
+            None if model is None or model_handler is None else model_handler.model_type_name
+        ),
         "parameters": _normalize_json_value(parameters),
         "metadata": _normalize_json_value(metadata or {}),
     }
@@ -412,6 +469,51 @@ def save_separation_result(
     return target_dir
 
 
+def save_bss_result(
+    model: Any,
+    output_dir: str | Path,
+    original_sources: list[MultiSignal],
+    separated_sources: list[MultiSignal] | None = None,
+    mixture: MultiSignal | None = None,
+    applied_mixture: Mixture | None = None,
+    metadata: dict[str, Any] | None = None,
+    overwrite: bool = False,
+) -> Path:
+    if not hasattr(model, "parameters"):
+        raise AttributeError("Le model doit exposer un attribut ou une propriete 'parameters'.")
+
+    parameters = model.parameters
+    if not isinstance(parameters, BssParameters):
+        raise TypeError("model.parameters doit heriter de BssParameters.")
+
+    mixture_to_save = mixture if mixture is not None else getattr(model, "signal", None)
+    if mixture_to_save is None:
+        raise ValueError(
+            "Aucun melange disponible. Passe mixture=... ou execute process_signal avant save_bss_result."
+        )
+
+    if separated_sources is None:
+        if not hasattr(model, "separate_source"):
+            raise AttributeError(
+                "Le model doit exposer une methode separate_source() si separated_sources n'est pas fourni."
+            )
+        separated_to_save = model.separate_source()
+    else:
+        separated_to_save = separated_sources
+
+    return save_separation_result(
+        output_dir=output_dir,
+        original_sources=original_sources,
+        mixture=mixture_to_save,
+        separated_sources=separated_to_save,
+        parameters=parameters,
+        applied_mixture=applied_mixture,
+        model=model,
+        metadata=metadata,
+        overwrite=overwrite,
+    )
+
+
 def save_sawada_result(
     sawada_model: "SawadaBSS",
     output_dir: str | Path,
@@ -422,24 +524,13 @@ def save_sawada_result(
     metadata: dict[str, Any] | None = None,
     overwrite: bool = False,
 ) -> Path:
-    mixture_to_save = mixture if mixture is not None else sawada_model.signal
-    if mixture_to_save is None:
-        raise ValueError(
-            "Aucun melange disponible. Passe mixture=... ou execute process_signal avant save_sawada_result."
-        )
-
-    separated_to_save = (
-        separated_sources if separated_sources is not None else sawada_model.separate_source()
-    )
-
-    return save_separation_result(
+    return save_bss_result(
+        model=sawada_model,
         output_dir=output_dir,
         original_sources=original_sources,
-        mixture=mixture_to_save,
-        separated_sources=separated_to_save,
-        parameters=sawada_model.parameters,
+        separated_sources=separated_sources,
+        mixture=mixture,
         applied_mixture=applied_mixture,
-        sawada_model=sawada_model,
         metadata=metadata,
         overwrite=overwrite,
     )
@@ -453,7 +544,9 @@ def load_separation_result(input_dir: str | Path) -> SeparationResultBundle:
     if manifest.get("format") != "bss_separation_result":
         raise ValueError("Format de sauvegarde non supporte.")
 
-    parameters = _rebuild_sawada_parameters(manifest["parameters"])
+    parameters_type_name = manifest.get("parameters_type", "SawadaBssParameters")
+    parameters = _rebuild_parameters(parameters_type_name, manifest["parameters"])
+
     mixture = load_multisignal(source_dir / "mixture.npz")
     original_sources = _load_multisignal_collection(
         input_dir=source_dir / "original_sources",
@@ -465,19 +558,40 @@ def load_separation_result(input_dir: str | Path) -> SeparationResultBundle:
         prefix="separated_source",
         expected_count=int(manifest["separated_sources_count"]),
     )
+
     applied_mixture = None
     if manifest.get("has_applied_mixture"):
         applied_mixture = load_mixture(source_dir / "applied_mixture.npz")
-    sawada_model = None
-    if manifest.get("has_sawada_model"):
-        sawada_model = _load_sawada_model(source_dir / "sawada_model", parameters)
+
+    model = None
+    has_model = manifest.get("has_model", manifest.get("has_sawada_model", False))
+    if has_model:
+        model_handler = _MODEL_HANDLERS.get(parameters_type_name)
+        if model_handler is None:
+            raise ValueError(
+                f"Aucun handler de model enregistre pour '{parameters_type_name}'."
+            )
+
+        model_dir = source_dir / "model"
+        if not model_dir.exists():
+            model_dir = source_dir / "sawada_model"
+        model = model_handler.load_model(model_dir, parameters)
 
     return SeparationResultBundle(
         original_sources=original_sources,
         mixture=mixture,
-        applied_mixture=applied_mixture,
-        separated_sources=separated_sources,
         parameters=parameters,
+        separated_sources=separated_sources,
+        applied_mixture=applied_mixture,
         metadata=manifest.get("metadata", {}),
-        sawada_model=sawada_model,
+        model=model,
     )
+
+
+register_parameter_type(SawadaBssParameters, _rebuild_sawada_parameters)
+register_model_handler(
+    SawadaBssParameters,
+    model_type_name="SawadaBSS",
+    save_model=_save_sawada_model,
+    load_model=_load_sawada_model,
+)
