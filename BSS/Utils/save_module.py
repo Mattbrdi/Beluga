@@ -23,6 +23,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, is_dataclass
 import json
 from pathlib import Path
+import shutil
 from typing import TYPE_CHECKING, Any, Callable
 
 import numpy as np
@@ -125,11 +126,19 @@ def _rebuild_parameters(parameters_type_name: str, raw_parameters: dict[str, Any
 
 def _validate_output_dir(output_dir: str | Path, overwrite: bool) -> Path:
     target_dir = Path(output_dir)
-    if target_dir.exists() and any(target_dir.iterdir()) and not overwrite:
-        raise FileExistsError(
-            f"Le dossier '{target_dir}' existe deja et n'est pas vide. "
-            "Utilise overwrite=True pour l'ecraser."
-        )
+    if target_dir.exists() and any(target_dir.iterdir()):
+        if not overwrite:
+            raise FileExistsError(
+                f"Le dossier '{target_dir}' existe deja et n'est pas vide. "
+                "Utilise overwrite=True pour l'ecraser."
+            )
+
+        for child in target_dir.iterdir():
+            if child.is_dir():
+                shutil.rmtree(child)
+            else:
+                child.unlink()
+
     target_dir.mkdir(parents=True, exist_ok=True)
     return target_dir
 
