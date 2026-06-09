@@ -2,6 +2,15 @@ from dataclasses import dataclass, field, asdict
 import numpy as np 
 
 @dataclass
+class BssParameters:
+    """
+    Classe de base des parametres d'un algorithme BSS.
+    Heriter de cette classe permet a save_module de reconnaitre
+    automatiquement le type de configuration.
+    """
+    pass
+
+@dataclass
 class StftParameters:
     window: str = 'hann'
     nperseg: int = 256
@@ -17,7 +26,7 @@ class EMClusteringParameters:
     eps: float = 1e-12
   
 @dataclass
-class SawadaBssParameters: 
+class SawadaBssParameters(BssParameters): 
     n_sources: int
     stft_parameters: StftParameters = field(default_factory= StftParameters)
     em_clustering_parameters : EMClusteringParameters = field(default_factory= EMClusteringParameters)
