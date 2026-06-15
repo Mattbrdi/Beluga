@@ -854,6 +854,8 @@ def classify_overlap(
         tensor_batch = torch.from_numpy(np.stack(batch)).float().unsqueeze(1)  # [B, 1, H, W]
         tensor_batch = tensor_batch.to(device)
 
+        
+
         with torch.no_grad():
             logits = model(tensor_batch)
             probabilities = torch.sigmoid(logits)

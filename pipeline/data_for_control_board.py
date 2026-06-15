@@ -4,6 +4,7 @@ from src.utils.sub_classes import Environment, Parameters
 import numpy as np
 from pyproj import Transformer
 import csv
+from datetime import datetime, timedelta
 
 from math import radians, sin, cos, sqrt, atan2
 
@@ -12,20 +13,83 @@ from math import radians, sin, cos, sqrt, atan2
 #                r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data\8296.240729065600.wav",
 #                ]
 
-audio_path =  [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8295.260511123039.wav", 
-               r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8296.260511123039.wav",
-               ]    
+# audio_path =  [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8295.260511123039.wav", 
+#                r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8296.260511123039.wav",
+#                ]    
 # audio_path = [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8295.260511132236.wav", 
 #               r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8296.260511132236.wav"]
 
 # audio_path = [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8295.260511141242.wav", 
 #               r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8296.260511141242.wav"]
-# audio_path = [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511134902.wav", 
-#               r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511134902.wav"]
+# audio_path = [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all_all\8295.260511134902.wav", 
+#               r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all_all\8296.260511134902.wav"]
 
 # audio_path = [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8295.260511133808.wav", 
 #               r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8296.260511133808.wav"]
 
+TEST_DATA2026_ALL_AUDIO_PATHS = {
+    7: [
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511123530.wav",
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511123530.wav",
+    ],
+    8: [
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511124248.wav",
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511124248.wav",
+    ],
+    9: [
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511125520.wav",
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511125520.wav",
+    ],
+    10: [
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511130305.wav",
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511130305.wav",
+    ],
+    11: [
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511131406.wav",
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511131406.wav",
+    ],
+    12: [
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511132244.wav",
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511132244.wav",
+    ],
+    13: [
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511133026.wav",
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511133026.wav",
+    ],
+    14: [
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511134030.wav",
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511134030.wav",
+    ],
+    15: [
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511134901.wav",
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511134901.wav",
+    ],
+    16: [
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511135634.wav",
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511135634.wav",
+    ],
+    17: [
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511140435.wav",
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511140435.wav",
+    ],
+    18: [
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511141244.wav",
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511141244.wav",
+    ],
+    19: [
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511141906.wav",
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511141906.wav",
+    ],
+    20: [
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511142534.wav",
+        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511142534.wav",
+    ],
+}
+
+point_number = 10
+
+
+audio_path = TEST_DATA2026_ALL_AUDIO_PATHS[point_number]
 ground_truth_path = r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\ground_truth\trace_gps_calibration.csv"
 #ces fichier n'ont pas exactrement la bonne date 
 model_path = 'jsons/models/mobile_net_8_layers_qat.pt'
@@ -71,7 +135,19 @@ def lat_long(csv_path, datetime_str):
     raise ValueError(
         f"Aucune ligne trouvée pour datetime_correct = '{datetime_str}' dans {csv_path}"
     )
+def sum_i(date :str , i: int ):
+    try:
+        resultat = (datetime.strptime(date, "%Y/%m/%d %H:%M:%S") + timedelta(seconds=i)).strftime("%Y/%m/%d %H:%M:%S")
+    except: 
+        print("format date valide requis")
+    return resultat
 
+def date_from_audio_path(audio_path):
+    first_audio_path = audio_path[0]
+    filename = first_audio_path.split("\\")[-1]
+    date_str = filename.split(".")[1]
+    parsed_date = datetime.strptime(date_str, "%y%m%d%H%M%S")
+    return parsed_date.strftime("%Y/%m/%d %H:%M:%S")
 
 #WARNIGN, fichier audio doivent avoir le meme nom de début et de fin 
 if __name__ == "__main__":
@@ -115,7 +191,7 @@ if __name__ == "__main__":
         #  (47.937244, -69.528370)],
         #
         #2026 test_data 12h30
-        [(47.9440129827708,-69.5248331129551), (47.9440762661397,-69.524761447683),(47.9441651981324,-69.5246633794159)],
+        # [(47.9440129827708,-69.5248331129551), (47.9440762661397,-69.524761447683),(47.9441651981324,-69.5246633794159)],
         
         # point 12 
         # [(47.9440129827708,-69.5248331129551)] + [lat_long(ground_truth_path, f"2026/05/11 13:22:{50+i}") for i in range(9)] + [ lat_long(ground_truth_path, f"2026/05/11 13:23:{i}") for i in range(10,60)] ,
@@ -125,7 +201,7 @@ if __name__ == "__main__":
         # [(47.9440129827708,-69.5248331129551)] + [lat_long(ground_truth_path, f"2026/05/11 14:12:{42+i}") for i in range(15)],  
        
         # [(47.9440129827708,-69.5248331129551)] + [lat_long(ground_truth_path, f"2026/05/11 13:49:{10+i}") for i in range(15)],  
-        
+        [lat_long(ground_truth_path, sum_i(date_from_audio_path(audio_path), i)) for i in range(30)] ,
         # dummy (modifier le code pour pouvoir utiliser sans ground truth?)
         #[(47.942531, -69.528000)],
         environment=environment,
