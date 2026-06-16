@@ -892,6 +892,16 @@ class Mixture:
         
         return MultiSignal(output_signals)
     
+    def is_delay_mixture(self)-> bool:
+        for i in range(self.S):
+            for j in range(self.E):
+                if np.sum(np.abs(self.filters[i,j])) != 1:
+                    return False
+        return True
+    
+    def get_delay_matrix(self):
+        
+        
     def __repr__(self):
         return f"Mixture(Entrées={self.E}, Sorties={self.S}, Longueur du filtre={self.L})"
 
