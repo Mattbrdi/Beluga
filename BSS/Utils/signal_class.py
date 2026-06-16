@@ -1,4 +1,4 @@
-from __future__ import annotations # Permet d'utiliser Spectrogram comme type même s'il est défini plus loin
+﻿from __future__ import annotations # Permet d'utiliser Spectrogram comme type même s'il est défini plus loin
 import numpy as np 
 from scipy import signal as sp_signal 
 import matplotlib.pyplot as plt
@@ -12,7 +12,7 @@ from scipy.signal import resample
 Ce module comprend les classes : 
     -Signal : signal 1d ayant une fréquence d'échantillonage
     -Multisignal : Plusieurs signaux mis dans un tableau 
-    -Mixture : applique une transformation sous forme de matrice de filtre à un multisignal
+    -Mixture : applique une transformation sous forme de matrice de filtre à un multisignal (simule un milieu qui transforme le signal)
     -Nspectrogram : spectrogram 3D contenant les spectro de N signaux et ayant toutes les infos necessaires pour reconstitué le signal avec ca 
 
 """
