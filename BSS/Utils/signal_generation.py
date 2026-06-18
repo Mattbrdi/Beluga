@@ -2,8 +2,9 @@ from BSS.Utils.signal_class import Signal, MultiSignal, Mixture, NSpectrogram
 import numpy as np 
 import torch
 from dataclasses import dataclass, field 
-
-    """
+from abc import ABC, abstractmethod 
+from scipy import signal as sp_signal
+"""
 Cahier des charges : faire un generateur de donnée à une fréquence donnée capable de generer des 
 sinusoîdes, des spikes, et d'autres signaux à chercher
 
@@ -11,13 +12,142 @@ produit du bruit gaussien ou des spikes indépendant de chaque canal
 
 
 
-    Returns:
-        _type_: _description_
-    """
+Pour ajouter un nouveau type de signal possible, il doit herité de TypedSignal et tu dois utiliser
+les fonctions register en fin de fichier 
+"""
+
+
+class TypedSignal(Signal, ABC):
+    def __init__(self, data: np.ndarray, freq : float):
+       super().__init__(data, freq) 
+    signal_type : str = "generic"
+    
+    @classmethod
+    @abstractmethod
+    def generate(cls, *args): 
+        raise NotImplementedError("cette fonction doit être implémentée")
+    
+@dataclass 
+class SignalPlacement():
+    signal : TypedSignal
+    start_time: float
+    window: str|None
+    gain : float = 1.0
+
+    def is_compatible_with(self, other: 'SignalPlacement') -> bool:
+        """
+        Vérifie que deux placements portent des signaux de même fréquence.
+        """
+        if not isinstance(other, SignalPlacement):
+            raise TypeError("other doit être une instance de SignalPlacement")
+        return self.signal.freq == other.signal.freq
+
+    def render(self)-> Signal:
+        data_array = self._apply_window(self.signal)*self.gain
+        latency = Signal.from_zeros(duration = self.start_time, freq = self.signal.freq)
+        return Signal.concat(latency, data_array)
+    
+    def _apply_window(self, signal: Signal) -> Signal: 
+       if self.window == None: 
+           return signal.copy()
+       else: 
+            return signal * Signal(data = sp_signal.get_window(window=self.window, Nx = len(signal.data)), freq = signal.freq)
+    
+class CompositeSignal(TypedSignal): 
+    signal_type : str = 'mix'
+    """ Signal qui est la somme de plusieurs signaux placé à différends endroits et multiplié par différentes fenêtres"""
+    def __init__(self, placements : list[SignalPlacement]):
+        assert len(placements)>0, "aucun SignalPlacement ajouté"
+        
+        if not self.verify_frequency_coherence(placements):
+            raise ValueError("Tous les SignalPlacement doivent contenir des signaux de même fréquence.")
+        
+        self.placements = placements
+        render = self.render()
+        super().__init__(data = render.data, freq = render.freq)
+    
+    @classmethod
+    def verify_frequency_coherence(cls, placements: list[SignalPlacement]) -> bool:
+        if len(placements) <= 1:
+            return True
+        reference = placements[0]
+        return all(reference.is_compatible_with(place) for place in placements[1:])
+    
+    def render(self) -> Signal: 
+        sig = self.placements[0].render()
+        for place in self.placements[1:]:
+            sig = sig + place.render()
+        return sig
+    
+    def cut(self, start_time: float | None = None, end_time: float | None = None) -> Signal:
+        """
+        Retourne le signal composite découpé entre start_time et end_time.
+        """
+        sig = self.render()
+        
+        start_time = 0.0 if start_time is None else start_time
+        end_time = sig.duration if end_time is None else end_time
+        
+        if start_time < 0 or end_time < 0:
+            raise ValueError("start_time et end_time doivent être positifs.")
+        if end_time < start_time:
+            raise ValueError("end_time doit être supérieur ou égal à start_time.")
+        
+        start_idx = int(round(start_time * sig.freq))
+        end_idx = int(round(end_time * sig.freq))
+        return Signal(sig.data[start_idx:end_idx].copy(), sig.freq)    
+        
+        
+    def add_placement(self, sig_placement : SignalPlacement):
+        pass  
+
+        
+    
+class SinSignal(TypedSignal):
+    signal_type = "sine"
+    def __init__(self, freq: float, data: np.ndarray, 
+                 sin_freq : float, phase :float, amplitude :float): 
+        super().__init__(data = data, freq = freq)
+        self.sin_freq = sin_freq
+        self.phase = phase
+        self.amplitude = amplitude
+        
+    @classmethod
+    def generate(cls, 
+                 freq: float,
+                 sin_freq : float,
+                 phase: float,
+                 amplitude,
+                 time_duration: float) -> 'SinSignal':
+        time = np.arange(0, time_duration*freq, 1)/ freq
+        data = amplitude*np.sin(2*np.pi*time*sin_freq + phase)
+        return SinSignal(freq = freq, data = data, sin_freq = sin_freq, phase = phase, amplitude = amplitude)
+
+class SpikeSignal(TypedSignal):
+    signal_type = "spike"
+
+class GaussianNoise(TypedSignal):
+    signal_type = "gaussian noise"
+
+_SOURCE_SIGNAL_TYPE : dict[str, type['TypedSignal']]= {}
+_NOISE_SIGNAL_TYPE: dict[str, type['TypedSignal']] = {}
+
+
+
+def register_SourceSignal(type : type['TypedSignal'], ):
+    if not issubclass(type, TypedSignal):
+        raise TypeError("mauvais type")
+    _SOURCE_SIGNAL_TYPE[type.signal_type] = type  
+    
+def register_NoiseSignal(type : type['TypedSignal']): 
+    if not issubclass(type, TypedSignal):
+        raise TypeError(...)
+    _NOISE_SIGNAL_TYPE[type.signal_type] = type 
+    
 class SignalGenerator:
     def __init__(self): 
-        return 
-
+        return None 
+    
 class MixtureGenerator :
     """
     crée la mixture selon la logique que je veux avoir 
@@ -46,11 +176,19 @@ class AudioSceneMetadata:
     fs:int 
     duration: float 
     n_sources :int 
-    sources_types : 
-    snr_db: float
-    delay_matrix : np.ndarray
-    seed: int
+    sources_types : list[type[str]]
+    n_noises : int 
+    noises_types : list[type[str]]
+    max_decay : int 
+    seed: int|None 
     
+    def __post_init__(self):
+        if self.n_sources != len(self.sources_types):
+            raise ValueError("Nombre de type pas cohérent avec le nombre de sources indiqué")
+        if self.n_noises != len(self.noises_types):
+            raise ValueError("Nombre de type de bruit pas cohérent avec nombre de noise")
+
+@dataclass      
 class AudioScene:
     """
     Donnée pour scène acoustique :
@@ -67,10 +205,8 @@ class AudioScene:
         "tdoa": ...,
     }
     """
-    def __init__(self, 
-                 mixed: MultiSignal, 
-                 sources : list[Signal], 
-                 mixing : Mixture, 
-                 metadata: dict
-                 ): 
-        return 
+    mixed: MultiSignal
+    sources: list[TypedSignal]
+    mixing: Mixture
+    noises: list[TypedSignal]
+    metadata: AudioSceneMetadata   

@@ -22,7 +22,13 @@ class Signal:
         if data.ndim != 1: 
             raise AttributeError("Dimension des data non supportée")
         self.data = np.array(data)
-        self.freq = freq 
+        self.freq = freq #frequence d'echantillonage 
+
+    def copy(self) -> 'Signal':
+        """
+        Retourne une nouvelle instance de Signal avec une copie des données.
+        """
+        return Signal(self.data.copy(), self.freq)
         
     def __add__(self, other: 'Signal') -> 'Signal' :
         if self.freq != other.freq:
@@ -467,6 +473,12 @@ class MultiSignal:
         self.signals = signals
         self.num_signals = len(signals) #nombre de signal
 
+    def copy(self) -> 'MultiSignal':
+        """
+        Retourne une nouvelle instance de MultiSignal avec des copies des signaux.
+        """
+        return MultiSignal([signal.copy() for signal in self.signals])
+
     def _validate_compatible_multisignal(self, other: 'MultiSignal') -> np.ndarray:
         """
         Vérifie qu'un autre MultiSignal est compatible pour une opération
@@ -804,6 +816,17 @@ class Mixture:
         # - E colonnes (entrées)
         # - L profondeur (coefficients du filtre/réponse impulsionnelle)
         self.filters = np.random.randn(S, E, L)
+
+    def copy(self) -> 'Mixture':
+        """
+        Retourne une nouvelle instance de Mixture avec une copie des filtres.
+        """
+        copied = Mixture.__new__(Mixture)
+        copied.E = self.E
+        copied.S = self.S
+        copied.L = self.L
+        copied.filters = self.filters.copy()
+        return copied
         
     @classmethod
     def create_delay_mixture(cls, E: int, S: int, L: int, delay_matrix: np.ndarray|None = None) -> 'Mixture':
@@ -900,7 +923,9 @@ class Mixture:
         return True
     
     def get_delay_matrix(self):
-        
+        assert self.is_delay_mixture(), "La mixture n'est pas une mixture de retard"
+        delay_matrix = np.argmax(self.filters, axis = 2)
+        return delay_matrix  
         
     def __repr__(self):
         return f"Mixture(Entrées={self.E}, Sorties={self.S}, Longueur du filtre={self.L})"
@@ -951,6 +976,24 @@ class NSpectrogram:
         self.boundary = boundary
         self.padded = padded
         self.signal_lengths = signal_lengths #utile à la reconstruction quand il y a du padding, permet de récuperer la taille exacte du signal de base 
+
+    def copy(self) -> 'NSpectrogram':
+        """
+        Retourne une nouvelle instance de NSpectrogram avec des copies des tableaux.
+        """
+        return NSpectrogram(
+            f=self.f.copy(),
+            t=self.t.copy(),
+            Sxx=self.Sxx.copy(),
+            fs=self.fs,
+            window=self.window,
+            nperseg=self.nperseg,
+            noverlap=self.noverlap,
+            nfft=self.nfft,
+            boundary=self.boundary,
+            padded=self.padded,
+            signal_lengths=None if self.signal_lengths is None else self.signal_lengths.copy()
+        )
         
     @property
     def num_signals(self) -> int:
