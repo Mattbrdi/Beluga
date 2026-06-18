@@ -149,20 +149,25 @@ class GaussianNoise(TypedSignal):
     signal_type = "gaussian noise"
 
 _SOURCE_SIGNAL_TYPE : dict[str, type['TypedSignal']]= {}
-_NOISE_SIGNAL_TYPE: dict[str, type['TypedSignal']] = {}
+_LOCAL_NOISE_SIGNAL_TYPE: dict[str, type['TypedSignal']] = {}
+_CONTINUOUS_NOISE_SIGNAL_TYPE: dict[str, type['TypedSignal']] = {}
 
 
-
-def register_SourceSignal(sig_signal : type['TypedSignal'], ):
-    if not issubclass(sig_signal, TypedSignal):
+def register_SourceSignal(sign_class : type['TypedSignal'], ):
+    if not issubclass(sign_class, TypedSignal):
         raise TypeError("mauvais type")
-    _SOURCE_SIGNAL_TYPE[sig_signal.signal_type] = sig_signal  
+    _SOURCE_SIGNAL_TYPE[sign_class.signal_type] = sign_class  
     
-def register_NoiseSignal(sig_signal : type['TypedSignal']): 
-    if not issubclass(sig_signal, TypedSignal):
+def register_LocalNoiseSignal(sig_class : type['TypedSignal']): 
+    if not issubclass(sig_class, TypedSignal):
         raise TypeError(...)
-    _NOISE_SIGNAL_TYPE[sig_signal.signal_type] = sig_signal 
-    
+    _LOCAL_NOISE_SIGNAL_TYPE[sig_class.signal_type] = sig_class
+     
+def register_ContinuousNoiseSignal(sig_class: type['TypedSignal']):
+    if not issubclass(sig_class, TypedSignal):
+        raise TypeError(...)
+    _CONTINUOUS_NOISE_SIGNAL_TYPE[sig_class.signal_type] = sig_class  
+
 class SignalGenerator:
     def __init__(self): 
         return None 
@@ -227,6 +232,7 @@ class AudioScene:
     sources: MultiSignal
     mixing: Mixture
     clean_mixed: MultiSignal
-    noises: MultiSignal
+    local_noises: MultiSignal
+    continuous_noise : MultiSignal
     mixed: MultiSignal
     metadata: AudioSceneMetadata   
