@@ -55,6 +55,7 @@ class SignalPlacement():
     
 class CompositeSignal(TypedSignal): 
     signal_type : str = 'mix'
+
     """ Signal qui est la somme de plusieurs signaux placé à différends endroits et multiplié par différentes fenêtres"""
     def __init__(self, placements : list[SignalPlacement]):
         assert len(placements)>0, "aucun SignalPlacement ajouté"
@@ -99,9 +100,16 @@ class CompositeSignal(TypedSignal):
         
         
     def add_placement(self, sig_placement : SignalPlacement):
+        if sig_placement.is_compatible_with(self.placements[0]):
+            self.placements.append(sig_placement)
+            self.data = self.render()
+        else :
+            raise AssertionError("SignalPlacement non compatible ")
         pass  
-
-        
+    
+    @classmethod 
+    def generate(cls)-> 'CompositeSignal':
+        return cls(placements = [])
     
 class SinSignal(TypedSignal):
     signal_type = "sine"
@@ -119,9 +127,9 @@ class SinSignal(TypedSignal):
                  phase: float,
                  amplitude,
                  time_duration: float) -> 'SinSignal':
-        time = np.arange(0, time_duration*freq, 1)/ freq
+        time = np.arange(0,int(round(time_duration*freq)), 1)/ freq
         data = amplitude*np.sin(2*np.pi*time*sin_freq + phase)
-        return SinSignal(freq = freq, data = data, sin_freq = sin_freq, phase = phase, amplitude = amplitude)
+        return cls(freq = freq, data = data, sin_freq = sin_freq, phase = phase, amplitude = amplitude)
 
 class SpikeSignal(TypedSignal):
     signal_type = "spike"
@@ -134,15 +142,15 @@ _NOISE_SIGNAL_TYPE: dict[str, type['TypedSignal']] = {}
 
 
 
-def register_SourceSignal(type : type['TypedSignal'], ):
-    if not issubclass(type, TypedSignal):
+def register_SourceSignal(sig_signal : type['TypedSignal'], ):
+    if not issubclass(sig_signal, TypedSignal):
         raise TypeError("mauvais type")
-    _SOURCE_SIGNAL_TYPE[type.signal_type] = type  
+    _SOURCE_SIGNAL_TYPE[sig_signal.signal_type] = sig_signal  
     
-def register_NoiseSignal(type : type['TypedSignal']): 
-    if not issubclass(type, TypedSignal):
+def register_NoiseSignal(sig_signal : type['TypedSignal']): 
+    if not issubclass(sig_signal, TypedSignal):
         raise TypeError(...)
-    _NOISE_SIGNAL_TYPE[type.signal_type] = type 
+    _NOISE_SIGNAL_TYPE[sig_signal.signal_type] = sig_signal 
     
 class SignalGenerator:
     def __init__(self): 
@@ -176,9 +184,9 @@ class AudioSceneMetadata:
     fs:int 
     duration: float 
     n_sources :int 
-    sources_types : list[type[str]]
+    sources_types : list[str]
     n_noises : int 
-    noises_types : list[type[str]]
+    noises_types : list[str]
     max_decay : int 
     seed: int|None 
     
