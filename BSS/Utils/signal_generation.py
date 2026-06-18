@@ -21,6 +21,8 @@ class TypedSignal(Signal, ABC):
     def __init__(self, data: np.ndarray, freq : float):
        super().__init__(data, freq) 
     signal_type : str = "generic"
+    allowed_windows: tuple  = ("hann",)
+    default_window : str = "hann"
     
     @classmethod
     @abstractmethod
@@ -31,8 +33,14 @@ class TypedSignal(Signal, ABC):
 class SignalPlacement():
     signal : TypedSignal
     start_time: float
-    window: str|None
+    window: str|None = "hann"
     gain : float = 1.0
+    
+    def __post_init__(self):
+        if self.window is None : 
+            self.window = self.signal.default_window 
+        if self.window not in self.signal.allowed_windows: 
+            raise ValueError( f"Fenetre {self.window} non autorisee pour {self.signal.signal_type}.")
 
     def is_compatible_with(self, other: 'SignalPlacement') -> bool:
         """
@@ -113,6 +121,9 @@ class CompositeSignal(TypedSignal):
     
 class SinSignal(TypedSignal):
     signal_type = "sine"
+    allowed_windows = ("hann",)
+    default_window = "hann"
+    
     def __init__(self, freq: float, data: np.ndarray, 
                  sin_freq : float, phase :float, amplitude :float): 
         super().__init__(data = data, freq = freq)
@@ -213,8 +224,9 @@ class AudioScene:
         "tdoa": ...,
     }
     """
-    mixed: MultiSignal
-    sources: list[TypedSignal]
+    sources: MultiSignal
     mixing: Mixture
-    noises: list[TypedSignal]
+    clean_mixed: MultiSignal
+    noises: MultiSignal
+    mixed: MultiSignal
     metadata: AudioSceneMetadata   
