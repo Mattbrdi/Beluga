@@ -19,3 +19,4 @@ test*/
 test*.py
 results*/
 results*.py 
+time_frequency_mask/data_generation/data/
