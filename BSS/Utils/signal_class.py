@@ -453,9 +453,9 @@ class Signal:
                 frequency_scale=frequency_scale,
                 **kwargs
             )
-    
+from collections.abc import Sequence
 class MultiSignal:
-    def __init__(self, signals: list[Signal]):
+    def __init__(self, signals: Sequence[Signal]):
         """
         Conteneur pour un vecteur de signaux (X).
         
