@@ -15,8 +15,9 @@ impulsive_noise_denoising/ml_denoising/data/
 impulsive_noise_denoising/ml_denoising/runs/
 runs/
 *.py[cod]
-test*/
-test*.py
+test_data*/
+sandbox*.py
+sandbox*.ipynb 
 results*/
 results*.py 
 .vscode/*
