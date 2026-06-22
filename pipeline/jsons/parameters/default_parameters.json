@@ -5,7 +5,7 @@
   "use_gcc": true,
   "location_parameters": {
     "use_h4": true,
-    "fusion_type": "high",
+    "fusion_type": "low",
     "projection_plan": 0.0
   },
   "vmd_denoise_parameters": {

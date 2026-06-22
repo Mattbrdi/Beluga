@@ -213,6 +213,7 @@ def set_dashboard(audio_files, positions, errors, timestamps, durations, call_ty
 
     # Inputs
     highlight_coords = [(position[0][0], position[1][0]) for position in lla_positions]
+    # highlight_coords = [(position[0], position[1]) for position in lla_positions]
     errors = [(error[0], error[1]) for error in errors]
     highlight_timestamps = [
         (timestamp - datetime(year, month, day, hour, minute, second)).total_seconds()
