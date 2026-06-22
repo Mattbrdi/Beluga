@@ -90,11 +90,11 @@ def scipy_stft(canal, frame_rate = SAMPLING_RATE, n_fft=N_FFT, hop_length = HOP_
     S = np.abs(Zxx)
     return freqs, times, S
 
-def scipy_db_spectrogram(canal, frame_rate, n_fft=4096, hop_length=2048, gain_db=0) -> tuple[NDArray[np.float64,], NDArray[np.float64], NDArray[np.float64]]:
+def scipy_db_spectrogram(canal, frame_rate=SAMPLING_RATE, n_fft=N_FFT, hop_length=HOP_LENGTH, gain_db=0) -> tuple[NDArray[np.float64,], NDArray[np.float64], NDArray[np.float64]]:
     freqs, times, S = scipy_stft(canal, frame_rate, n_fft=n_fft, hop_length=hop_length)
     D = 20 * np.log10(np.maximum(2 * S, 1e-12)) + gain_db
     return freqs, times, D
 
-def scipy_spectrogram(canal, frame_rate, n_fft=4096, hop_length=2048) -> tuple[NDArray[np.float64,], NDArray[np.float64], NDArray[np.float64]]:
+def scipy_spectrogram(canal, frame_rate=SAMPLING_RATE, n_fft=N_FFT, hop_length=HOP_LENGTH) -> tuple[NDArray[np.float64,], NDArray[np.float64], NDArray[np.float64]]:
     freqs, times, S = scipy_stft(canal, frame_rate, n_fft=n_fft, hop_length=hop_length)
     return freqs, times, 2 * S
