@@ -3,6 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any
+import warnings
 
 import numpy as np
 from scipy import signal as sp_signal
@@ -63,7 +64,7 @@ def _random_choice(
 
 def _random_type_name(
     rng: np.random.Generator,
-    type_name: str | None,
+    type_name: str | None, #if not random
     registry: dict[str, type["TypedSignal"]],
 ) -> str:
     if type_name is not None:
@@ -95,7 +96,6 @@ class TypedSignal(Signal, ABC):
         cls,
         rng: np.random.Generator,
         freq: float,
-        scene_duration: float,
         fixed_params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         raise NotImplementedError
@@ -105,13 +105,11 @@ class TypedSignal(Signal, ABC):
         cls,
         rng: np.random.Generator,
         freq: float,
-        scene_duration: float,
         fixed_params: dict[str, Any] | None = None,
     ) -> "TypedSignal":
         params = cls.generate_random_params(
             rng=rng,
             freq=freq,
-            scene_duration=scene_duration,
             fixed_params=fixed_params,
         )
         return cls.generate(**params)
@@ -163,7 +161,6 @@ class SinSignal(TypedSignal):
         cls,
         rng: np.random.Generator,
         freq: float,
-        scene_duration: float,
         fixed_params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         fixed_params = fixed_params or {}
@@ -176,7 +173,7 @@ class SinSignal(TypedSignal):
                 rng,
                 fixed_params.get("time_duration"),
                 0.05,
-                max(0.05, min(1.0, scene_duration)),
+                1.0,
             ),
         }
 
@@ -203,7 +200,6 @@ class SpikeSignal(TypedSignal):
         cls,
         rng: np.random.Generator,
         freq: float,
-        scene_duration: float,
         fixed_params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         fixed_params = fixed_params or {}
@@ -214,7 +210,7 @@ class SpikeSignal(TypedSignal):
                 rng,
                 fixed_params.get("time_duration"),
                 1.0 / freq,
-                min(0.02, scene_duration),
+                0.02,
             ),
         }
 
@@ -252,7 +248,6 @@ class GaussianNoise(TypedSignal):
         cls,
         rng: np.random.Generator,
         freq: float,
-        scene_duration: float,
         fixed_params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         fixed_params = fixed_params or {}
@@ -263,7 +258,7 @@ class GaussianNoise(TypedSignal):
                 rng,
                 fixed_params.get("time_duration"),
                 0.05,
-                max(0.05, min(1.0, scene_duration)),
+                1.0,
             ),
         }
 
@@ -272,10 +267,9 @@ class GaussianNoise(TypedSignal):
         cls,
         rng: np.random.Generator,
         freq: float,
-        scene_duration: float,
         fixed_params: dict[str, Any] | None = None,
     ) -> "GaussianNoise":
-        params = cls.generate_random_params(rng, freq, scene_duration, fixed_params)
+        params = cls.generate_random_params(rng, freq, fixed_params)
         return cls.generate_with_rng(rng=rng, **params)
 
 
@@ -329,41 +323,20 @@ class SignalPlacement:
         return signal * window
 
 
-class CompositeSignal(TypedSignal):
-    signal_type = "composite"
-    allowed_windows = (None,)
-    default_window = None
+class CompositeSignal:
+    """Timeline composee de plusieurs SignalPlacement; render() retourne un Signal."""
 
-    def __init__(self, placements: list[SignalPlacement], freq: float | None = None):
-        if not placements and freq is None:
-            raise ValueError("Un CompositeSignal vide doit recevoir une frequence freq.")
-        if placements and not self.verify_frequency_coherence(placements):
+    def __init__(self, placements: list[SignalPlacement], freq: float):
+        if not self.verify_frequency_coherence(placements):
             raise ValueError("Tous les SignalPlacement doivent avoir la meme frequence.")
+        if any(placement.signal.freq != freq for placement in placements):
+            raise ValueError("Tous les placements doivent avoir la frequence freq.")
 
         self.placements = list(placements)
-        if placements:
-            render = self.render()
-            super().__init__(data=render.data, freq=render.freq)
-        else:
-            if freq is not None:
-                super().__init__(data=np.zeros(0), freq=float(freq)) 
+        self.freq = float(freq)
 
-    @classmethod
-    def generate(cls, placements: list[SignalPlacement], freq: float | None = None) -> "CompositeSignal":
-        return cls(placements=placements, freq=freq)
-
-    @classmethod
-    def generate_random_params(
-        cls,
-        rng: np.random.Generator,
-        freq: float,
-        scene_duration: float,
-        fixed_params: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        raise NotImplementedError("CompositeSignal est genere par CompositeSignalGenerator.")
-
-    @classmethod
-    def verify_frequency_coherence(cls, placements: list[SignalPlacement]) -> bool:
+    @staticmethod
+    def verify_frequency_coherence(placements: list[SignalPlacement]) -> bool:
         if len(placements) <= 1:
             return True
         reference = placements[0]
@@ -379,6 +352,7 @@ class CompositeSignal(TypedSignal):
 
     def cut(self, start_time: float | None = None, end_time: float | None = None) -> Signal:
         signal = self.render()
+
         start_time = 0.0 if start_time is None else start_time
         end_time = signal.duration if end_time is None else end_time
 
@@ -389,8 +363,14 @@ class CompositeSignal(TypedSignal):
 
         start_idx = int(round(start_time * signal.freq))
         end_idx = int(round(end_time * signal.freq))
-        return Signal(signal.data[start_idx:end_idx].copy(), signal.freq)
+        target_len = end_idx - start_idx
 
+        data = signal.data[start_idx:end_idx].copy()
+
+        if len(data) < target_len:
+            data = np.pad(data, (0, target_len - len(data)))
+
+        return Signal(data, signal.freq)
     def cut_to_duration(self, duration: float) -> Signal:
         signal = self.cut(0.0, duration)
         target_samples = int(round(duration * self.freq))
@@ -404,11 +384,9 @@ class CompositeSignal(TypedSignal):
     def add_placement(self, placement: SignalPlacement) -> None:
         if self.placements and not placement.is_compatible_with(self.placements[0]):
             raise ValueError("SignalPlacement non compatible.")
-        if not self.placements and len(self.data) == 0:
-            self.freq = placement.signal.freq
+        if placement.signal.freq != self.freq:
+            raise ValueError("SignalPlacement non compatible avec la frequence du composite.")
         self.placements.append(placement)
-        rendered = self.render()
-        self.data = rendered.data
 
 
 _SOURCE_SIGNAL_TYPE: dict[str, type[TypedSignal]] = {}
@@ -434,7 +412,7 @@ def register_ContinuousNoiseSignal(signal_cls: type[TypedSignal]) -> None:
     _CONTINUOUS_NOISE_SIGNAL_TYPE[signal_cls.signal_type] = signal_cls
 
 
-class SignalGenerator:
+class SignalPlacementGenerator:
     def __init__(self, registry: dict[str, type[TypedSignal]]):
         self.registry = registry
 
@@ -452,7 +430,6 @@ class SignalGenerator:
         signal = signal_cls.generate_random(
             rng=rng,
             freq=freq,
-            scene_duration=scene_duration,
             fixed_params=spec.signal_params,
         )
         max_start = max(0.0, scene_duration - signal.duration)
@@ -478,7 +455,7 @@ class CompositeSignalGenerator:
         n_placements_range: tuple[int, int],
         gain_range: tuple[float, float],
     ):
-        self.signal_generator = SignalGenerator(registry)
+        self.signal_generator = SignalPlacementGenerator(registry)
         self.n_placements_range = n_placements_range
         self.gain_range = gain_range
 
@@ -499,7 +476,13 @@ class CompositeSignalGenerator:
 
         placement_specs = list(spec.placements)
         if len(placement_specs) > n_placements:
-            raise ValueError("Plus de placements fixes que n_placements.")
+            warnings.warn(
+                "Plus de SignalPlacementSpec fournis que n_placements; "
+                "les specs explicites sont prioritaires.",
+                UserWarning,
+                stacklevel=2,
+            )
+            n_placements = len(placement_specs)
         while len(placement_specs) < n_placements:
             placement_specs.append(SignalPlacementSpec())
 
@@ -513,9 +496,7 @@ class CompositeSignalGenerator:
             )
             for placement_spec in placement_specs
         ]
-        composite = CompositeSignal(placements=placements, freq=freq)
-        composite.data = composite.cut_to_duration(scene_duration).data
-        return composite
+        return CompositeSignal(placements=placements, freq=freq)
 
 
 class MixtureGenerator:
@@ -575,6 +556,8 @@ class AudioSceneMetadata:
 
 @dataclass
 class AudioScene:
+    source_composites: list[CompositeSignal]
+    local_noise_composites: list[CompositeSignal]
     sources: MultiSignal
     mixing: Mixture
     clean_mixed: MultiSignal
@@ -616,7 +599,7 @@ class AudioSceneGenerator:
             n_placements_range=local_noise_placements_range,
             gain_range=local_noise_gain_range,
         )
-        self.continuous_noise_generator = SignalGenerator(_CONTINUOUS_NOISE_SIGNAL_TYPE)
+        self.continuous_noise_generator = SignalPlacementGenerator(_CONTINUOUS_NOISE_SIGNAL_TYPE)
         self.continuous_noise_gain_range = continuous_noise_gain_range
         self.mixture_generator = MixtureGenerator(max_delay=max_delay)
 
@@ -625,7 +608,7 @@ class AudioSceneGenerator:
         rng = np.random.default_rng(self.seed if seed is None else seed)
 
         source_specs = self._expand_composite_specs(spec.source_specs, self.n_sources)
-        sources_list = [
+        source_composites = [
             self.source_generator.generate(
                 rng=rng,
                 freq=self.fs,
@@ -634,7 +617,9 @@ class AudioSceneGenerator:
             )
             for source_spec in source_specs
         ]
-        sources = MultiSignal(sources_list)
+        sources = MultiSignal(
+            [source.cut_to_duration(self.scene_duration) for source in source_composites]
+        )
 
         mixing = self.mixture_generator.generate(
             rng=rng,
@@ -645,16 +630,17 @@ class AudioSceneGenerator:
         clean_mixed = mixing.apply(sources, mode="same")
 
         local_noise_specs = self._expand_composite_specs(spec.local_noise_specs, self.n_mics)
+        local_noise_composites = [
+            self.local_noise_generator.generate(
+                rng=rng,
+                freq=self.fs,
+                scene_duration=self.scene_duration,
+                spec=noise_spec,
+            )
+            for noise_spec in local_noise_specs
+        ]
         local_noises = MultiSignal(
-            [
-                self.local_noise_generator.generate(
-                    rng=rng,
-                    freq=self.fs,
-                    scene_duration=self.scene_duration,
-                    spec=noise_spec,
-                )
-                for noise_spec in local_noise_specs
-            ]
+            [noise.cut_to_duration(self.scene_duration) for noise in local_noise_composites]
         )
 
         continuous_noise_specs = self._expand_placement_specs(
@@ -676,8 +662,8 @@ class AudioSceneGenerator:
             duration=self.scene_duration,
             n_sources=self.n_sources,
             n_mics=self.n_mics,
-            source_types=self._composite_types(sources_list),
-            local_noise_types=self._composite_types(local_noises.signals),
+            source_types=self._composite_types(source_composites),
+            local_noise_types=self._composite_types(local_noise_composites),
             continuous_noise_types=[output[1] for output in continuous_noise_outputs],
             max_delay=self.max_delay,
             delay_matrix=self._delay_matrix_from_mixture(mixing),
@@ -685,6 +671,8 @@ class AudioSceneGenerator:
         )
 
         return AudioScene(
+            source_composites=source_composites,
+            local_noise_composites=local_noise_composites,
             sources=sources,
             mixing=mixing,
             clean_mixed=clean_mixed,
@@ -706,7 +694,6 @@ class AudioSceneGenerator:
         signal = signal_cls.generate_random(
             rng=rng,
             freq=self.fs,
-            scene_duration=self.scene_duration,
             fixed_params=fixed_params,
         )
         gain = _random_value(
@@ -736,11 +723,10 @@ class AudioSceneGenerator:
         return specs + [SignalPlacementSpec() for _ in range(expected_count - len(specs))]
 
     @staticmethod
-    def _composite_types(signals: Sequence[Signal]) -> list[str]:
+    def _composite_types(composites: Sequence[CompositeSignal]) -> list[str]:
         types: list[str] = []
-        for signal in signals:
-            placements = getattr(signal, "placements", [])
-            types.append("+".join(placement.signal.signal_type for placement in placements))
+        for composite in composites:
+            types.append("+".join(placement.signal.signal_type for placement in composite.placements))
         return types
 
     @staticmethod
