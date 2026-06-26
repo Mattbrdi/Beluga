@@ -86,7 +86,7 @@ TEST_DATA2026_ALL_AUDIO_PATHS = {
     ],
 }
 
-point_number = 17
+point_number = 9
 
 
 audio_path = TEST_DATA2026_ALL_AUDIO_PATHS[point_number]
