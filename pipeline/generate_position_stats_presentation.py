@@ -3,7 +3,19 @@ from pathlib import Path
 import pandas as pd
 
 
-RESULTS_DIR = Path("test_data2026_all") / "results" / "position_stats"
+RESULTS_ROOT = Path("test_data2026_all") / "results" / "position_stats"
+
+
+def find_results_dir() -> Path:
+    run_dirs = sorted(
+        path
+        for path in RESULTS_ROOT.glob("run_*")
+        if path.is_dir() and (path / "summary.csv").exists()
+    )
+    return run_dirs[-1] if run_dirs else RESULTS_ROOT
+
+
+RESULTS_DIR = find_results_dir()
 SUMMARY_PATH = RESULTS_DIR / "summary.csv"
 OUTPUT_PATH = RESULTS_DIR / "position_stats_presentation.html"
 

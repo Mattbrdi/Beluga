@@ -564,7 +564,15 @@ def run_point(
 if __name__ == "__main__":
     parameters: Parameters = Parameters(param_path)
     environment: Environment = Environment(env_path, parameters.location_parameters.use_h4)
-    output_dir: str = os.path.join("test_data2026_all", "results", "position_stats")
+    run_id: str = datetime.now().strftime("run_%Y%m%d_%H%M%S_%f")
+    output_dir: str = os.path.join(
+        "test_data2026_all",
+        "results",
+        "position_stats",
+        run_id,
+    )
+    os.makedirs(output_dir, exist_ok=False)
+    print(f"Resultats de cette execution: {output_dir}")
 
     summaries: list[dict[str, int | float]] = []
     failures: list[dict[str, int | str]] = []
@@ -598,7 +606,6 @@ if __name__ == "__main__":
             }
         )
 
-    os.makedirs(output_dir, exist_ok=True)
     if summaries:
         summary_path: str = os.path.join(output_dir, "summary.csv")
         with open(summary_path, mode="w", newline="", encoding="utf-8") as csv_file:
