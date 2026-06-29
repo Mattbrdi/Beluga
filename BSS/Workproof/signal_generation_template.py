@@ -40,8 +40,8 @@ def build_demo_scene():
         n_sources=n_sources,
         n_mics=n_mics,
         max_delay=max_delay,
-        source_placements_range=(1, 3),  # Chaque source contient entre 1 et 3 evenements places.
-        local_noise_placements_range=(0, 2),  # Chaque micro recoit entre 0 et 2 bruits locaux places.
+        source_placement_rate=0.75,  # Evenements source par seconde.
+        local_noise_placement_rate=1.0 / 3.0,  # Bruits locaux par seconde et par micro.
         source_gain_range=(0.5, 1.0),
         local_noise_gain_range=(0.02, 0.15),
         continuous_noise_gain_range=(0.05, 0.05),
@@ -121,9 +121,24 @@ def print_scene_summary(scene) -> None:
     print("Scene generated")
     print(f"  fs: {scene.metadata.fs} Hz")
     print(f"  duration: {scene.metadata.duration} s")
-    print(f"  sources: {scene.metadata.source_types}")
-    print(f"  local noises: {scene.metadata.local_noise_types}")
-    print(f"  continuous noises: {scene.metadata.continuous_noise_types}")
+    print(
+        "  sources:",
+        [
+            [placement.signal_type for placement in composite.placements]
+            for composite in scene.metadata.source_composites
+        ],
+    )
+    print(
+        "  local noises:",
+        [
+            [placement.signal_type for placement in composite.placements]
+            for composite in scene.metadata.local_noise_composites
+        ],
+    )
+    print(
+        "  continuous noises:",
+        [noise.signal_type for noise in scene.metadata.continuous_noises],
+    )
     print("  delay matrix:")
     print(scene.metadata.delay_matrix)
     print(f"  sources shape: {scene.sources.data.shape}")

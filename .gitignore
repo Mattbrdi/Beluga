@@ -20,3 +20,4 @@ test*.py
 results*/
 results*.py 
 .vscode/*
+BSS/Dataset/generated/
