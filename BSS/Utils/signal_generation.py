@@ -6,8 +6,10 @@ Architecture du module
 1. TypedSignal represente une brique sonore mono typee. Chaque sous-classe
    (SinSignal, SpikeSignal, GaussianNoise, etc.) sait construire un signal a
    partir de parametres explicites avec generate(), ou tirer ses parametres
-   manquants avec generate_random(). L'amplitude des briques est normalisee par
-   defaut; leur niveau dans une scene est principalement controle par un gain.
+   manquants avec generate_random(). La frequence d'echantillonnage et la duree
+   sont des parametres communs obligatoires de generate(). L'amplitude des
+   briques est normalisee par defaut; leur niveau dans une scene est
+   principalement controle par un gain.
 
 2. SignalPlacement place un TypedSignal sur une timeline. Il porte le temps de
    debut, la fenetre et le gain, puis render() produit le signal decale et
@@ -40,12 +42,13 @@ Architecture du module
    - generation d'une Mixture de retards source-vers-micro;
    - calcul du melange propre sur m microphones;
    - generation des bruits locaux et continus de chaque microphone;
+   - ajustement optionnel du bruit continu pour atteindre un SNR cible;
    - somme du melange propre et du bruit pour produire le signal final.
 
 7. AudioScene contient les donnees utiles a l'exploitation: sources propres,
    matrice de melange, melange propre, bruit total et melange final. Les
    dataclasses de metadata conservent les parametres de generation necessaires
-   pour analyser ou reproduire une scene sans dupliquer toutes les donnees
+   ainsi que les energies des signaux rendus, sans dupliquer toutes les donnees
    intermediaires.
 """
 
@@ -126,6 +129,19 @@ class TypedSignal(Signal, ABC):
         super().__init__(data, freq)
 
     @classmethod
+    def validate_generation_contract(cls) -> None:
+        """Verifie que generate() expose les parametres communs obligatoires."""
+        required_params = {"freq", "time_duration"}
+        declared_params = set(inspect.signature(cls.generate).parameters)
+        missing_params = required_params - declared_params
+        if missing_params:
+            raise TypeError(
+                f"{cls.__name__}.generate() doit declarer les parametres "
+                f"obligatoires {sorted(required_params)}; manquants: "
+                f"{sorted(missing_params)}."
+            )
+
+    @classmethod
     def validate_fixed_params(cls, fixed_params: dict[str, Any] | None) -> None:
         """Verifie que les parametres fixes sont acceptes par generate()."""
         if not fixed_params:
@@ -150,7 +166,12 @@ class TypedSignal(Signal, ABC):
 
     @classmethod
     @abstractmethod
-    def generate(cls, **params: Any) -> "TypedSignal":
+    def generate(
+        cls,
+        freq: float,
+        time_duration: float,
+        **params: Any,
+    ) -> "TypedSignal":
         raise NotImplementedError
 
     @classmethod
@@ -170,6 +191,8 @@ class TypedSignal(Signal, ABC):
         freq: float,
         fixed_params: dict[str, Any] | None = None,
     ) -> "TypedSignal":
+        fixed_params = dict(fixed_params or {})
+        cls.validate_fixed_params(fixed_params)
         params = cls.generate_random_params(
             rng=rng,
             freq=freq,
@@ -334,13 +357,20 @@ class GaussianNoise(TypedSignal):
         freq: float,
         fixed_params: dict[str, Any] | None = None,
     ) -> "GaussianNoise":
+        fixed_params = dict(fixed_params or {})
+        cls.validate_fixed_params(fixed_params)
         params = cls.generate_random_params(rng, freq, fixed_params)
         return cls.generate_with_rng(rng=rng, **params)
 
 
 @dataclass
 class SignalPlacementSpec:
-    """Contraintes partielles pour un placement: les champs None/random sont tires aleatoirement."""
+    """Contraintes partielles pour un placement.
+
+    signal_type=None herite des types autorises par le composite ou la scene.
+    window="random" tire une fenetre autorisee; window=None desactive le
+    fenetrage. Les autres champs None sont tires aleatoirement.
+    """
     signal_type: SignalTypeChoice = None
     signal_params: dict[str, Any] = field(default_factory=dict)
     start_time: float | None = None
@@ -350,7 +380,14 @@ class SignalPlacementSpec:
 
 @dataclass
 class CompositeSignalSpec:
-    """Contraintes partielles pour une source composite et ses placements."""
+    """Contraintes partielles pour un composite et ses placements.
+
+    n_placements fixe le nombre cible lorsqu'il est renseigne. Les specs de
+    placement explicites restent prioritaires: si elles sont plus nombreuses,
+    elles constituent le nombre final de placements.
+    allowed_signal_types sert de valeur par defaut aux placements qui ne fixent
+    pas eux-memes leur type.
+    """
     n_placements: int | None = None
     allowed_signal_types: SignalTypeChoice = None
     placements: list[SignalPlacementSpec] = field(default_factory=list)
@@ -490,23 +527,30 @@ _CONTINUOUS_NOISE_SIGNAL_TYPE: dict[str, type[TypedSignal]] = {}
 def register_SourceSignal(signal_cls: type[TypedSignal]) -> None:
     if not issubclass(signal_cls, TypedSignal):
         raise TypeError("La classe doit heriter de TypedSignal.")
+    signal_cls.validate_generation_contract()
     _SOURCE_SIGNAL_TYPE[signal_cls.signal_type] = signal_cls
 
 
 def register_LocalNoiseSignal(signal_cls: type[TypedSignal]) -> None:
     if not issubclass(signal_cls, TypedSignal):
         raise TypeError("La classe doit heriter de TypedSignal.")
+    signal_cls.validate_generation_contract()
     _LOCAL_NOISE_SIGNAL_TYPE[signal_cls.signal_type] = signal_cls
 
 
 def register_ContinuousNoiseSignal(signal_cls: type[TypedSignal]) -> None:
     if not issubclass(signal_cls, TypedSignal):
         raise TypeError("La classe doit heriter de TypedSignal.")
+    signal_cls.validate_generation_contract()
     _CONTINUOUS_NOISE_SIGNAL_TYPE[signal_cls.signal_type] = signal_cls
 
 
 class SignalPlacementGenerator:
     def __init__(self, registry: dict[str, type[TypedSignal]]):
+        for signal_cls in registry.values():
+            if not issubclass(signal_cls, TypedSignal):
+                raise TypeError("Toutes les classes du registry doivent heriter de TypedSignal.")
+            signal_cls.validate_generation_contract()
         self.registry = registry
 
     def generate_placement(
@@ -555,7 +599,7 @@ class CompositeSignalGenerator:
         if min_placements < 0:
             raise ValueError("min_placements doit etre positif ou nul.")
 
-        self.signal_generator = SignalPlacementGenerator(registry)
+        self.signal_placement_generator = SignalPlacementGenerator(registry)
         self.placement_rate = float(placement_rate)
         self.gain_range = gain_range
         self.min_placements = int(min_placements)
@@ -581,33 +625,18 @@ class CompositeSignalGenerator:
                 int(rng.poisson(self.placement_rate * scene_duration)),
             )
 
-        default_signal_types = (
-            spec.allowed_signal_types
-            if spec.allowed_signal_types is not None
-            else allowed_signal_types
+        default_signal_types = self._select_default_signal_types(
+            composite_signal_types=spec.allowed_signal_types,
+            scene_signal_types=allowed_signal_types,
         )
-        placement_specs = [
-            placement_spec
-            if placement_spec.signal_type is not None
-            else replace(placement_spec, signal_type=default_signal_types)
-            for placement_spec in spec.placements
-        ]
-        if len(placement_specs) > n_placements:
-            if spec.n_placements is not None:
-                warnings.warn(
-                    "Plus de SignalPlacementSpec fournis que n_placements; "
-                    "les specs explicites sont prioritaires.",
-                    UserWarning,
-                    stacklevel=2,
-                )
-            n_placements = len(placement_specs)
-        while len(placement_specs) < n_placements:
-            placement_specs.append(
-                SignalPlacementSpec(signal_type=default_signal_types)
-            )
+        placement_specs = self._prepare_placement_specs(
+            spec=spec,
+            n_placements=n_placements,
+            default_signal_types=default_signal_types,
+        )
 
         placements = [
-            self.signal_generator.generate_placement(
+            self.signal_placement_generator.generate_placement(
                 rng=rng,
                 freq=freq,
                 scene_duration=scene_duration,
@@ -621,6 +650,55 @@ class CompositeSignalGenerator:
             freq=freq,
             duration=scene_duration,
         )
+
+    @staticmethod
+    def _select_default_signal_types(
+        composite_signal_types: SignalTypeChoice,
+        scene_signal_types: SignalTypeChoice,
+    ) -> SignalTypeChoice:
+        """Donne la priorite aux types autorises par le composite."""
+        if composite_signal_types is not None:
+            return composite_signal_types
+        return scene_signal_types
+
+    @staticmethod
+    def _apply_default_signal_types(
+        placement_spec: SignalPlacementSpec,
+        default_signal_types: SignalTypeChoice,
+    ) -> SignalPlacementSpec:
+        """Fait heriter les types par defaut sans modifier la spec originale."""
+        if placement_spec.signal_type is not None:
+            return placement_spec
+        return replace(placement_spec, signal_type=default_signal_types)
+
+    @classmethod
+    def _prepare_placement_specs(
+        cls,
+        spec: CompositeSignalSpec,
+        n_placements: int,
+        default_signal_types: SignalTypeChoice,
+    ) -> list[SignalPlacementSpec]:
+        """Resout les specs explicites puis complete les placements manquants."""
+        placement_specs = [
+            cls._apply_default_signal_types(placement_spec, default_signal_types)
+            for placement_spec in spec.placements
+        ]
+
+        if len(placement_specs) > n_placements and spec.n_placements is not None:
+            warnings.warn(
+                "Plus de SignalPlacementSpec fournis que n_placements; "
+                "les specs explicites sont prioritaires.",
+                UserWarning,
+                stacklevel=3,
+            )
+
+        target_count = max(n_placements, len(placement_specs))
+        missing_count = target_count - len(placement_specs)
+        placement_specs.extend(
+            SignalPlacementSpec(signal_type=default_signal_types)
+            for _ in range(missing_count)
+        )
+        return placement_specs
 
 
 class MixtureGenerator:
@@ -657,10 +735,16 @@ class MixtureGenerator:
 
 @dataclass
 class AudioSceneSpec:
-    """Contraintes partielles pour une scene; tout champ omis reste genere aleatoirement."""
+    """Contraintes partielles appliquees a une generation de scene.
+
+    Les types sont resolus par priorite: placement, composite, scene, registre.
+    snr_db fixe le rapport en dB entre l'energie totale du melange propre sur
+    les micros et celle des bruits continus; les bruits locaux sont exclus.
+    """
     allowed_source_signal_types: SignalTypeChoice = None
     allowed_local_noise_signal_types: SignalTypeChoice = None
     allowed_continuous_noise_signal_types: SignalTypeChoice = None
+    snr_db: float | None = None
     source_specs: list[CompositeSignalSpec] = field(default_factory=list)
     local_noise_specs: list[CompositeSignalSpec] = field(default_factory=list)
     continuous_noise_specs: list[SignalPlacementSpec] = field(default_factory=list)
@@ -679,19 +763,24 @@ class SignalPlacementMetadata:
 
 @dataclass
 class CompositeSignalMetadata:
+    """Description des placements et energie du composite rendu."""
     placements: list[SignalPlacementMetadata]
     duration: float
+    energy: float | None = None
 
 
 @dataclass
 class ContinuousNoiseMetadata:
+    """Description d'un bruit continu apres application de son gain et du SNR."""
     signal_type: str
     signal_params: dict[str, Any]
     gain: float
+    energy: float | None = None
 
 
 @dataclass
 class AudioSceneMetadata:
+    """Parametres et valeurs realisees necessaires pour analyser une scene."""
     fs: int
     duration: float
     n_sources: int
@@ -702,6 +791,7 @@ class AudioSceneMetadata:
     max_delay: int
     delay_matrix: np.ndarray
     seed: int | None
+    snr_db: float | None = None
 
 
 @dataclass
@@ -760,14 +850,52 @@ class AudioSceneGenerator:
             gain_range=local_noise_gain_range,
             min_placements=0,
         )
-        self.continuous_noise_generator = SignalPlacementGenerator(self.continuous_noise_registry) #Un seul type de bruit continue
+        self.continuous_noise_generator = SignalPlacementGenerator(
+            self.continuous_noise_registry
+        )
         self.continuous_noise_gain_range = continuous_noise_gain_range
         self.mixture_generator = MixtureGenerator(max_delay=max_delay)
 
     def generate(self, spec: AudioSceneSpec | None = None, seed: int | None = None) -> AudioScene:
         spec = spec or AudioSceneSpec()
-        rng = np.random.default_rng(self.seed if seed is None else seed)
+        effective_seed = self.seed if seed is None else seed
+        rng = np.random.default_rng(effective_seed)
 
+        source_composites, sources = self._generate_sources(rng, spec)
+        mixing, clean_mixed = self._mix_sources(rng, sources, spec)
+        local_noise_composites, local_noises = self._generate_local_noises(rng, spec)
+        continuous_noises, continuous_noise_metadata = self._generate_continuous_noises(
+            rng,
+            spec,
+            clean_mixed,
+        )
+
+        noise = local_noises + continuous_noises
+        mixed = clean_mixed + noise
+        metadata = self._build_scene_metadata(
+            spec=spec,
+            seed=effective_seed,
+            mixing=mixing,
+            source_composites=source_composites,
+            local_noise_composites=local_noise_composites,
+            continuous_noise_metadata=continuous_noise_metadata,
+        )
+
+        return AudioScene(
+            sources=sources,
+            mixing=mixing,
+            clean_mixed=clean_mixed,
+            noise=noise,
+            mixed=mixed,
+            metadata=metadata,
+        )
+
+    def _generate_sources(
+        self,
+        rng: np.random.Generator,
+        spec: AudioSceneSpec,
+    ) -> tuple[list[CompositeSignal], MultiSignal]:
+        """Genere et rend les sources propres de la scene."""
         source_specs = self._expand_composite_specs(spec.source_specs, self.n_sources)
         source_composites = [
             self.source_generator.generate(
@@ -780,7 +908,15 @@ class AudioSceneGenerator:
             for source_spec in source_specs
         ]
         sources = MultiSignal([source.render() for source in source_composites])
+        return source_composites, sources
 
+    def _mix_sources(
+        self,
+        rng: np.random.Generator,
+        sources: MultiSignal,
+        spec: AudioSceneSpec,
+    ) -> tuple[Mixture, MultiSignal]:
+        """Genere la mixture et propage les sources sur les microphones."""
         mixing = self.mixture_generator.generate(
             rng=rng,
             n_sources=self.n_sources,
@@ -788,7 +924,14 @@ class AudioSceneGenerator:
             delay_matrix=spec.delay_matrix,
         )
         clean_mixed = mixing.apply(sources, mode="same")
+        return mixing, clean_mixed
 
+    def _generate_local_noises(
+        self,
+        rng: np.random.Generator,
+        spec: AudioSceneSpec,
+    ) -> tuple[list[CompositeSignal], MultiSignal]:
+        """Genere et rend le bruit local propre a chaque microphone."""
         local_noise_specs = self._expand_composite_specs(spec.local_noise_specs, self.n_mics)
         local_noise_composites = [
             self.local_noise_generator.generate(
@@ -801,7 +944,15 @@ class AudioSceneGenerator:
             for noise_spec in local_noise_specs
         ]
         local_noises = MultiSignal([noise.render() for noise in local_noise_composites])
+        return local_noise_composites, local_noises
 
+    def _generate_continuous_noises(
+        self,
+        rng: np.random.Generator,
+        spec: AudioSceneSpec,
+        clean_mixed: MultiSignal,
+    ) -> tuple[MultiSignal, list[ContinuousNoiseMetadata]]:
+        """Genere les bruits continus et applique le SNR cible si demande."""
         continuous_noise_specs = self._expand_placement_specs(
             spec.continuous_noise_specs,
             self.n_mics,
@@ -814,11 +965,27 @@ class AudioSceneGenerator:
             )
             for noise_spec in continuous_noise_specs
         ]
+        if spec.snr_db is not None:
+            continuous_noise_outputs = self._apply_continuous_noise_snr(
+                clean_mixed=clean_mixed,
+                continuous_noise_outputs=continuous_noise_outputs,
+                snr_db=spec.snr_db,
+            )
         continuous_noises = MultiSignal([output[0] for output in continuous_noise_outputs])
+        metadata = [output[1] for output in continuous_noise_outputs]
+        return continuous_noises, metadata
 
-        noise = local_noises + continuous_noises
-        mixed = clean_mixed + noise
-        metadata = AudioSceneMetadata(
+    def _build_scene_metadata(
+        self,
+        spec: AudioSceneSpec,
+        seed: int | None,
+        mixing: Mixture,
+        source_composites: list[CompositeSignal],
+        local_noise_composites: list[CompositeSignal],
+        continuous_noise_metadata: list[ContinuousNoiseMetadata],
+    ) -> AudioSceneMetadata:
+        """Construit les metadonnees finales a partir des objets generes."""
+        return AudioSceneMetadata(
             fs=self.fs,
             duration=self.scene_duration,
             n_sources=self.n_sources,
@@ -831,19 +998,11 @@ class AudioSceneGenerator:
                 self._composite_metadata(noise)
                 for noise in local_noise_composites
             ],
-            continuous_noises=[output[1] for output in continuous_noise_outputs],
+            continuous_noises=continuous_noise_metadata,
             max_delay=self.max_delay,
             delay_matrix=self._delay_matrix_from_mixture(mixing),
-            seed=self.seed if seed is None else seed,
-        )
-
-        return AudioScene(
-            sources=sources,
-            mixing=mixing,
-            clean_mixed=clean_mixed,
-            noise=noise,
-            mixed=mixed,
-            metadata=metadata,
+            seed=seed,
+            snr_db=None if spec.snr_db is None else float(spec.snr_db),
         )
 
     def _generate_continuous_noise(
@@ -860,8 +1019,8 @@ class AudioSceneGenerator:
         type_name = _random_type_name(rng, signal_types, self.continuous_noise_registry)
         signal_cls = self.continuous_noise_registry[type_name]
         fixed_params = dict(spec.signal_params)
-        signal_cls.validate_fixed_params(fixed_params)
-        fixed_params.setdefault("time_duration", self.scene_duration) #permet d'avoir le bruit continue 
+        # Un bruit continu couvre toujours la scene complete.
+        fixed_params["time_duration"] = self.scene_duration
         signal = signal_cls.generate_random(
             rng=rng,
             freq=self.fs,
@@ -873,12 +1032,45 @@ class AudioSceneGenerator:
             self.continuous_noise_gain_range[0],
             self.continuous_noise_gain_range[1],
         )
+        noise = signal * gain
         metadata = ContinuousNoiseMetadata(
             signal_type=type_name,
             signal_params=self._signal_params(signal),
             gain=gain,
+            energy=float(noise.energy),
         )
-        return signal * gain, metadata
+        return noise, metadata
+
+    @staticmethod
+    def _apply_continuous_noise_snr(
+        clean_mixed: MultiSignal,
+        continuous_noise_outputs: list[tuple[Signal, ContinuousNoiseMetadata]],
+        snr_db: float,
+    ) -> list[tuple[Signal, ContinuousNoiseMetadata]]:
+        """Ajuste les bruits continus avec un gain commun pour atteindre le SNR global."""
+        if not np.isfinite(snr_db):
+            raise ValueError("snr_db doit etre une valeur finie.")
+
+        signal_energy = sum(float(signal.energy) for signal in clean_mixed.signals)
+        noise_energy = sum(float(signal.energy) for signal, _ in continuous_noise_outputs)
+        if signal_energy <= 0:
+            raise ValueError("Impossible de fixer le SNR: l'energie du signal est nulle.")
+        if noise_energy <= 0:
+            raise ValueError("Impossible de fixer le SNR: l'energie du bruit continu est nulle.")
+
+        target_ratio = 10.0 ** (float(snr_db) / 10.0)
+        noise_scale = np.sqrt(signal_energy / (target_ratio * noise_energy))
+
+        scaled_outputs: list[tuple[Signal, ContinuousNoiseMetadata]] = []
+        for noise, metadata in continuous_noise_outputs:
+            scaled_noise = noise * noise_scale
+            scaled_metadata = replace(
+                metadata,
+                gain=float(metadata.gain * noise_scale),
+                energy=float(scaled_noise.energy),
+            )
+            scaled_outputs.append((scaled_noise, scaled_metadata))
+        return scaled_outputs
 
     @staticmethod
     def _expand_composite_specs(
@@ -900,12 +1092,14 @@ class AudioSceneGenerator:
 
     @classmethod
     def _composite_metadata(cls, composite: CompositeSignal) -> CompositeSignalMetadata:
+        rendered = composite.render()
         return CompositeSignalMetadata(
             placements=[
                 cls._placement_metadata(placement)
                 for placement in composite.placements
             ],
             duration=composite.duration,
+            energy=float(rendered.energy),
         )
 
     @classmethod

@@ -119,6 +119,11 @@ def _metadata_from_dict(raw: dict[str, Any]) -> AudioSceneMetadata:
                 for placement in value["placements"]
             ],
             duration=float(value["duration"]),
+            energy=(
+                None
+                if value.get("energy") is None
+                else float(value["energy"])
+            ),
         )
 
     return AudioSceneMetadata(
@@ -137,6 +142,7 @@ def _metadata_from_dict(raw: dict[str, Any]) -> AudioSceneMetadata:
         max_delay=int(raw["max_delay"]),
         delay_matrix=np.asarray(raw["delay_matrix"], dtype=int),
         seed=None if raw["seed"] is None else int(raw["seed"]),
+        snr_db=None if raw.get("snr_db") is None else float(raw["snr_db"]),
     )
 
 

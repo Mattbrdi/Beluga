@@ -12,9 +12,9 @@
     "continuous_noise_gain_range": [0.05, 0.05]
   },
   "splits": {
-    "train": 1000,
-    "validation": 100,
-    "test": 100
+    "train": 10,
+    "validation": 5,
+    "test": 5
   },
   "base_seed": 42,
   "compressed": true

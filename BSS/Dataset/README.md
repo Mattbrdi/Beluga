@@ -56,4 +56,7 @@ tableaux NumPy bruts plutot que des objets `AudioScene` et `MultiSignal`.
 
 `build_dataset(..., spec_factory=...)` accepte aussi une fonction qui retourne
 un `AudioSceneSpec` par scene. C'est le point d'extension prevu pour construire
-des scenarios `easy`, `nominal`, `hard` ou hors distribution.
+des scenarios `easy`, `nominal`, `hard` ou hors distribution. Le champ
+`snr_db` permet de fixer le rapport, en decibels, entre l'energie totale du
+melange propre sur les micros et celle des bruits continus. Les bruits locaux
+ne participent pas a ce calcul.
