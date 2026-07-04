@@ -417,7 +417,7 @@ class Signal:
         padded: bool = True,
         db=False,
         magnitude_scale: str | None = None,
-        frequency_scale: str = 'linear',
+        frequency_scale: str = 'log',
         **kwargs
     ):
             """
