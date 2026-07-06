@@ -31,3 +31,17 @@ class SawadaBssParameters(BssParameters):
     stft_parameters: StftParameters = field(default_factory= StftParameters)
     em_clustering_parameters : EMClusteringParameters = field(default_factory= EMClusteringParameters)
     whitening: bool = True 
+
+
+@dataclass
+class FrequencyIcaParameters(BssParameters):
+    """Paramètres de la séparation ICA dans le domaine fréquentiel."""
+
+    n_sources: int
+    stft_parameters: StftParameters = field(default_factory=StftParameters)
+    n_iter: int = 100
+    tolerance: float = 1e-6
+    max_tdoa_seconds: float = 0.01
+    reference_microphone: int = 0
+    random_state: int | None = 0
+    eps: float = 1e-10
