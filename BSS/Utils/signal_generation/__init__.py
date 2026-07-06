@@ -27,7 +27,7 @@ from .scene import (
     ContinuousNoiseMetadata,
     SignalPlacementMetadata,
 )
-from .TypedSignal import GaussianNoise, SinSignal, SpikeSignal, TypedSignal, WhistleSignal
+from .signals import GaussianNoise, SinSignal, SpikeSignal, TypedSignal, WhistleSignal
 
 
 register_SourceSignal(SinSignal)
