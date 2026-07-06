@@ -302,10 +302,11 @@ class AudioSceneGenerator:
         fixed_params = dict(spec.signal_params)
         # Un bruit continu couvre toujours la scene complete.
         fixed_params["time_duration"] = self.scene_duration
+        signal_cls.validate_fixed_params(fixed_params)
         signal = signal_cls.generate_random(
             rng=rng,
             freq=self.fs,
-            fixed_params=fixed_params,
+            **fixed_params,
         )
         gain = _random_value(
             rng,

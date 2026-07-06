@@ -43,6 +43,7 @@ class DatasetConfig:
     """Configuration reproductible d'un dataset et de ses splits."""
 
     generator: GeneratorConfig = field(default_factory=GeneratorConfig)
+    scenario: str = "default"
     splits: dict[str, int] = field(
         default_factory=lambda: {"train": 1_000, "validation": 100, "test": 100}
     )
@@ -50,6 +51,8 @@ class DatasetConfig:
     compressed: bool = True
 
     def __post_init__(self) -> None:
+        if not self.scenario or not self.scenario.isidentifier():
+            raise ValueError(f"Nom de scenario invalide: {self.scenario!r}.")
         if self.base_seed < 0:
             raise ValueError("base_seed doit etre positive ou nulle.")
         if not self.splits:
@@ -72,6 +75,7 @@ class DatasetConfig:
                 generator_raw[key] = tuple(generator_raw[key])
         return cls(
             generator=GeneratorConfig(**generator_raw),
+            scenario=str(raw.get("scenario", "default")),
             splits=dict(raw.get("splits", {"train": 1_000, "validation": 100, "test": 100})),
             base_seed=int(raw.get("base_seed", 42)),
             compressed=bool(raw.get("compressed", True)),

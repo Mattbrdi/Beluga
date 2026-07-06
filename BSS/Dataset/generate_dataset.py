@@ -19,6 +19,7 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+    
 def main() -> None:
     args = parse_args()
     config = DatasetConfig.from_json(args.config)

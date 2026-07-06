@@ -3,14 +3,10 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
-from typing import Callable
-
-from ..Utils.signal_generation import AudioSceneGenerator, AudioSceneSpec
+from ..Utils.signal_generation import AudioSceneGenerator
 from .config import DatasetConfig
 from .io import metadata_to_dict, save_scene, write_json
-
-
-SpecFactory = Callable[[str, int, int], AudioSceneSpec | None]
+from .scenarios import get_scenario_factory
 
 
 def _prepare_output_dir(output_dir: Path, overwrite: bool) -> None:
@@ -28,15 +24,14 @@ def build_dataset(
     config: DatasetConfig,
     output_dir: str | Path,
     *,
-    spec_factory: SpecFactory | None = None,
     overwrite: bool = False,
 ) -> Path:
     """Genere un dataset fixe; une seed unique est affectee a chaque scene.
 
-    spec_factory(split, index, seed) permet ensuite de definir des scenarios
-    faciles/difficiles sans modifier le mecanisme de stockage.
+    Le scenario nomme dans la configuration est resolu via SCENARIO_FACTORIES.
     """
     root = Path(output_dir)
+    spec_factory = get_scenario_factory(config.scenario)
     _prepare_output_dir(root, overwrite=overwrite)
     write_json(root / "dataset_config.json", config.to_dict())
 
@@ -51,7 +46,7 @@ def build_dataset(
         with manifest_path.open("w", encoding="utf-8") as manifest:
             for split_index in range(split_size):
                 seed = config.base_seed + global_index
-                spec = None if spec_factory is None else spec_factory(split_name, split_index, seed)
+                spec = spec_factory(split_name, split_index, seed)
                 scene = generator.generate(spec=spec, seed=seed)
                 filename = f"scene_{split_index:06d}.npz"
                 save_scene(scene, split_dir / filename, compressed=config.compressed)

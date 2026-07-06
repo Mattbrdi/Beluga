@@ -41,6 +41,10 @@ Chaque fichier de scene contient :
 Le manifeste contient le chemin, le split, la seed et les metadonnees de chaque
 scene. Une configuration et une seed identiques reproduisent le meme dataset.
 
+Le champ `scenario` de la configuration selectionne une fabrique enregistree
+dans `SCENARIO_FACTORIES`. Le scenario `default` applique la generation
+aleatoire sans contrainte supplementaire.
+
 Pour charger une scene :
 
 ```python
@@ -54,9 +58,15 @@ references = scene.sources     # MultiSignal de reference pour l'evaluation
 `load_scene_arrays(path)` reste disponible lorsqu'un traitement a besoin des
 tableaux NumPy bruts plutot que des objets `AudioScene` et `MultiSignal`.
 
-`build_dataset(..., spec_factory=...)` accepte aussi une fonction qui retourne
-un `AudioSceneSpec` par scene. C'est le point d'extension prevu pour construire
-des scenarios `easy`, `nominal`, `hard` ou hors distribution. Le champ
-`snr_db` permet de fixer le rapport, en decibels, entre l'energie totale du
-melange propre sur les micros et celle des bruits continus. Les bruits locaux
-ne participent pas a ce calcul.
+Pour ajouter un scenario reproductible dans `BSS/Dataset/scenarios.py` :
+
+```python
+@register_scenario("hard")
+def hard_scenario(split: str, index: int, seed: int) -> AudioSceneSpec:
+    return AudioSceneSpec(snr_db=0.0)
+```
+
+Le JSON peut ensuite utiliser `"scenario": "hard"`. Toute decision aleatoire
+de la fabrique doit etre derivee de la `seed` recue. Le champ `snr_db` fixe le
+rapport, en decibels, entre l'energie totale du melange propre sur les micros et
+celle des bruits continus; les bruits locaux ne participent pas a ce calcul.

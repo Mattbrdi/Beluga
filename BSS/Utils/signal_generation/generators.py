@@ -33,7 +33,7 @@ class SignalPlacementGenerator:
         signal = signal_cls.generate_random(
             rng=rng,
             freq=freq,
-            fixed_params=spec.signal_params,
+            **spec.signal_params,
         )
         max_start = max(0.0, scene_duration - signal.duration)
         start_time = _random_value(rng, spec.start_time, 0.0, max_start)

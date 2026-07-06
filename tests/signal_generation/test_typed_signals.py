@@ -33,7 +33,8 @@ def test_random_generation_preserves_fixed_parameters():
     signal = SpikeSignal.generate_random(
         rng=np.random.default_rng(7),
         freq=2_000,
-        fixed_params={"amplitude": 3, "time_duration": 0.01},
+        amplitude=3,
+        time_duration=0.01,
     )
 
     assert signal.amplitude == 3
@@ -43,7 +44,7 @@ def test_random_generation_preserves_fixed_parameters():
 def test_unknown_fixed_parameter_is_rejected():
     with pytest.raises(ValueError, match="Parametres inconnus"):
         SinSignal.generate_random(
-            np.random.default_rng(0), 1_000, {"not_a_parameter": 1}
+            np.random.default_rng(0), 1_000, not_a_parameter=1
         )
 
 
@@ -57,6 +58,15 @@ def test_whistle_rejects_harmonics_above_nyquist():
             f_max=2_000,
             harmonic_amplitudes=(1.0, 0.5),
             harmonic_phases=(0.0, 0.0),
+        )
+
+
+def test_whistle_leaves_fading_to_signal_placement():
+    with pytest.raises(ValueError, match="Parametres inconnus"):
+        WhistleSignal.generate_random(
+            np.random.default_rng(0),
+            freq=48_000,
+            fade_duration=0.04,
         )
 
 

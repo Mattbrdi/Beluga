@@ -73,12 +73,10 @@ class TypedSignal(Signal, ABC):
         cls,
         rng: np.random.Generator,
         freq: float,
-        fixed_params: dict[str, Any] | None = None,
+        **fixed_params: Any,
     ) -> "TypedSignal":
-        fixed_params = dict(fixed_params or {})
         cls.validate_fixed_params(fixed_params)
         params = cls.generate_random_params(
             rng=rng, freq=freq, fixed_params=fixed_params
         )
         return cls.generate(**params)
-

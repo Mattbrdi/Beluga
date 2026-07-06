@@ -18,7 +18,8 @@ class WhistleSignal(TypedSignal):
     sans oscillations artificielles. Un faible jitter temporellement correle
     est ensuite ajoute, puis la frequence instantanee est integree pour obtenir
     la phase. Le signal final somme les harmoniques demandees, applique une
-    enveloppe lente, normalise le pic a 1 et ajoute des fondus aux extremites.
+    enveloppe lente et normalise le pic a 1. Le fenetrage temporel est laisse
+    a ``SignalPlacement``.
 
     Parametres
     ----------
@@ -54,16 +55,13 @@ class WhistleSignal(TypedSignal):
         Niveau constant de l'enveloppe d'amplitude avant normalisation.
     envelope_depth:
         Amplitude de la variation lente ajoutee a envelope_base.
-    fade_duration:
-        Duree, en secondes, des fondus d'entree et de sortie internes.
     seed:
         Graine controlant les points du contour, les changements de direction
         et le jitter. Les memes parametres et la meme graine reproduisent le
         meme signal.
 
     La derniere harmonique doit rester sous la frequence de Nyquist:
-    ``len(harmonic_amplitudes) * f_max < freq / 2``. Aucune fenetre externe
-    n'est appliquee par defaut, car le signal possede deja ses propres fondus.
+    ``len(harmonic_amplitudes) * f_max < freq / 2``.
     """
 
     signal_type = "whistle"
@@ -87,7 +85,6 @@ class WhistleSignal(TypedSignal):
         harmonic_phases: tuple[float, ...],
         envelope_base: float,
         envelope_depth: float,
-        fade_duration: float,
         seed: int,
     ):
         super().__init__(data=data, freq=freq)
@@ -104,7 +101,6 @@ class WhistleSignal(TypedSignal):
         self.harmonic_phases = harmonic_phases
         self.envelope_base = envelope_base
         self.envelope_depth = envelope_depth
-        self.fade_duration = fade_duration
         self.seed = seed
 
     @classmethod
@@ -124,7 +120,6 @@ class WhistleSignal(TypedSignal):
         harmonic_phases: tuple[float, ...] = (0.0, 0.2, 0.0),
         envelope_base: float = 0.75,
         envelope_depth: float = 0.15,
-        fade_duration: float = 0.04,
         seed: int = 0,
     ) -> "WhistleSignal":
         cls._validate_parameters(
@@ -138,7 +133,6 @@ class WhistleSignal(TypedSignal):
             sweep_rate_range=sweep_rate_range,
             jitter_tau=jitter_tau,
             jitter_std=jitter_std,
-            fade_duration=fade_duration,
             harmonic_amplitudes=harmonic_amplitudes,
             harmonic_phases=harmonic_phases,
         )
@@ -181,12 +175,6 @@ class WhistleSignal(TypedSignal):
         if peak > 0:
             data /= peak
 
-        n_fade = min(int(round(fade_duration * freq)), n_samples // 2)
-        if n_fade > 0:
-            fade = np.sin(np.linspace(0.0, np.pi / 2.0, n_fade)) ** 2
-            data[:n_fade] *= fade
-            data[-n_fade:] *= fade[::-1]
-
         return cls(
             freq=freq,
             data=data,
@@ -209,7 +197,6 @@ class WhistleSignal(TypedSignal):
             harmonic_phases=tuple(harmonic_phases),
             envelope_base=envelope_base,
             envelope_depth=envelope_depth,
-            fade_duration=fade_duration,
             seed=int(seed),
         )
 
@@ -272,7 +259,6 @@ class WhistleSignal(TypedSignal):
             "harmonic_phases": harmonic_phases,
             "envelope_base": float(fixed_params.get("envelope_base", 0.75)),
             "envelope_depth": float(fixed_params.get("envelope_depth", 0.15)),
-            "fade_duration": float(fixed_params.get("fade_duration", 0.04)),
             "seed": seed,
         }
 
@@ -325,7 +311,6 @@ class WhistleSignal(TypedSignal):
         sweep_rate_range: tuple[float, float],
         jitter_tau: float,
         jitter_std: float,
-        fade_duration: float,
         harmonic_amplitudes: tuple[float, ...],
         harmonic_phases: tuple[float, ...],
     ) -> None:
@@ -345,8 +330,8 @@ class WhistleSignal(TypedSignal):
             raise ValueError("sweep_rate_range doit contenir deux vitesses positives ordonnees.")
         if not 0 <= direction_change_probability <= 1:
             raise ValueError("direction_change_probability doit etre comprise entre 0 et 1.")
-        if jitter_tau <= 0 or jitter_std < 0 or fade_duration < 0:
-            raise ValueError("Les parametres de jitter et de fondu doivent etre positifs.")
+        if jitter_tau <= 0 or jitter_std < 0:
+            raise ValueError("Les parametres de jitter doivent etre positifs.")
         if not harmonic_amplitudes:
             raise ValueError("harmonic_amplitudes doit contenir au moins une harmonique.")
         if len(harmonic_amplitudes) != len(harmonic_phases):
@@ -363,5 +348,4 @@ class WhistleSignal(TypedSignal):
             raise ValueError(
                 "La plus haute harmonique depasse Nyquist; augmente freq ou reduis f_max."
             )
-
 
