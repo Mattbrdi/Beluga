@@ -37,12 +37,12 @@ WHISTLE_PNG_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\da
 DEBUG_LEVEL = 0 
 
 # Paths paremeters
-DATASET_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\output\260617_new_labeling"
+DATASET_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\output\260701_new_labeling"
 
 now = datetime.now()
 formatted_string = now.strftime("%Y%m%d%H%M%S") # Format to YYYYMMDDHHMMSS
 
-formatted_string = "260617_new_labeling"
+formatted_string = "260701_new_labeling"
 
 OUTPUT_PATH = Path(
     r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\output"
@@ -56,7 +56,7 @@ COUNT = sum(1 for p in wav_dir.iterdir()) if wav_dir.exists() else 0
 # 1 : scaled by 99th percentile
 # 2: scaled by 95th percentile
 
-SPECTROGRAM_TYPE = 0
+SPECTROGRAM_TYPE = 1
 
 if SPECTROGRAM_TYPE not in [0, 1, 2]:
     raise ValueError(f"Incorrect spectrogram_type parameter got {SPECTROGRAM_TYPE} not in [0, 1, 2]")

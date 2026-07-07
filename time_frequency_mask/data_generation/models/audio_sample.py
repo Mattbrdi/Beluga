@@ -2,11 +2,14 @@ from __future__ import annotations
 from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
+import numpy.random as rd 
 
 from time_frequency_mask.configuration import SAMPLING_RATE, DURATION, N_FFT, HOP_LENGTH, MAX_TDOA, MIN_FREQ, MAX_FREQ
-from time_frequency_mask.stft import compute_power_from_waveform_and_mask, scipy_spectrogram, frequency_band
+from time_frequency_mask.stft import compute_power_from_waveform_and_mask, scipy_spectrogram, frequency_band, scipy_stft_complex_psd
 from time_frequency_mask.data_generation.core.multi_canal import set_channels_tdoas
-from time_frequency_mask.data_generation.generators.noise_generator import gaussian_noise_generator
+from time_frequency_mask.data_generation.core.power_computation import compute_P_moy, set_std_from_snr
+from time_frequency_mask.data_generation.core.mask_visibility import update_mask_for_noise
+from time_frequency_mask.data_generation.generators.noise_generator import gaussian_noise_generator, gaussian_noise_generator_2
 from time_frequency_mask.data_generation.io.data_parser import read_wav_file, save_mask, save_wav_file, save_stft_png
 from time_frequency_mask.data_generation.models.mask import AudioMask, WhistleMask
 
@@ -37,7 +40,7 @@ class Whistle(AudioSample):
     @classmethod
     def from_path(cls, waveform_path, mask_path, start_time = None):
         waveform, sampling_rate = read_wav_file(waveform_path, num_canals=1)
-        mask = WhistleMask.from_path(mask_path)
+        mask = WhistleMask.from_path(mask_path, SAMPLING_RATE)
         return cls(waveform, mask, sampling_rate, start_time)
 
     def place(self) -> LabeledAudioSample:
@@ -155,31 +158,21 @@ class TetrahedraAudioSample:
     def set_common_impulsive_noise(self):
         pass
 
-    def set_gaussian_noise(self, snrs_db : list[float], change_mask : bool = True):
+    def set_gaussian_noise(self, snrs_db : list[float]):
+        low_band_noise = True
+        if rd.uniform() < 0.25:
+            low_band_noise = False
+
         for i in range(4):
-            shifted_waveforms, mask = self.shifted_waveforms[i], self.masks[i].data
-
-            signal_power = compute_power_from_waveform_and_mask(shifted_waveforms, mask)
-
-            snr = 10 ** (snrs_db[i] / 10)
-            noise_std = np.sqrt(signal_power / snr)
-
-            noise = gaussian_noise_generator(noise_std)
-
-            # freqs, times, noise_stft = scipy_spectrogram(self.waveforms[0], SAMPLING_RATE)
-        
-            # freqs, noise_stft = frequency_band(freqs, noise_stft, MIN_FREQ, MAX_FREQ)
-            # if change_mask:
-            #     mask_data = self.shifted_masks[0].data
-            #     waveform = self.shifted_waveforms[i]
-
-            #     condition = (
-            #         (mask_data >= 1)
-            #         & (np.abs(noise_stft) > 2 * np.abs(self.stft))
-            #     )
-            #     mask_data[condition] = 0
-
+            shifted_waveform, mask = self.shifted_waveforms[i], self.shifted_masks[i]
+            noise_std = set_std_from_snr(shifted_waveform, mask.data, snrs_db[i])
+            if not low_band_noise:
+                noise = gaussian_noise_generator(noise_std)
+            else:
+                noise = gaussian_noise_generator_2(noise_std)
+            new_mask_data = update_mask_for_noise(shifted_waveform, noise, mask.data)
             self.shifted_waveforms[i] += noise
+            self.shifted_masks[i].data = new_mask_data
 
     def save(self, output_path : str, stem : str):
         path = Path(output_path)
@@ -194,6 +187,7 @@ class TetrahedraAudioSample:
         save_stft_png(self.shifted_waveforms, str(png_output_path))
 
         # Save mask:
+        self.shifted_masks[0].data = self.shifted_masks[0].data & self.shifted_masks[1].data & self.shifted_masks[2].data & self.shifted_masks[3].data
         save_mask(self.shifted_masks[0].data, str(mask_output_path))
 
         # Save Waveform:

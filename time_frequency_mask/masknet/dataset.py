@@ -131,6 +131,7 @@ class WhistleMaskDataset(Dataset):
                 if np.max(np.abs(D)) > 0:
                     D = D - np.min(D)
                     D /= np.percentile(D,99)
+                    D = np.clip(D, 0, 1)
 
                 if D.shape[0] != N_FREQS or D.shape[1] != N_TIMES:
                     raise ValueError(f"incorrect shape got {D.shape} instead of {(N_FREQS, N_TIMES)}")

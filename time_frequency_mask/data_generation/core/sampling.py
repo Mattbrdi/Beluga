@@ -13,7 +13,7 @@ from time_frequency_mask.data_generation.models.mask import WhistleMask
 
 def set_num_whistles() -> int:
     # return rd.choice(a = 5, p = [0.2, 0.4, 0.3, 0.09, 0.01])
-    return rd.choice(a = [1,2,3,4], p = [0.45, 0.35, 0.14, 0.06])
+    return rd.choice(a = [1,2,3,4,5,6,7], p = [0.35, 0.25, 0.15, 0.12, 0.08, 0.03,0.02])
 
 def set_start_time() -> float:
     start_time = rd.uniform()
@@ -120,6 +120,7 @@ def sample(is_augmentation = False) -> tuple[int, list[float], list[int], list[W
     """
     num_whistles = set_num_whistles()
 
+    num_whistles = 0 
     start_times = [set_start_time() for _ in range(num_whistles)]
 
     shifts = [set_shift() for _ in range(3)]

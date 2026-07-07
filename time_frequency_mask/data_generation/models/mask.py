@@ -16,7 +16,7 @@ class Mask:
         self.height, self.width = data.shape
 
     @classmethod
-    def from_path(cls, file_path : str, sampling_rate : float) -> Mask:
+    def from_path(cls, file_path : str, sampling_rate : float = SAMPLING_RATE) -> Mask:
         return cls(read_image_file(file_path), sampling_rate)
 
     def apply_mask(self, audio_array : NDArray[np.float64]) -> NDArray[np.float64]:

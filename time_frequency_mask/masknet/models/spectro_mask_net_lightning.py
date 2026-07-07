@@ -19,13 +19,13 @@ def dice_loss_from_logits(logits, targets, eps=1e-6):
     return 1 - dice.mean()
 
 class SpectroMaskLightningModule(L.LightningModule):
-    def __init__(self, model, lr=1e-3, pos_weight=torch.tensor([20.0])):
+    def __init__(self, model, lr=1e-3, pos_weight=torch.tensor([0.0])):
         super().__init__()
         self.model = model
         self.lr = lr
         self.bce_loss = nn.BCEWithLogitsLoss(pos_weight=pos_weight)
         self.dice_score = DiceScore(num_classes=1)
-        # self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight) + DiceScore(num_classes=1)
+        self.loss_fn = nn.BCEWithLogitsLoss(pos_weight=pos_weight) + DiceScore(num_classes=1)
 
     def forward(self, x):
         return self.model(x)
@@ -84,4 +84,4 @@ class SpectroMaskLightningModule(L.LightningModule):
         return loss
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=self.lr)
+        return torch.optim.AdamW(self.parameters(), lr=self.lr, weight_decay=1e-4)
