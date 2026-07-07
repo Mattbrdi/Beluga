@@ -1,7 +1,7 @@
 """Signal sinusoïdal."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 
@@ -12,6 +12,13 @@ class SinSignal(TypedSignal):
     signal_type = "sine"
     allowed_windows = (None, "hann", "hamming", "blackman", "boxcar")
     default_window = "hann"
+
+    SIN_FREQUENCY_MIN: ClassVar[float] = 100.0
+    SIN_FREQUENCY_MAX: ClassVar[float] = 3_000.0
+    NYQUIST_MARGIN: ClassVar[float] = 0.45
+    PHASE_RANGE: ClassVar[tuple[float, float]] = (0.0, 2.0 * np.pi)
+    AMPLITUDE_RANGE: ClassVar[tuple[float, float]] = (1.0, 1.0)
+    DURATION_RANGE: ClassVar[tuple[float, float]] = (0.05, 1.0)
 
     def __init__(
         self,
@@ -59,17 +66,24 @@ class SinSignal(TypedSignal):
         fixed_params = fixed_params or {}
         return {
             "freq": freq,
-            "sin_freq": _random_value(rng, fixed_params.get("sin_freq"), 100.0, min(3000.0, 0.45 * freq)),
-            "phase": _random_value(rng, fixed_params.get("phase"), 0.0, 2 * np.pi),
+            "sin_freq": _random_value(
+                rng,
+                fixed_params.get("sin_freq"),
+                cls.SIN_FREQUENCY_MIN,
+                min(cls.SIN_FREQUENCY_MAX, cls.NYQUIST_MARGIN * freq),
+            ),
+            "phase": _random_value(
+                rng, fixed_params.get("phase"), *cls.PHASE_RANGE
+            ),
             # Par defaut, les briques sont normalisees; le niveau de scene vient du placement.gain.
-            "amplitude": _random_value(rng, fixed_params.get("amplitude"), 1.0, 1.0),
+            "amplitude": _random_value(
+                rng, fixed_params.get("amplitude"), *cls.AMPLITUDE_RANGE
+            ),
             "time_duration": _random_value(
                 rng,
                 fixed_params.get("time_duration"),
-                0.05,
-                1.0,
+                *cls.DURATION_RANGE,
             ),
         }
-
 
 

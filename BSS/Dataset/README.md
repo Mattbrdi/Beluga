@@ -43,7 +43,8 @@ scene. Une configuration et une seed identiques reproduisent le meme dataset.
 
 Le champ `scenario` de la configuration selectionne une fabrique enregistree
 dans `SCENARIO_FACTORIES`. Le scenario `default` applique la generation
-aleatoire sans contrainte supplementaire.
+aleatoire sans contrainte supplementaire. Le scenario `whistles_only` limite
+les sources utiles aux sifflements, sans modifier la generation des bruits.
 
 Pour charger une scene :
 

@@ -18,13 +18,15 @@ from .TypedSignal import TypedSignal
 class AudioSceneSpec:
     """Contraintes partielles appliquees a une generation de scene.
 
-    Les types sont resolus par priorite: placement, composite, scene, registre.
+    Les champs ``random_*_signal_types`` limitent uniquement les types tires
+    pour les placements non types. Un type explicite au niveau d'un placement
+    reste prioritaire: placement, composite, scene, registre.
     snr_db fixe le rapport en dB entre l'energie totale du melange propre sur
     les micros et celle des bruits continus; les bruits locaux sont exclus.
     """
-    allowed_source_signal_types: SignalTypeChoice = None
-    allowed_local_noise_signal_types: SignalTypeChoice = None
-    allowed_continuous_noise_signal_types: SignalTypeChoice = None
+    random_source_signal_types: SignalTypeChoice = None
+    random_local_noise_signal_types: SignalTypeChoice = None
+    random_continuous_noise_signal_types: SignalTypeChoice = None
     snr_db: float | None = None
     source_specs: list[CompositeSignalSpec] = field(default_factory=list)
     local_noise_specs: list[CompositeSignalSpec] = field(default_factory=list)
@@ -93,15 +95,15 @@ class AudioSceneGenerator:
         n_sources: int,
         n_mics: int,
         max_delay: int,
-        source_placement_rate: float = 0.75,
-        local_noise_placement_rate: float = 1.0 / 3.0,
-        source_gain_range: tuple[float, float] = (0.5, 1.0),
-        local_noise_gain_range: tuple[float, float] = (0.05, 0.3),
-        continuous_noise_gain_range: tuple[float, float] = (1.0, 1.0),
-        source_registry: dict[str, type[TypedSignal]] | None = None,
-        local_noise_registry: dict[str, type[TypedSignal]] | None = None,
-        continuous_noise_registry: dict[str, type[TypedSignal]] | None = None,
-        seed: int | None = None,
+        source_placement_rate: float,
+        local_noise_placement_rate: float,
+        source_gain_range: tuple[float, float],
+        local_noise_gain_range: tuple[float, float],
+        continuous_noise_gain_range: tuple[float, float],
+        source_registry: dict[str, type[TypedSignal]] | None,
+        local_noise_registry: dict[str, type[TypedSignal]] | None,
+        continuous_noise_registry: dict[str, type[TypedSignal]] | None,
+        seed: int | None,
     ):
         self.fs = fs
         self.scene_duration = scene_duration
@@ -184,7 +186,7 @@ class AudioSceneGenerator:
                 freq=self.fs,
                 scene_duration=self.scene_duration,
                 spec=source_spec,
-                allowed_signal_types=spec.allowed_source_signal_types,
+                allowed_signal_types=spec.random_source_signal_types,
             )
             for source_spec in source_specs
         ]
@@ -220,7 +222,7 @@ class AudioSceneGenerator:
                 freq=self.fs,
                 scene_duration=self.scene_duration,
                 spec=noise_spec,
-                allowed_signal_types=spec.allowed_local_noise_signal_types,
+                allowed_signal_types=spec.random_local_noise_signal_types,
             )
             for noise_spec in local_noise_specs
         ]
@@ -242,7 +244,7 @@ class AudioSceneGenerator:
             self._generate_continuous_noise(
                 rng=rng,
                 spec=noise_spec,
-                allowed_signal_types=spec.allowed_continuous_noise_signal_types,
+                allowed_signal_types=spec.random_continuous_noise_signal_types,
             )
             for noise_spec in continuous_noise_specs
         ]

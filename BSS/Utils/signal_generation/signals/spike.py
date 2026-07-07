@@ -1,7 +1,7 @@
 """Impulsion brève."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 
@@ -12,6 +12,10 @@ class SpikeSignal(TypedSignal):
     signal_type = "spike"
     allowed_windows = (None, "boxcar", "hann")
     default_window = None
+
+    AMPLITUDE_RANGE: ClassVar[tuple[float, float]] = (1.0, 1.0)
+    MIN_DURATION_SAMPLES: ClassVar[int] = 1
+    DURATION_MAX: ClassVar[float] = 0.02
 
     def __init__(self, freq: float, data: np.ndarray, amplitude: float, time_duration: float):
         super().__init__(data=data, freq=freq)
@@ -36,14 +40,15 @@ class SpikeSignal(TypedSignal):
         return {
             "freq": freq,
             # Par defaut, les briques sont normalisees; le niveau de scene vient du placement.gain.
-            "amplitude": _random_value(rng, fixed_params.get("amplitude"), 1.0, 1.0),
+            "amplitude": _random_value(
+                rng, fixed_params.get("amplitude"), *cls.AMPLITUDE_RANGE
+            ),
             "time_duration": _random_value(
                 rng,
                 fixed_params.get("time_duration"),
-                1.0 / freq,
-                0.02,
+                cls.MIN_DURATION_SAMPLES / freq,
+                cls.DURATION_MAX,
             ),
         }
-
 
 

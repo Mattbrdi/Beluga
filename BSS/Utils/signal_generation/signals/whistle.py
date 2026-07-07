@@ -1,7 +1,7 @@
 """Sifflement harmonique à contour fréquentiel lisse."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 from scipy.interpolate import PchipInterpolator
@@ -62,11 +62,35 @@ class WhistleSignal(TypedSignal):
 
     La derniere harmonique doit rester sous la frequence de Nyquist:
     ``len(harmonic_amplitudes) * f_max < freq / 2``.
+
+    Par defaut, la generation aleatoire tire entre deux et quatre harmoniques.
+    Leurs amplitudes suivent une decroissance en puissance perturbee par une
+    faible variation log-normale, puis sont normalisees relativement a la
+    fondamentale. Leurs phases sont tirees uniformement sur un tour complet.
     """
 
     signal_type = "whistle"
-    allowed_windows = (None, "hann", "hamming", "blackman", "boxcar")
-    default_window = None
+    allowed_windows = ("hann",)
+    default_window = "hann"
+
+    DURATION_RANGE: ClassVar[tuple[float, float]] = (0.35, 1.2)
+    HARMONIC_COUNT_RANGE: ClassVar[tuple[int, int]] = (2, 4)
+    HARMONIC_DECAY_RANGE: ClassVar[tuple[float, float]] = (1.5, 3.0)
+    HARMONIC_VARIATION_STD: ClassVar[float] = 0.2
+    HARMONIC_PHASE_RANGE: ClassVar[tuple[float, float]] = (0.0, 2.0 * np.pi)
+    NYQUIST_MARGIN: ClassVar[float] = 0.45
+    F_MAX_DEFAULT: ClassVar[float] = 4_000.0
+    F_MIN_DEFAULT: ClassVar[float] = 800.0
+    F_MIN_FRACTION_OF_MAX: ClassVar[float] = 0.5
+    F_START_DEFAULT: ClassVar[float] = 2_000.0
+    SEGMENT_DURATION_RANGE: ClassVar[tuple[float, float]] = (0.35, 0.9)
+    DIRECTION_CHANGE_PROBABILITY: ClassVar[float] = 0.2
+    SWEEP_RATE_RANGE: ClassVar[tuple[float, float]] = (300.0, 1_000.0)
+    JITTER_TAU: ClassVar[float] = 0.05
+    JITTER_STD: ClassVar[float] = 4.0
+    ENVELOPE_BASE: ClassVar[float] = 0.75
+    ENVELOPE_DEPTH: ClassVar[float] = 0.15
+    RANDOM_SEED_MAX: ClassVar[int] = int(np.iinfo(np.uint32).max)
 
     def __init__(
         self,
@@ -108,19 +132,19 @@ class WhistleSignal(TypedSignal):
         cls,
         freq: float,
         time_duration: float,
-        f_start: float = 2_000.0,
-        f_min: float = 800.0,
-        f_max: float = 20000.0,
-        segment_duration_range: tuple[float, float] = (0.35, 0.9),
-        direction_change_probability: float = 0.2,
-        sweep_rate_range: tuple[float, float] = (300.0, 1_000.0),
-        jitter_tau: float = 0.05,
-        jitter_std: float = 4.0,
-        harmonic_amplitudes: tuple[float, ...] = (1.0, 0.14, 0.04),
-        harmonic_phases: tuple[float, ...] = (0.0, 0.2, 0.0),
-        envelope_base: float = 0.75,
-        envelope_depth: float = 0.15,
-        seed: int = 0,
+        f_start: float,
+        f_min: float,
+        f_max: float,
+        segment_duration_range: tuple[float, float],
+        direction_change_probability: float,
+        sweep_rate_range: tuple[float, float],
+        jitter_tau: float,
+        jitter_std: float,
+        harmonic_amplitudes: tuple[float, ...],
+        harmonic_phases: tuple[float, ...],
+        envelope_base: float,
+        envelope_depth: float,
+        seed: int,
     ) -> "WhistleSignal":
         cls._validate_parameters(
             freq=freq,
@@ -208,29 +232,30 @@ class WhistleSignal(TypedSignal):
         fixed_params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         fixed_params = fixed_params or {}
-        harmonic_amplitudes = tuple(
-            float(value)
-            for value in fixed_params.get(
-                "harmonic_amplitudes",
-                (1.0, 0.14, 0.04),
-            )
-        )
-        harmonic_phases = tuple(
-            float(value)
-            for value in fixed_params.get(
-                "harmonic_phases",
-                (0.0, 0.2, 0.0),
-            )
+        harmonic_amplitudes, harmonic_phases = cls._random_harmonic_structure(
+            rng=rng,
+            fixed_amplitudes=fixed_params.get("harmonic_amplitudes"),
+            fixed_phases=fixed_params.get("harmonic_phases"),
         )
         n_harmonics = max(1, len(harmonic_amplitudes))
-        max_fundamental = 0.45 * freq / n_harmonics
-        f_max = float(fixed_params.get("f_max", min(4_000.0, max_fundamental)))
-        f_min = float(fixed_params.get("f_min", min(800.0, 0.5 * f_max)))
-        f_start = float(fixed_params.get("f_start", np.clip(2_000.0, f_min, f_max)))
+        max_fundamental = cls.NYQUIST_MARGIN * freq / n_harmonics
+        f_max = float(
+            fixed_params.get("f_max", min(cls.F_MAX_DEFAULT, max_fundamental))
+        )
+        f_min = float(
+            fixed_params.get(
+                "f_min", min(cls.F_MIN_DEFAULT, cls.F_MIN_FRACTION_OF_MAX * f_max)
+            )
+        )
+        f_start = float(
+            fixed_params.get(
+                "f_start", np.clip(cls.F_START_DEFAULT, f_min, f_max)
+            )
+        )
         seed = (
             int(fixed_params["seed"])
             if "seed" in fixed_params
-            else int(rng.integers(0, np.iinfo(np.uint32).max, dtype=np.uint32))
+            else int(rng.integers(0, cls.RANDOM_SEED_MAX, dtype=np.uint32))
         )
 
         return {
@@ -238,29 +263,76 @@ class WhistleSignal(TypedSignal):
             "time_duration": _random_value(
                 rng,
                 fixed_params.get("time_duration"),
-                0.35,
-                3.0,
+                *cls.DURATION_RANGE,
             ),
             "f_start": f_start,
             "f_min": f_min,
             "f_max": f_max,
             "segment_duration_range": tuple(
-                fixed_params.get("segment_duration_range", (0.35, 0.9))
+                fixed_params.get("segment_duration_range", cls.SEGMENT_DURATION_RANGE)
             ),
             "direction_change_probability": float(
-                fixed_params.get("direction_change_probability", 0.2)
+                fixed_params.get(
+                    "direction_change_probability", cls.DIRECTION_CHANGE_PROBABILITY
+                )
             ),
             "sweep_rate_range": tuple(
-                fixed_params.get("sweep_rate_range", (300.0, 1_000.0))
+                fixed_params.get("sweep_rate_range", cls.SWEEP_RATE_RANGE)
             ),
-            "jitter_tau": float(fixed_params.get("jitter_tau", 0.05)),
-            "jitter_std": float(fixed_params.get("jitter_std", 4.0)),
+            "jitter_tau": float(fixed_params.get("jitter_tau", cls.JITTER_TAU)),
+            "jitter_std": float(fixed_params.get("jitter_std", cls.JITTER_STD)),
             "harmonic_amplitudes": harmonic_amplitudes,
             "harmonic_phases": harmonic_phases,
-            "envelope_base": float(fixed_params.get("envelope_base", 0.75)),
-            "envelope_depth": float(fixed_params.get("envelope_depth", 0.15)),
+            "envelope_base": float(
+                fixed_params.get("envelope_base", cls.ENVELOPE_BASE)
+            ),
+            "envelope_depth": float(
+                fixed_params.get("envelope_depth", cls.ENVELOPE_DEPTH)
+            ),
             "seed": seed,
         }
+
+    @classmethod
+    def _random_harmonic_structure(
+        cls,
+        rng: np.random.Generator,
+        fixed_amplitudes: tuple[float, ...] | list[float] | None,
+        fixed_phases: tuple[float, ...] | list[float] | None,
+    ) -> tuple[tuple[float, ...], tuple[float, ...]]:
+        """Tire un spectre décroissant, sauf valeurs explicitement fixées."""
+        if fixed_amplitudes is not None:
+            harmonic_count = len(fixed_amplitudes)
+        elif fixed_phases is not None:
+            harmonic_count = len(fixed_phases)
+        else:
+            count_min, count_max = cls.HARMONIC_COUNT_RANGE
+            harmonic_count = int(rng.integers(count_min, count_max + 1))
+
+        if fixed_amplitudes is None:
+            decay = float(rng.uniform(*cls.HARMONIC_DECAY_RANGE))
+            harmonic_orders = np.arange(1, harmonic_count + 1, dtype=float)
+            variations = rng.lognormal(
+                mean=0.0,
+                sigma=cls.HARMONIC_VARIATION_STD,
+                size=harmonic_count,
+            )
+            amplitudes = harmonic_orders ** (-decay) * variations
+            if harmonic_count > 0:
+                amplitudes /= amplitudes[0]
+            harmonic_amplitudes = tuple(float(value) for value in amplitudes)
+        else:
+            harmonic_amplitudes = tuple(float(value) for value in fixed_amplitudes)
+
+        if fixed_phases is None:
+            phases = rng.uniform(
+                *cls.HARMONIC_PHASE_RANGE,
+                size=harmonic_count,
+            )
+            harmonic_phases = tuple(float(value) for value in phases)
+        else:
+            harmonic_phases = tuple(float(value) for value in fixed_phases)
+
+        return harmonic_amplitudes, harmonic_phases
 
     @staticmethod
     def _generate_frequency_control_points(
@@ -348,4 +420,3 @@ class WhistleSignal(TypedSignal):
             raise ValueError(
                 "La plus haute harmonique depasse Nyquist; augmente freq ou reduis f_max."
             )
-

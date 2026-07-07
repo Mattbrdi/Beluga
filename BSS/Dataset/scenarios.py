@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from ..Utils.signal_generation import AudioSceneSpec
+from ..Utils.signal_generation import AudioSceneSpec, WhistleSignal
 
 
 ScenarioFactory = Callable[[str, int, int], AudioSceneSpec | None]
@@ -37,3 +37,15 @@ def get_scenario_factory(name: str) -> ScenarioFactory:
 def default_scenario(_split: str, _index: int, _seed: int) -> None:
     """Utilise la generation aleatoire sans contrainte d'AudioSceneGenerator."""
     return None
+
+
+@register_scenario("whistles_only")
+def whistles_only_scenario(
+    _split: str,
+    _index: int,
+    _seed: int,
+) -> AudioSceneSpec:
+    """Limite les sources utiles aux sifflements, sans modifier les bruits."""
+    return AudioSceneSpec(
+        random_source_signal_types=(WhistleSignal.signal_type,),
+    )

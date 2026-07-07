@@ -35,7 +35,13 @@ def build_dataset(
     _prepare_output_dir(root, overwrite=overwrite)
     write_json(root / "dataset_config.json", config.to_dict())
 
-    generator = AudioSceneGenerator(**config.generator.__dict__)
+    generator = AudioSceneGenerator(
+        **config.generator.__dict__,
+        source_registry=None,
+        local_noise_registry=None,
+        continuous_noise_registry=None,
+        seed=None,
+    )
     global_index = 0
 
     for split_name, split_size in config.splits.items():

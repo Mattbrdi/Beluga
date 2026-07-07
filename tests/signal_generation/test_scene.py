@@ -1,3 +1,5 @@
+import inspect
+
 import numpy as np
 import pytest
 
@@ -16,7 +18,14 @@ def _generator(seed=None):
         n_sources=2,
         n_mics=3,
         max_delay=4,
+        source_placement_rate=0.75,
+        local_noise_placement_rate=1.0 / 3.0,
+        source_gain_range=(0.5, 1.0),
+        local_noise_gain_range=(0.05, 0.3),
+        continuous_noise_gain_range=(1.0, 1.0),
         source_registry=None,
+        local_noise_registry=None,
+        continuous_noise_registry=None,
         seed=seed,
     )
 
@@ -29,9 +38,18 @@ def _stable_spec(snr_db=None):
     )
     return AudioSceneSpec(
         source_specs=[source, source],
-        allowed_local_noise_signal_types="gaussian_noise",
-        allowed_continuous_noise_signal_types="gaussian_noise",
+        random_local_noise_signal_types="gaussian_noise",
+        random_continuous_noise_signal_types="gaussian_noise",
         snr_db=snr_db,
+    )
+
+
+def test_audio_scene_generator_constructor_has_no_default_parameters():
+    signature = inspect.signature(AudioSceneGenerator)
+
+    assert all(
+        parameter.default is inspect.Parameter.empty
+        for parameter in signature.parameters.values()
     )
 
 
@@ -84,6 +102,34 @@ def test_too_many_source_specs_are_rejected():
         _generator().generate(spec, seed=0)
 
 
+def test_explicit_signal_type_can_be_outside_random_type_selection():
+    spec = AudioSceneSpec(
+        random_source_signal_types="sine",
+        random_local_noise_signal_types="gaussian_noise",
+        random_continuous_noise_signal_types="gaussian_noise",
+        source_specs=[
+            CompositeSignalSpec(
+                n_placements=1,
+                placements=[
+                    SignalPlacementSpec(
+                        signal_type="spike",
+                        signal_params={"time_duration": 0.01},
+                    )
+                ],
+            ),
+            CompositeSignalSpec(n_placements=2),
+        ],
+    )
+
+    scene = _generator().generate(spec, seed=8)
+
+    assert scene.metadata.source_composites[0].placements[0].signal_type == "spike"
+    assert all(
+        placement.signal_type == "sine"
+        for placement in scene.metadata.source_composites[1].placements
+    )
+
+
 def test_metadata_records_realized_delays_and_seed():
     delays = np.array([[0, 1], [2, 3], [4, 0]])
     spec = _stable_spec()
@@ -92,3 +138,15 @@ def test_metadata_records_realized_delays_and_seed():
 
     np.testing.assert_array_equal(scene.metadata.delay_matrix, delays)
     assert scene.metadata.seed == 99
+
+
+def test_large_ship_noise_can_be_selected_as_continuous_noise():
+    spec = _stable_spec()
+    spec.random_continuous_noise_signal_types = "large_ship_noise"
+
+    scene = _generator().generate(spec, seed=14)
+
+    assert all(
+        noise.signal_type == "large_ship_noise"
+        for noise in scene.metadata.continuous_noises
+    )

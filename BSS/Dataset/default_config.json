@@ -11,7 +11,7 @@
     "local_noise_gain_range": [0.02, 0.15],
     "continuous_noise_gain_range": [0.05, 0.05]
   },
-  "scenario": "default",
+  "scenario": "whistles_only",
   "splits": {
     "train": 10,
     "validation": 5,

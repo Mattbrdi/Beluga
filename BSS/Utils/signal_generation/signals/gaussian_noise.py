@@ -1,7 +1,7 @@
 """Bruit blanc gaussien reproductible."""
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 import numpy as np
 
@@ -12,6 +12,10 @@ class GaussianNoise(TypedSignal):
     signal_type = "gaussian_noise"
     allowed_windows = (None, "hann", "hamming", "boxcar")
     default_window = None
+
+    STD_RANGE: ClassVar[tuple[float, float]] = (0.01, 0.1)
+    DURATION_RANGE: ClassVar[tuple[float, float]] = (0.05, 1.0)
+    RANDOM_SEED_MAX: ClassVar[int] = int(np.iinfo(np.uint32).max)
 
     def __init__(
         self,
@@ -32,7 +36,7 @@ class GaussianNoise(TypedSignal):
         freq: float,
         std: float,
         time_duration: float,
-        seed: int = 0,
+        seed: int,
     ) -> "GaussianNoise":
         n_samples = int(round(time_duration * freq))
         rng = np.random.default_rng(seed)
@@ -56,20 +60,19 @@ class GaussianNoise(TypedSignal):
         seed = (
             int(fixed_params["seed"])
             if "seed" in fixed_params
-            else int(rng.integers(0, np.iinfo(np.uint32).max, dtype=np.uint32))
+            else int(rng.integers(0, cls.RANDOM_SEED_MAX, dtype=np.uint32))
         )
         return {
             "freq": freq,
-            "std": _random_value(rng, fixed_params.get("std"), 0.01, 0.1),
+            "std": _random_value(
+                rng, fixed_params.get("std"), *cls.STD_RANGE
+            ),
             "time_duration": _random_value(
                 rng,
                 fixed_params.get("time_duration"),
-                0.05,
-                1.0,
+                *cls.DURATION_RANGE,
             ),
             "seed": seed,
         }
-
-
 
 

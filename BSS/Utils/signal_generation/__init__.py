@@ -27,7 +27,14 @@ from .scene import (
     ContinuousNoiseMetadata,
     SignalPlacementMetadata,
 )
-from .signals import GaussianNoise, SinSignal, SpikeSignal, TypedSignal, WhistleSignal
+from .signals import (
+    GaussianNoise,
+    LargeShipNoise,
+    SinSignal,
+    SpikeSignal,
+    TypedSignal,
+    WhistleSignal,
+)
 
 
 register_SourceSignal(SinSignal)
@@ -36,6 +43,7 @@ register_SourceSignal(WhistleSignal)
 register_LocalNoiseSignal(SpikeSignal)
 register_LocalNoiseSignal(GaussianNoise)
 register_ContinuousNoiseSignal(GaussianNoise)
+register_ContinuousNoiseSignal(LargeShipNoise)
 
 
 __all__ = [
@@ -49,6 +57,7 @@ __all__ = [
     "CompositeSignalSpec",
     "ContinuousNoiseMetadata",
     "GaussianNoise",
+    "LargeShipNoise",
     "MixtureGenerator",
     "RANDOM_WINDOW",
     "SignalPlacement",
