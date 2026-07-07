@@ -6,7 +6,7 @@ import scipy.signal as signal
 
 from time_frequency_mask.configuration import SAMPLING_RATE, N_FFT, HOP_LENGTH, WINDOW_LIBROSA, MIN_FREQ, MAX_FREQ
 
-def frequency_band(freqs : NDArray[np.float64], D : NDArray[np.complex128], fmin : float = MIN_FREQ, fmax : float = MAX_FREQ) -> tuple[NDArray[np.float64], NDArray[np.complex128]]:
+def frequency_band(freqs : NDArray[np.float64], D : NDArray, fmin : float = MIN_FREQ, fmax : float = MAX_FREQ) -> tuple[NDArray[np.float64], NDArray[np.complex128]]:
     freq_mask = (freqs >= fmin) & (freqs <= fmax) 
     if not np.any(freq_mask):
         raise ValueError(f"No frequency bins found between {fmin} Hz and {fmax} Hz")
@@ -64,6 +64,28 @@ def scipy_stft_complex(canal, frame_rate = SAMPLING_RATE, n_fft=N_FFT, hop_lengt
         return_onesided=True,
         boundary=None,
         padded=False,
+    )
+
+    return freqs, times, Zxx
+
+def scipy_stft_complex_psd(canal, frame_rate = SAMPLING_RATE, n_fft=N_FFT, hop_length = HOP_LENGTH) -> tuple[NDArray[np.float64,], NDArray[np.float64], NDArray[np.complex128]]:
+    """Compute an STFT using scipy. Returns complex valued stft shaped as frequency x time."""
+    if len(canal) < n_fft:
+        raise ValueError(f"Audio slice is too short for n_fft={n_fft}. Got {len(canal)} samples.")
+    noverlap = n_fft - hop_length
+
+    freqs, times, Zxx = signal.stft(
+        canal,
+        fs= frame_rate,
+        window='hann',
+        nperseg=n_fft,
+        noverlap=noverlap,
+        nfft=n_fft,
+        detrend=False,
+        return_onesided=False,
+        boundary=None,
+        padded=False,
+        scaling="psd"
     )
 
     return freqs, times, Zxx

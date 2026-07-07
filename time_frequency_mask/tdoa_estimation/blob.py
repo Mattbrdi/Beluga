@@ -21,7 +21,7 @@ class Blob():
 
         else:
             x, y, w, h = cv.boundingRect(self.data)
-            print(x,y,w,h)
+            # print(x,y,w,h)
             if x < 0 or x >= N_TIMES:
                 raise ValueError(f"Error incorrect x start boundingRect index not between 0 and N_TIMES {N_TIMES} got {x}")
             
@@ -53,8 +53,8 @@ class Blob():
             self.tmin_idx = max(int(np.ceil(self.tmin * SAMPLING_RATE)),0)
             self.tmax_idx = min(int(np.floor(self.tmax * SAMPLING_RATE)), int(SAMPLING_RATE*(DURATION - MAX_TDOA)))
 
-            print(self.fmin, self.fmax)
-            print(self.tmin, self.tmax)
+            # print(self.fmin, self.fmax)
+            # print(self.tmin, self.tmax)
 
 
 def output_blobs_from_mask(mask : AudioMask, area_thr=30) -> list[Blob]:

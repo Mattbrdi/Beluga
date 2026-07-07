@@ -26,8 +26,11 @@ from time_frequency_mask.data_generation.core.preprocess import bandpass_filter
 from time_frequency_mask.data_generation.io.data_parser import read_wav_file
 
 # CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\runs\spectro_mask_net\version_12\checkpoints\epoch=111-step=3584.ckpt"
-CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\runs\spectro_mask_net\version_16\epoch=155-step=17316.ckpt"
-WAV_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\input\beluga_2026.wav"#r"C:\Users\amine\Downloads\amine.wav"#
+# CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\runs\spectro_mask_net\version_16\epoch=155-step=17316.ckpt"
+CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\best-epoch=072-val_loss=0.3297.ckpt"
+# CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\last.ckpt"
+WAV_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\input\beluga_2026_3.wav"#r"C:\Users\amine\Downloads\amine.wav"#
+# WAV_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\input\beluga_synth_02.wav"#r"C:\Users\amine\Downloads\amine.wav"#
 is_db = False
 
 def parse_args():
@@ -69,7 +72,7 @@ def preprocess_torch(Ds : NDArray[np.float64], device):
     x = Ds.unsqueeze(0).to(device)  # shape: [1, C, H, W]
     return x 
 
-def get_mask_from_array(audio_array : list[NDArray[np.float64]], checkpoint_path, debug=False) -> NDArray[np.uint8]:
+def get_mask_from_array(audio_array : list[NDArray[np.float64]], checkpoint_path = CKPT_PATH, debug=False) -> NDArray[np.uint8]:
     Ds = []
 
     freqs_list = []
@@ -90,6 +93,7 @@ def get_mask_from_array(audio_array : list[NDArray[np.float64]], checkpoint_path
         if np.max(np.abs(D)) > 0:
             D = D - np.min(D)
             D = D / np.percentile(np.abs(D),99)
+            D = np.clip(D, 0, 1)
 
         # D = np.clip(D, -1,1)
 
@@ -158,7 +162,7 @@ def main():
     plot_waveform_4D(audio_array, SAMPLING_RATE)
 
     plot_spectrogram_4D(audio_array, SAMPLING_RATE, is_db=False, mask=AudioMask(mask, SAMPLING_RATE).data)
-    plot_spectrogram_4D(audio_array, SAMPLING_RATE, is_db=False)
+    plot_spectrogram_4D(audio_array, SAMPLING_RATE, is_db=True, fmin=100)
 
 if __name__ == '__main__':
     main()
