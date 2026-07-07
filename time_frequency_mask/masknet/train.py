@@ -9,7 +9,7 @@ from time_frequency_mask.masknet.models.spectro_mask_net_lightning import Spectr
 from time_frequency_mask.masknet.models.spectro_mask_net import SpectroMaskNet
 from time_frequency_mask.configuration import DATASET_PATH
 from lightning.pytorch.loggers import CSVLogger
-# from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
+from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 
 import lightning as L
 
@@ -22,17 +22,33 @@ def main():
     )
 
     model = SpectroMaskLightningModule(
-        model=SpectroMaskNet(),
+        model=SpectroMaskNet(dropout=0.1),
         lr=1e-3,
+    )
+
+    checkpoint_callback = ModelCheckpoint(
+        monitor="val_loss",
+        mode="min",
+        save_top_k=1,
+        save_last=True,
+        filename="best-{epoch:03d}-{val_loss:.4f}",
+    )
+
+    early_stopping_callback = EarlyStopping(
+        monitor="val_loss",
+        mode="min",
+        patience=30,
+        min_delta=1e-4,
     )
 
     trainer = L.Trainer(
         max_epochs=1000,
         accelerator="auto",
         devices="auto",
-        logger=CSVLogger("runs", name="spectro_mask_net"),
+        callbacks=[checkpoint_callback, early_stopping_callback],
+        logger=CSVLogger("runs", name="spectro_mask_net")
     )
-
+    
     trainer.fit(model, datamodule=datamodule)
     trainer.test(model, datamodule=datamodule)
 
