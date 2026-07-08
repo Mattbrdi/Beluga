@@ -27,3 +27,4 @@ results*/
 results*.py 
 .vscode/*
 BSS/Dataset/generated/
+*.txt

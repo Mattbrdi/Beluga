@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from ..Utils.signal_generation import AudioSceneSpec, WhistleSignal
+from ..Utils.signal_generation import AudioSceneSpec, WhistleSignal, CompositeSignalSpec, LargeShipNoise
 
-
+"""
+Un scénario sert à définir le Spec en fonction de l'endroit ou l'on est sur le dataset.
+"""
 ScenarioFactory = Callable[[str, int, int], AudioSceneSpec | None]
 SCENARIO_FACTORIES: dict[str, ScenarioFactory] = {}
 
@@ -47,5 +49,15 @@ def whistles_only_scenario(
 ) -> AudioSceneSpec:
     """Limite les sources utiles aux sifflements, sans modifier les bruits."""
     return AudioSceneSpec(
-        random_source_signal_types=(WhistleSignal.signal_type,),
+        allowed_source_signal_types=(WhistleSignal.signal_type,),
     )
+
+@register_scenario("Whistles_and_boat")
+def whistle_and_boat(_split : str, _index: int, _seed: int) -> AudioSceneSpec: 
+    if _seed %2 == 0: 
+        return AudioSceneSpec(
+            allowed_source_signal_types=(WhistleSignal.signal_type),
+            source_specs=[CompositeSignalSpec(n_placements=1,allowed_signal_types=LargeShipNoise.signal_type)]
+        )
+    else : 
+        return AudioSceneSpec(allowed_source_signal_types=WhistleSignal.signal_type)

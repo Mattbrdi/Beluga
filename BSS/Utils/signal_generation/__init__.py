@@ -40,10 +40,10 @@ from .signals import (
 register_SourceSignal(SinSignal)
 register_SourceSignal(SpikeSignal)
 register_SourceSignal(WhistleSignal)
+register_SourceSignal(LargeShipNoise)
 register_LocalNoiseSignal(SpikeSignal)
 register_LocalNoiseSignal(GaussianNoise)
 register_ContinuousNoiseSignal(GaussianNoise)
-register_ContinuousNoiseSignal(LargeShipNoise)
 
 
 __all__ = [

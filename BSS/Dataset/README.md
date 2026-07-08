@@ -40,6 +40,9 @@ Chaque fichier de scene contient :
 
 Le manifeste contient le chemin, le split, la seed et les metadonnees de chaque
 scene. Une configuration et une seed identiques reproduisent le meme dataset.
+Le fichier `dataset_config.json` produit contient aussi un instantane des cles
+des registres effectivement charges, la version du format, le commit Git et un
+indicateur signalant si le code comportait des modifications non commitees.
 
 Le champ `scenario` de la configuration selectionne une fabrique enregistree
 dans `SCENARIO_FACTORIES`. Le scenario `default` applique la generation

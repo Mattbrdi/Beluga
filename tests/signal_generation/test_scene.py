@@ -38,8 +38,8 @@ def _stable_spec(snr_db=None):
     )
     return AudioSceneSpec(
         source_specs=[source, source],
-        random_local_noise_signal_types="gaussian_noise",
-        random_continuous_noise_signal_types="gaussian_noise",
+        allowed_local_noise_signal_types="gaussian_noise",
+        allowed_continuous_noise_signal_types="gaussian_noise",
         snr_db=snr_db,
     )
 
@@ -104,9 +104,9 @@ def test_too_many_source_specs_are_rejected():
 
 def test_explicit_signal_type_can_be_outside_random_type_selection():
     spec = AudioSceneSpec(
-        random_source_signal_types="sine",
-        random_local_noise_signal_types="gaussian_noise",
-        random_continuous_noise_signal_types="gaussian_noise",
+        allowed_source_signal_types="sine",
+        allowed_local_noise_signal_types="gaussian_noise",
+        allowed_continuous_noise_signal_types="gaussian_noise",
         source_specs=[
             CompositeSignalSpec(
                 n_placements=1,
@@ -142,7 +142,7 @@ def test_metadata_records_realized_delays_and_seed():
 
 def test_large_ship_noise_can_be_selected_as_continuous_noise():
     spec = _stable_spec()
-    spec.random_continuous_noise_signal_types = "large_ship_noise"
+    spec.allowed_continuous_noise_signal_types = "large_ship_noise"
 
     scene = _generator().generate(spec, seed=14)
 

@@ -11,12 +11,12 @@
     "local_noise_gain_range": [0.02, 0.15],
     "continuous_noise_gain_range": [0.05, 0.05]
   },
-  "scenario": "whistles_only",
+  "scenario": "Whistles_and_boat",
   "splits": {
     "train": 10,
     "validation": 5,
     "test": 5
   },
-  "base_seed": 42,
+  "base_seed": 470,
   "compressed": true
 }
