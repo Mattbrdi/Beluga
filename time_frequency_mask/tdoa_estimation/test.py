@@ -14,7 +14,7 @@ from BSS.Utils.signal_class import Signal, MultiSignal, Mixture
 
 from time_frequency_mask.configuration import DURATION, SAMPLING_RATE, MAX_TDOA
 from time_frequency_mask.plotter import plot_spectrogram_4D, plot_waveform_4D, plot_mask
-from time_frequency_mask.tdoa_estimation.blob import Blob, output_blobs_from_mask
+from time_frequency_mask.tdoa_estimation.blob import Blob, output_blobs_from_mask, blob_filtering_heuristic
 from time_frequency_mask.tdoa_estimation.tdoa import compute_tdoa, compute_cross_corr
 from time_frequency_mask.data_generation.models.mask import AudioMask
 from time_frequency_mask.data_generation.io.data_parser import read_wav_file
@@ -28,7 +28,8 @@ plot = True
 denoise = False 
 std_noise = 5
 amplitude = 1
-n_tdoa = int(np.ceil(SAMPLING_RATE*MAX_TDOA))
+# n_tdoa = int(np.ceil(SAMPLING_RATE*MAX_TDOA))
+n_tdoa = int(SAMPLING_RATE*MAX_TDOA)
 
 delay_matrix = np.array([
     [0],  
@@ -105,6 +106,8 @@ def main():
         plot_spectrogram_4D(tetra_noised, SAMPLING_RATE, is_db=False, mask = mask.data)
 
     blobs = output_blobs_from_mask(mask)
+
+    blobs = blob_filtering_heuristic(blobs)
 
     for i, blob in enumerate(blobs):
         tmin_idx = blob.tmin_idx

@@ -8,6 +8,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 from time_frequency_mask.configuration import SAMPLING_RATE, N_FFT, MAX_TDOA, DURATION
+from time_frequency_mask.tdoa_estimation.blob import Blob
+from time_frequency_mask.data_generation.core.preprocess import bandpass_filter
 from scipy.signal import correlate
 
 def windowed_correlation(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64], idx_0 : int, win_size = N_FFT):
@@ -65,6 +67,26 @@ def compute_cross_corr(audio_one : NDArray[np.float64], audio_two : NDArray[np.f
     cross_corr = one_full_two_windowed + two_full_one_windowed
     # return (cross_corr)/np.std(cross_corr)
     return (cross_corr)
+
+def compute_cross_corr_from_blob(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64], blobs : list[Blob]) -> NDArray[np.float64]:
+    
+    correlations = []
+    for i, blob in enumerate(blobs):
+        tmin_idx = blob.tmin_idx
+        tmax_idx = blob.tmax_idx
+
+        idx_center = (tmin_idx + tmax_idx) // 2
+        win_size = tmax_idx - tmin_idx
+
+        fmin = blob.fmin
+        fmax = blob.fmax
+
+        audio_one_filtered = bandpass_filter(audio_one, SAMPLING_RATE, fmin, fmax)
+        audio_two_filtered = bandpass_filter(audio_two, SAMPLING_RATE, fmin, fmax)
+
+        correlations.append(blob.area*compute_cross_corr(audio_one_filtered, audio_two_filtered, idx_center, win_size))
+
+    return np.sum(correlations, axis=0)
 
 def main():
     array_1 = np.arange(-500,500,1).astype(int)

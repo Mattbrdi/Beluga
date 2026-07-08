@@ -8,9 +8,10 @@ from time_frequency_mask.plotter import plot_mask
 from time_frequency_mask.configuration import MIN_FREQ, MAX_TDOA, MAX_FREQ, SAMPLING_RATE, DURATION, N_FFT, DURATION, N_TIMES, START_FREQ_IDX, N_FREQS
 
 class Blob():
-    def __init__(self, data : NDArray[np.uint8], area = N_FREQS*N_TIMES):
+    def __init__(self, data : NDArray[np.uint8], stats, area = N_FREQS*N_TIMES):
         self.data = data
         self.area = area
+        self.stats = stats
         if data is None:
             self.fmin = MIN_FREQ
             self.fmax = MAX_FREQ
@@ -69,10 +70,32 @@ def output_blobs_from_mask(mask : AudioMask, area_thr=30) -> list[Blob]:
         area = stats[i, cv.CC_STAT_AREA]
 
         if area < area_thr or area < 0.1*mean_area:
-            pass
+            continue
     
         label = (np.array(labels) == i).astype(np.uint8)
         # plot_mask(label)
-        masks.append(Blob(label, stats[i, cv.CC_STAT_AREA]))
+        masks.append(Blob(label, stats, stats[i, cv.CC_STAT_AREA]))
 
     return masks
+
+def blob_filtering_heuristic(blobs : list[Blob], max_blobs_count = 7, min_area = 10*10) -> list[Blob]:
+    output_blobs = []
+    mean_area = np.mean([blob.area for blob in blobs])
+    count = len(blobs)
+
+    argsort = np.flip(np.argsort([blob.area for blob in blobs]))
+    sorted_blobs = [blobs[argsort[idx]] for idx in range(min(count, max_blobs_count))]
+
+    for blob in sorted_blobs:
+        freq_cond = blob.fmin < 1.05* MIN_FREQ
+
+        min_area_cond = blob.area < min_area
+        
+        mean_area_cond = blob.area < 0.2*mean_area
+
+        if not freq_cond and not min_area_cond and not mean_area_cond:
+            output_blobs.append(blob)
+
+    return output_blobs
+
+

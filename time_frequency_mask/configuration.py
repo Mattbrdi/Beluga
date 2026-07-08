@@ -8,7 +8,7 @@ from pathlib import Path
 SAMPLING_RATE = 384000
 DURATION = 1
 N = DURATION * SAMPLING_RATE 
-MAX_TDOA = 0.3 / 1500
+MAX_TDOA = 1.1 * 0.3 / 1450
 
 ## STFT parameters
 N_FFT = 4096
