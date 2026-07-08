@@ -133,6 +133,7 @@ class Parameters:
         self.max_position_frames = data["max_position_frames"]
         self.location_parameters = LocationParameters(**data["location_parameters"])
         self.use_gcc = data["use_gcc"]
+        self.use_mask_based_tdoa = data["use_mask_based_tdoa"]
         vmd_options_dict = data["vmd_denoise_parameters"]["vmd_options"]
         vmd_options = VMDOptions(
             vmd_options_dict["max_iter"],
