@@ -140,13 +140,16 @@ def test_metadata_records_realized_delays_and_seed():
     assert scene.metadata.seed == 99
 
 
-def test_large_ship_noise_can_be_selected_as_continuous_noise():
+def test_large_ship_noise_can_be_selected_as_source():
     spec = _stable_spec()
-    spec.allowed_continuous_noise_signal_types = "large_ship_noise"
+    spec.allowed_source_signal_types = "sine"
+    spec.source_specs[0] = CompositeSignalSpec(
+        n_placements=1,
+        allowed_signal_types="large_ship_noise",
+    )
 
     scene = _generator().generate(spec, seed=14)
 
-    assert all(
-        noise.signal_type == "large_ship_noise"
-        for noise in scene.metadata.continuous_noises
-    )
+    placements = scene.metadata.source_composites[0].placements
+    assert len(placements) == 1
+    assert placements[0].signal_type == "large_ship_noise"
