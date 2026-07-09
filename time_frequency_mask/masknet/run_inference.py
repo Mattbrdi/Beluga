@@ -14,7 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
-from time_frequency_mask.configuration import SAMPLING_RATE, N_FFT, HOP_LENGTH, N_TIMES, N_FREQS, IMAGE_SIZE
+from time_frequency_mask.configuration import SAMPLING_RATE, N_FFT, HOP_LENGTH, N_TIMES, N_FREQS, IMAGE_SIZE, DURATION, CKPT_PATH
 from time_frequency_mask.plotter import plot_spectrogram_4D, plot_mask,plot_waveform_4D
 from time_frequency_mask.stft import frequency_band, scipy_spectrogram, scipy_db_spectrogram
 
@@ -27,9 +27,9 @@ from time_frequency_mask.data_generation.io.data_parser import read_wav_file
 
 # CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\runs\spectro_mask_net\version_12\checkpoints\epoch=111-step=3584.ckpt"
 # CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\runs\spectro_mask_net\version_16\epoch=155-step=17316.ckpt"
-CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\best-epoch=072-val_loss=0.3297.ckpt"
+# CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\best-epoch=157-val_loss=0.2527.ckpt"
 # CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\last.ckpt"
-WAV_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\input\beluga_2026_3.wav"#r"C:\Users\amine\Downloads\amine.wav"#
+WAV_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\input\beluga_2026_2.wav"#r"C:\Users\amine\Downloads\amine.wav"#
 # WAV_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\input\beluga_synth_02.wav"#r"C:\Users\amine\Downloads\amine.wav"#
 is_db = False
 
@@ -144,6 +144,8 @@ def get_mask_from_array(audio_array : list[NDArray[np.float64]], checkpoint_path
     end_X = IMAGE_SIZE - start_X
 
     masks_np = masks_np[:, start_Y:end_Y, start_X: end_X]
+    if debug:
+        plot_spectrogram_4D(audio_array, SAMPLING_RATE, is_db=False, mask=AudioMask(masks_np[0], SAMPLING_RATE).data)
     return masks_np[0]
 
 def main():
@@ -163,6 +165,49 @@ def main():
 
     plot_spectrogram_4D(audio_array, SAMPLING_RATE, is_db=False, mask=AudioMask(mask, SAMPLING_RATE).data)
     plot_spectrogram_4D(audio_array, SAMPLING_RATE, is_db=True, fmin=100)
+
+def crop_audio_array(audio_array : NDArray[np.float64], current_length : int, target_length : int) -> NDArray[np.float64]:
+    start = (current_length - target_length) // 2
+    end = start + target_length
+    return audio_array[:, start:end] 
+
+def pad_audio_array(audio_array : NDArray[np.float64], current_length : int, target_length : int) -> NDArray[np.float64]:
+    pad_width = target_length - current_length
+    left = pad_width // 2
+    right = pad_width - left
+    return np.pad(audio_array, ((0,0), (left, right)))
+
+def crop_audio_canal(audio_canal : NDArray[np.float64], current_length : int, target_length : int) -> NDArray[np.float64]:
+    start = (current_length - target_length) // 2
+    end = start + target_length
+    return audio_canal[start:end]
+
+def pad_audio_canal(audio_canal : NDArray[np.float64], current_length : int, target_length : int) -> NDArray[np.float64]:
+    pad_width = target_length - current_length
+    left = pad_width // 2
+    right = pad_width - left
+    return np.pad(audio_canal, (left, right))
+
+def pad_crop_audio_canal(audio_canal : NDArray[np.float64]):
+    target_length = int(SAMPLING_RATE * DURATION)
+    current_length = len(audio_canal)
+
+    if current_length > target_length: 
+        audio_canal = crop_audio_canal(audio_canal, current_length, target_length)
+    elif current_length < target_length:
+        audio_canal = pad_audio_canal(audio_canal, current_length, target_length)
+    
+    return audio_canal.copy()
+
+def pad_crop_audio_array(audio_array : NDArray[np.float64]):
+    target_length = int(SAMPLING_RATE * DURATION)
+    current_length = len(audio_array[0])
+    if current_length > target_length: 
+        audio_array = crop_audio_array(audio_array, current_length, target_length)
+    elif current_length < target_length:
+        audio_array = pad_audio_array(audio_array, current_length, target_length)
+    
+    return audio_array.copy()
 
 if __name__ == '__main__':
     main()

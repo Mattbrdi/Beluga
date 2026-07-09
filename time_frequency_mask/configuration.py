@@ -8,7 +8,7 @@ from pathlib import Path
 SAMPLING_RATE = 384000
 DURATION = 1
 N = DURATION * SAMPLING_RATE 
-MAX_TDOA = 0.3 / 1500
+MAX_TDOA = 1.1 * 0.3 / 1450
 
 ## STFT parameters
 N_FFT = 4096
@@ -26,6 +26,7 @@ START_FREQ_IDX = int(np.ceil(MIN_FREQ * N_FFT / SAMPLING_RATE) + 1)
 
 # Neural Network
 IMAGE_SIZE = 256 
+CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\best-epoch=157-val_loss=0.2527.ckpt"
 
 ## Whistle BANK:
 WHISTLE_WAV_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\input\whistle2\wav"
