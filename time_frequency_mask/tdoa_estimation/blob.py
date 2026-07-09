@@ -104,6 +104,11 @@ def blob_filtering_heuristic(blobs : list[Blob], max_blobs_count = 7, min_area =
         if not freq_cond and not min_area_cond and not mean_area_cond:
             output_blobs.append(blob)
 
+    if np.sum([blob.area for blob in output_blobs]) < min_total_area:
+        raise ValueError(f"Error total area of mask is too small for masked based tdoa got {np.sum([blob.area for blob in output_blobs])} smaller than min_total_area: {min_total_area}")
+
+    if len(output_blobs) == 0:
+        raise ValueError(f"Error output_blobs is empty unable to perform masked TDOA on current sample")
     return output_blobs
 
 
