@@ -26,6 +26,7 @@ START_FREQ_IDX = int(np.ceil(MIN_FREQ * N_FFT / SAMPLING_RATE) + 1)
 
 # Neural Network
 IMAGE_SIZE = 256 
+CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\best-epoch=157-val_loss=0.2527.ckpt"
 
 ## Whistle BANK:
 WHISTLE_WAV_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\input\whistle2\wav"

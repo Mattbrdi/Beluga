@@ -14,7 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 
-from time_frequency_mask.configuration import SAMPLING_RATE, N_FFT, HOP_LENGTH, N_TIMES, N_FREQS, IMAGE_SIZE, DURATION
+from time_frequency_mask.configuration import SAMPLING_RATE, N_FFT, HOP_LENGTH, N_TIMES, N_FREQS, IMAGE_SIZE, DURATION, CKPT_PATH
 from time_frequency_mask.plotter import plot_spectrogram_4D, plot_mask,plot_waveform_4D
 from time_frequency_mask.stft import frequency_band, scipy_spectrogram, scipy_db_spectrogram
 
@@ -27,7 +27,7 @@ from time_frequency_mask.data_generation.io.data_parser import read_wav_file
 
 # CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\runs\spectro_mask_net\version_12\checkpoints\epoch=111-step=3584.ckpt"
 # CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\runs\spectro_mask_net\version_16\epoch=155-step=17316.ckpt"
-CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\best-epoch=157-val_loss=0.2527.ckpt"
+# CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\best-epoch=157-val_loss=0.2527.ckpt"
 # CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\last.ckpt"
 WAV_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\input\beluga_2026_2.wav"#r"C:\Users\amine\Downloads\amine.wav"#
 # WAV_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\input\beluga_synth_02.wav"#r"C:\Users\amine\Downloads\amine.wav"#
