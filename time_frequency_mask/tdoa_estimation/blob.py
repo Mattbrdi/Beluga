@@ -78,7 +78,15 @@ def output_blobs_from_mask(mask : AudioMask, area_thr=30) -> list[Blob]:
 
     return masks
 
-def blob_filtering_heuristic(blobs : list[Blob], max_blobs_count = 7, min_area = 10*10) -> list[Blob]:
+def output_mask_from_blobs(blobs : list[Blob]) -> AudioMask:
+    mask = AudioMask.create_empty_mask(SAMPLING_RATE)
+
+    for blob in blobs:
+        mask.data = mask.data | (blob.data != 0)
+
+    return mask
+
+def blob_filtering_heuristic(blobs : list[Blob], max_blobs_count = 7, min_area = 7*7, min_total_area = 12*12) -> list[Blob]:
     output_blobs = []
     mean_area = np.mean([blob.area for blob in blobs])
     count = len(blobs)
