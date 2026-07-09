@@ -2,6 +2,49 @@ from typing import Optional, List
 import numpy as np
 from itertools import combinations
 
+
+def direction_vector_from_tdoas(
+    tdoas_measured: np.ndarray,
+    tetrahedra,
+    tdoas_mask: Optional[np.ndarray] = None,
+) -> Optional[np.ndarray]:
+    """Estimate a normalized source direction in ENU from one tetrahedron.
+
+    The minus sign follows the TDOA convention used by ``tdoa_from_pair`` and
+    makes the resulting vector point from the tetrahedron towards the source.
+    Only pairs selected by ``tdoas_mask`` participate in the least-squares
+    estimate.
+    """
+    tdoas_measured = np.asarray(tdoas_measured, dtype=float).reshape(-1)
+    v_matrix = np.asarray(tetrahedra.v_matrix, dtype=float)
+    if len(tdoas_measured) != len(v_matrix):
+        raise ValueError(
+            "TDOA vector and tetrahedron V matrix must have the same length: "
+            f"{len(tdoas_measured)} != {len(v_matrix)}"
+        )
+
+    if tdoas_mask is None:
+        mask = np.ones(len(tdoas_measured), dtype=bool)
+    else:
+        mask = np.asarray(tdoas_mask, dtype=bool).reshape(-1)
+        if len(mask) != len(tdoas_measured):
+            raise ValueError("TDOA mask and TDOA vector must have the same length.")
+
+    mask &= np.isfinite(tdoas_measured)
+    selected_v_matrix = v_matrix[mask]
+    selected_tdoas = tdoas_measured[mask]
+    dimensions = v_matrix.shape[1]
+    if len(selected_tdoas) < dimensions:
+        return None
+    if np.linalg.matrix_rank(selected_v_matrix) < dimensions:
+        return None
+
+    direction = -np.linalg.pinv(selected_v_matrix) @ selected_tdoas.reshape(-1, 1)
+    norm = float(np.linalg.norm(direction))
+    if not np.isfinite(norm) or norm <= np.finfo(float).eps:
+        return None
+    return direction / norm
+
 def wave_vectors(tdoas_measured: List[np.ndarray], environment):
     """
     Calculate wave vectors from measured TDOAs and environment tetrahedra.
@@ -16,8 +59,12 @@ def wave_vectors(tdoas_measured: List[np.ndarray], environment):
     wave_vectors_list = []
     for tdoa, tetrahedra in zip(tdoas_measured, environment.tetrahedras.values()):
         if tetrahedra.is_active:
-            wave_vector = -np.linalg.pinv(tetrahedra.v_matrix) @ tdoa.reshape(-1,1)
-            normalized_wave_vector = wave_vector / np.linalg.norm(wave_vector)
+            normalized_wave_vector = direction_vector_from_tdoas(tdoa, tetrahedra)
+            if normalized_wave_vector is None:
+                normalized_wave_vector = np.full(
+                    (tetrahedra.v_matrix.shape[1], 1),
+                    np.nan,
+                )
             # Expected shape : 2 x 1 for 2D, 3 x 1 for 3D. The shape of v_matrix determines 2D or 3D
             wave_vectors_list.append(normalized_wave_vector)
     return wave_vectors_list
@@ -67,28 +114,39 @@ def two_tetra_intersection(wave_vector_pair, origins_enu_pair, projection_plan: 
     Returns:
     - position: Intersection position or NaN if vectors are divergent.
     """
-    direction_matrix = np.array([wave_vector_pair[0], -wave_vector_pair[1]]).T
-    # TODO maybe np concat is better
-    if wave_vector_pair[0].shape == (3, 1):
-        origins_difference = origins_enu_pair[1] - origins_enu_pair[0]
+    vector_dimension = wave_vector_pair[0].shape[0]
+    project_to_xy = projection_plan is not None or vector_dimension == 2
+
+    if project_to_xy:
+        # Les vecteurs peuvent avoir ete estimes en 3D avec les 6 TDOA. Pour
+        # la triangulation, on ne conserve ici que leur projection horizontale.
+        direction_one = wave_vector_pair[0].ravel()[:2]
+        direction_two = wave_vector_pair[1].ravel()[:2]
+        origin_one = np.asarray(origins_enu_pair[0], dtype=float)[:2]
+        origin_two = np.asarray(origins_enu_pair[1], dtype=float)[:2]
     else:
-        origins_difference = origins_enu_pair[1][:2] - origins_enu_pair[0][:2]
-    direction_matrix = direction_matrix[0, :, :]
+        direction_one = wave_vector_pair[0].ravel()
+        direction_two = wave_vector_pair[1].ravel()
+        origin_one = np.asarray(origins_enu_pair[0], dtype=float)
+        origin_two = np.asarray(origins_enu_pair[1], dtype=float)
+
+    direction_matrix = np.column_stack((direction_one, -direction_two))
+    origins_difference = origin_two - origin_one
     optimal_weights = np.linalg.lstsq(direction_matrix, origins_difference, rcond=None)[0]
     """if np.sign(optimal_weights[0])!=np.sign(optimal_weights[1]):
         #TODO Check if relevant
         print("Vecteurs d'onde divergents")
         return np.full(3, np.nan)"""
-    if wave_vector_pair[0].shape == (3, 1):
+    if not project_to_xy:
         position = 0.5*(
-            origins_enu_pair[0] + optimal_weights[0] * wave_vector_pair[0].ravel()
-            + origins_enu_pair[1] + optimal_weights[1] * wave_vector_pair[1].ravel()
+            origin_one + optimal_weights[0] * direction_one
+            + origin_two + optimal_weights[1] * direction_two
             )
         return position
 
     position_xy = 0.5*(
-        origins_enu_pair[0][:2] + optimal_weights[0] * wave_vector_pair[0].ravel()
-        + origins_enu_pair[1][:2] + optimal_weights[1] * wave_vector_pair[1].ravel()
+        origin_one + optimal_weights[0] * direction_one
+        + origin_two + optimal_weights[1] * direction_two
         )
     if projection_plan is None:
         projection_plan = np.nan

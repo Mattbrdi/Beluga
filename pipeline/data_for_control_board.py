@@ -1,6 +1,7 @@
 from main_module import positions_from_audio
 from src.utils.dashboard import set_dashboard
 from src.utils.sub_classes import Environment, Parameters
+from data_paths_2026 import TEST_DATA2026_ALL_AUDIO_PATHS
 import numpy as np
 from pyproj import Transformer
 import csv
@@ -27,66 +28,7 @@ from math import radians, sin, cos, sqrt, atan2
 # audio_path = [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8295.260511133808.wav", 
 #               r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8296.260511133808.wav"]
 
-TEST_DATA2026_ALL_AUDIO_PATHS = {
-    7: [
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511123530.wav",
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511123530.wav",
-    ],
-    8: [
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511124248.wav",
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511124248.wav",
-    ],
-    9: [
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511125520.wav",
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511125520.wav",
-    ],
-    10: [
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511130305.wav",
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511130305.wav",
-    ],
-    11: [
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511131406.wav",
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511131406.wav",
-    ],
-    12: [
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511132244.wav",
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511132244.wav",
-    ],
-    13: [
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511133026.wav",
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511133026.wav",
-    ],
-    14: [
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511134030.wav",
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511134030.wav",
-    ],
-    15: [
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511134901.wav",
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511134901.wav",
-    ],
-    16: [
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511135634.wav",
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511135634.wav",
-    ],
-    17: [
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511140435.wav",
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511140435.wav",
-    ],
-    18: [
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511141244.wav",
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511141244.wav",
-    ],
-    19: [
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511141906.wav",
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511141906.wav",
-    ],
-    20: [
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8295.260511142534.wav",
-        r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026_all\8296.260511142534.wav",
-    ],
-}
-
-point_number = 9
+point_number = 18
 
 
 audio_path = TEST_DATA2026_ALL_AUDIO_PATHS[point_number]

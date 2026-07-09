@@ -3,6 +3,7 @@
 import os
 from datetime import timedelta
 from time import time
+from typing import Any, Literal, TypeAlias, overload
 import numpy as np
 import soundfile as sf
 import pandas as pd
@@ -20,6 +21,33 @@ from src.denoising_bricks.wt_denoising import wt_denoise
 
 from src.tests.debug_functions import plot_analysis
 from scipy.signal import find_peaks, windows
+
+
+PositionsOutput: TypeAlias = tuple[
+    list[np.ndarray],
+    list[np.ndarray],
+    list[Any],
+    list[float],
+    list[str],
+    list[Any],
+    list[float],
+    list[str],
+    list[str],
+    list[pd.DataFrame],
+]
+PositionsAndTdoasOutput: TypeAlias = tuple[
+    list[np.ndarray],
+    list[np.ndarray],
+    list[Any],
+    list[float],
+    list[str],
+    list[Any],
+    list[float],
+    list[str],
+    list[str],
+    list[pd.DataFrame],
+    list[dict[str, Any]],
+]
 
 #############################################
 ########## Detection to AudioArray ##########
@@ -234,10 +262,10 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
        
         if audio_arrays is None:
             print("WARNING : Audio arrays is None, indicating a setup to detection issue")
-            return None, None, None, None, "reject_setup"
+            return None, None, None, None, "reject_setup", None
     except Exception as e:
         print(f"▒▒▒▒▒▒▒▒▒▒▒▒ Pas de béluga ou erreur: {e}")
-        return None, None, None, None, "reject_setup"
+        return None, None, None, None, "reject_setup", None
     #mb55
     # from src.utils.four_can_generator import generate_correlated_array_from_nparray_int_tdoas
     # audio_data1 = audio_arrays[0].data_array[0:1, :]
@@ -265,7 +293,7 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
     for i in range(len(audio_arrays)):
         if audio_arrays[i].data_array.shape[1] == 0:
             print("WARNING : Canals matching went wrong, audio array's shape is empty")
-            return None, None, None, None, "reject_setup"
+            return None, None, None, None, "reject_setup", None
         audio_arrays[i] = filter_audio_array_from_calltype(audio_arrays[i], parameters.pre_filter_parameters)
 
     # VMD filtering
@@ -312,10 +340,29 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
         tdoas_mask.append(new_mask)
 
     associated_time = event_start_dt
+    tdoa_measurements = []
+    for audio_array, tdoa_values, error_variances, pair_mask in zip(
+        audio_arrays, tdoas_measured, tdoas_error_variance, tdoas_mask
+    ):
+        for pair_id, tdoa_value, error_variance, usable in zip(
+            audio_array.pairs_dict.keys(), tdoa_values, error_variances, pair_mask
+        ):
+            tdoa_measurements.append(
+                {
+                    "timestamp": associated_time,
+                    "duration_s": float(duration),
+                    "call_type": call_type,
+                    "tetra_id": audio_array.metadata.tetra_id,
+                    "pair_id": pair_id,
+                    "tdoa_s": float(tdoa_value),
+                    "error_variance_s2": float(error_variance),
+                    "usable": bool(usable),
+                }
+            )
 
     if not tdoas_mask_check(tdoas_mask):
         print("Warning : Tdoas are not usable")
-        return None, None, associated_time, duration, "reject_tdoa"
+        return None, None, associated_time, duration, "reject_tdoa", tdoa_measurements
 
     end_tdoa = time()
     if parameters.print_level > 0:
@@ -338,12 +385,38 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
         print(f"▒▒▒▒▒▒▒▒▒▒▒▒ Fusion finished in: {end_fusion - end_tdoa:.2f}s")
 
     if position_enu is None:
-        return None, None, associated_time, duration, "reject_fusion"
+        return None, None, associated_time, duration, "reject_fusion", tdoa_measurements
 
-    return position_enu, position_error_variance, associated_time, duration, "ok"
+    return position_enu, position_error_variance, associated_time, duration, "ok", tdoa_measurements
 
 
-def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_files:list[str]) -> tuple[list[np.ndarray], list[np.ndarray], list, list[float], list[str],list, list[float], list[str], list[str], list[pd.DataFrame]] :
+@overload
+def positions_from_audio(
+        model_path: str,
+        env_path: str,
+        param_path: str,
+        audio_files: list[str],
+        return_tdoas: Literal[False] = False,
+        ) -> PositionsOutput: ...
+
+
+@overload
+def positions_from_audio(
+        model_path: str,
+        env_path: str,
+        param_path: str,
+        audio_files: list[str],
+        return_tdoas: Literal[True],
+        ) -> PositionsAndTdoasOutput: ...
+
+
+def positions_from_audio(
+        model_path: str,
+        env_path: str,
+        param_path: str,
+        audio_files: list[str],
+        return_tdoas: bool = False,
+        ) -> PositionsOutput | PositionsAndTdoasOutput:
 
     """Main loop to output positions from an audio.
 
@@ -361,6 +434,9 @@ def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_fi
         associated_times (list[float]) : Beginning times of beluga signals
         durations (list[float]) : Durations of beluga signals
         call_types(list[str]) : List of call types matching the used sounds
+        tdoa_measurements (list[dict], optional): Flat list containing one TDOA
+        per timestamp, tetrahedron and microphone pair. It is appended to the
+        usual return tuple only when ``return_tdoas`` is True.
     """
     ##### JSON reading #####
     #model = MultiHeadResNet(num_call_types=4, pretrained=True)
@@ -385,6 +461,7 @@ def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_fi
     durations = []
     results_dfs = []
     call_types = []
+    tdoa_measurements = []
     all_sounds = ["Whistle", "HFPC", "ECHO", "CC", "Noise"]
     masks_dict = {sound: [] for sound in all_sounds}
 
@@ -464,7 +541,23 @@ def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_fi
                         sounds_lines = [result_df.loc[iters] for result_df in results_dfs]
                         if parameters.print_level >1:
                             print(f'offset : {offset}')
-                        position_enu, position_error_variance, associated_time, duration, status = one_iteration(parameters, audio_files, sounds_lines, call_type, offset, environment, sound_mask)
+                        (
+                            position_enu,
+                            position_error_variance,
+                            associated_time,
+                            duration,
+                            status,
+                            iteration_tdoas,
+                        ) = one_iteration(
+                            parameters, audio_files, sounds_lines, call_type,
+                            offset, environment, sound_mask
+                        )
+
+                        if iteration_tdoas is not None:
+                            for measurement in iteration_tdoas:
+                                measurement["frame_index"] = iters
+                                measurement["event_status"] = status
+                            tdoa_measurements.extend(iteration_tdoas)
 
                         if associated_time is not None:
                             event_times.append(associated_time)
@@ -490,11 +583,12 @@ def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_fi
             main_end = time()
             print(f'Reached max iters in {main_end- main_start}s')
     
-            return (
+            outputs = (
                 positions_enu, positions_error_variance, associated_times, durations, call_types,
                 event_times, event_durations, event_call_types, event_status,
                 results_dfs,   # 👈 NEW
             )
+            return outputs + (tdoa_measurements,) if return_tdoas else outputs
 
         
         iters += 1
@@ -504,8 +598,31 @@ def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_fi
     
     print(f'Finished the full pipeline in {main_end- main_start}s')
     
-    return (
+    outputs = (
         positions_enu, positions_error_variance, associated_times, durations, call_types,
         event_times, event_durations, event_call_types, event_status,
         results_dfs,   # 👈 NEW
     )
+    return outputs + (tdoa_measurements,) if return_tdoas else outputs
+
+
+def tdoas_from_audio(
+        model_path: str,
+        env_path: str,
+        param_path: str,
+        audio_files: list[str],
+        ) -> list[dict[str, Any]]:
+    """Run the audio pipeline and return every estimated TDOA measurement.
+
+    Each item corresponds to one detected event, tetrahedron and microphone
+    pair. Rejected measurements are included with ``usable=False`` so they can
+    be inspected without contaminating statistics based on usable TDOAs.
+    """
+    outputs = positions_from_audio(
+        model_path,
+        env_path,
+        param_path,
+        audio_files,
+        return_tdoas=True,
+    )
+    return outputs[-1]

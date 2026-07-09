@@ -212,8 +212,8 @@ def set_dashboard(audio_files, positions, errors, timestamps, durations, call_ty
     lla_positions = [enu_to_lla(*position, T1_lat, T1_lon, 0) for position in positions]
 
     # Inputs
-    highlight_coords = [(position[0][0], position[1][0]) for position in lla_positions]
-    # highlight_coords = [(position[0], position[1]) for position in lla_positions]
+    # highlight_coords = [(position[0][0], position[1][0]) for position in lla_positions] #low fusion
+    highlight_coords = [(position[0], position[1]) for position in lla_positions] #high fusion
     errors = [(error[0], error[1]) for error in errors]
     highlight_timestamps = [
         (timestamp - datetime(year, month, day, hour, minute, second)).total_seconds()
