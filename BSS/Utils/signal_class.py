@@ -1170,7 +1170,7 @@ class NSpectrogram:
                 nfft=self.nfft,
                 boundary=self.boundary is not None
             )
-
+            #utile si des signaux on été paddé mais c'est tout
             if self.signal_lengths is not None:
                 target_length = int(self.signal_lengths[i])
                 if len(x) > target_length:

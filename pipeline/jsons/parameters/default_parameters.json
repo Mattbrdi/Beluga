@@ -2,7 +2,8 @@
   "debug_mode": false,
   "print_level": 0,
   "max_position_frames": null,
-  "use_gcc": true,
+  "use_gcc": false,
+  "use_mask_based_tdoa": true,
   "location_parameters": {
     "use_h4": true,
     "fusion_type": "high",

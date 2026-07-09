@@ -2,8 +2,92 @@ import matplotlib.pyplot as plt
 import numpy as np 
 from numpy.typing import NDArray
 
-from wav_reader import extract_time_slice
-from stft import scipy_spectrogram, scipy_db_spectrogram, frequency_band
+from impulsive_noise_denoising.wav_reader import extract_time_slice
+from impulsive_noise_denoising.stft import scipy_spectrogram, scipy_db_spectrogram, frequency_band
+
+def _extract_canal_time_slice(canal, frame_rate, start_time, end_time):
+    canal = np.asarray(canal, dtype=np.float64)
+    if canal.ndim != 1:
+        raise ValueError(f"Expected a 1D canal, but got an array with shape {canal.shape}")
+
+    duration = len(canal) / frame_rate
+    if start_time is None or end_time is None:
+        return canal
+    if start_time < 0:
+        raise ValueError(f"Provided start time should be at least zero, but got {start_time}")
+    if start_time >= duration:
+        raise ValueError(f"Provided start time should be less than duration, but got start_time: {start_time}s and duration: {duration}s")
+    if end_time <= 0:
+        raise ValueError(f"Provided end time should be greater than zero, but got {end_time}")
+    if end_time <= start_time:
+        raise ValueError(f"Provided end time should be greater than start time, but got start_time: {start_time}s and end_time: {end_time}s")
+    if end_time > duration:
+        raise ValueError(f"Provided end time should be less than or equal to duration, but got end_time: {end_time}s and duration: {duration}s")
+
+    start_idx = int(round(start_time * frame_rate))
+    end_idx = int(round(end_time * frame_rate))
+    return canal[start_idx:end_idx]
+
+def plot_spectro_1D(
+    canal,
+    frame_rate,
+    outliers=None,
+    is_db=False,
+    start_time=None,
+    end_time=None,
+    fmin=1000,
+    fmax=20000,
+    gain_db=0,
+    range_db=80,
+    n_fft=4096,
+    hop_length=2048,
+    cmap='magma',
+):
+    """Plot the spectrogram of one 1D canal."""
+    extract_canal = _extract_canal_time_slice(canal, frame_rate, start_time, end_time)
+
+    if is_db:
+        freqs, times, D = scipy_db_spectrogram(extract_canal, frame_rate, n_fft, hop_length, gain_db)
+        vmin = -range_db
+        vmax = 0
+        colorbar_format = '%+2.0f dB'
+    else:
+        freqs, times, D = scipy_spectrogram(extract_canal, frame_rate, n_fft, hop_length, gain_db)
+        vmin = 0
+        vmax = np.max(D)
+        colorbar_format = None
+
+    freqs, D = frequency_band(freqs, D, fmin, fmax)
+    extent = [
+        times[0],
+        times[-1] if len(times) > 1 else 0,
+        freqs[0],
+        freqs[-1],
+    ]
+
+    fig, ax = plt.subplots(1, 1, figsize=(30, 5))
+    mappable = ax.imshow(
+        D,
+        origin='lower',
+        aspect='auto',
+        extent=extent,
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+    )
+
+    if outliers is not None:
+        for outlier in outliers:
+            ax.vlines(outlier, freqs[0], freqs[-1], colors='red')
+
+    ax.set_title('Spectrogramme SciPy du Canal')
+    ax.set_ylim([fmin, fmax])
+    ax.set_xlabel('Time (s)')
+    ax.set_ylabel('Frequency (Hz)')
+    plt.colorbar(mappable, ax=ax, format=colorbar_format)
+    plt.tight_layout()
+    plt.show()
+    plt.close(fig)
 
 def plot_spectro(
     tetra_array,

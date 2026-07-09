@@ -8,6 +8,21 @@ from scipy.special import erfc, ndtri
 from scipy.optimize import root_scalar
 from typing import Optional
 
+import sys
+from pathlib import Path
+
+#TODO: Fix this by removing the need for sys and pathlib
+PROJECT_ROOT = Path(__file__).resolve().parents[3]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from time_frequency_mask.configuration import DURATION
+from time_frequency_mask.stft import frequency_band, scipy_stft_complex_psd
+from time_frequency_mask.data_generation.models.mask import AudioMask
+from time_frequency_mask.data_generation.core.power_computation import compute_P_moy, df
+from time_frequency_mask.masknet.run_inference import get_mask_from_array, pad_crop_audio_array, pad_crop_audio_canal
+from time_frequency_mask.tdoa_estimation.blob import output_blobs_from_mask, blob_filtering_heuristic, output_mask_from_blobs
+from time_frequency_mask.tdoa_estimation.tdoa import compute_cross_corr_from_blob
 ############################
 ##### TDOA computation #####
 ############################
@@ -122,6 +137,43 @@ def tdoa_from_pair(hydrophone_pair: HydrophonePair, sample_rate, use_gcc: bool, 
 
     if argmax_idx <2 or argmax_idx > (len(processed_correlation)-2) :#or processed_correlation[argmax_idx]<0:
         #print("WARNING : Some TDOAs are at the frontier or the correlation is <0")
+        # TODO put back the warning after benchmarking
+        use_tdoa = False
+    #if np.abs(tdoa) < 1E-9:
+        # Avoid having 0
+    #    tdoa = 1E-9
+    return tdoa, use_tdoa, scores
+
+def masked_tdoa_from_pair(audio_one, audio_two, max_delay, blobs, sample_rate, compute_scores : bool):
+    """
+    Calculate Time Difference of Arrival (TDOA) from a pair of hydrophones using mask-based TDOA.
+
+    Parameters:
+    - hydrophone_pair: Pair of hydrophones.
+    - blobs: connected components of mask on spectrogram
+    - sample_rate: Sampling rate of the audio signals.
+
+    Returns:
+    - tdoa: Time Difference of Arrival.
+    """
+    use_tdoa = True
+        
+    ############################################################
+    cross_corr = compute_cross_corr_from_blob(audio_one, audio_two, blobs)[:-1] # cuz we need an even number
+
+    ############################################################
+    
+    processed_correlation = cross_corr/(np.max(np.abs(cross_corr))+1E-34)  # Avoid division by zero    
+    if compute_scores:
+        scores, _ = compute_correlation_score(processed_correlation, sample_rate)
+    else:
+        scores = None
+    
+    argmax_idx = np.argmax(processed_correlation)
+    tdoa = (argmax_idx - max_delay) / sample_rate
+
+    if argmax_idx <2 or argmax_idx > (len(processed_correlation)-2) :#or processed_correlation[argmax_idx]<0:
+        # print("WARNING : Some TDOAs are at the frontier or the correlation is <0")
         # TODO put back the warning after benchmarking
         use_tdoa = False
     #if np.abs(tdoa) < 1E-9:
@@ -349,10 +401,71 @@ def crb_from_pair(metadata : AudioMetadata, duration: float, hydrophone_pair: Hy
     if metadata.beluga_call_type == 'HFPC':
         return hfpc_crb_from_pair(metadata, snr, omega0, duration, delay, bandwidth)
     
-    
-    
+def masked_crb_from_pair(metadata : AudioMetadata, duration: float, hydrophone_pair: HydrophonePair, audio_one, audio_two, signal_mask, noise_mask, bandwidth : Optional[float] = None):
+    """
+    Calculate Cramér-Rao Bound (CRB) from a pair of hydrophones.
 
-def tdoas(audio_array: AudioArray, use_gcc : bool = False, compute_scores : bool = False):
+    Parameters:
+    - call_type: Type of the call.
+    - duration: Duration of the call.
+    - hydrophone_pair: Pair of hydrophones.
+    - frequency_range: Optional frequency range.
+
+    Returns:
+    - error estimate corresponding to Ziv Zakai bound
+    - Mask indicating whether the pair should be used
+    """
+    ##### Computing intermediate variables #####
+    snr_ref = hydrophone_pair.hydrophone_ref.snr_power
+    snr_delta = hydrophone_pair.hydrophone_delta.snr_power
+
+    best_error_bound = (1./metadata.sample_rate)**2 / 12
+    if snr_delta is None or snr_ref is None or not(metadata.beluga_call_type in ['Whistle', 'HFPC']):
+        return best_error_bound, True
+
+    if metadata.beluga_call_type == 'Whistle':
+        freqs, time, Zxx_1 = scipy_stft_complex_psd(audio_one)
+        freqs, Zxx_1 = frequency_band(freqs, Zxx_1)
+        
+        Pxx_1 = np.abs(Zxx_1)**2
+        global_noise_psd_1 = np.sum(2 * df * Pxx_1[noise_mask.data == 0]) / np.sum(2 * df * (noise_mask.data == 0))
+
+        freqs, time, Zxx_2 = scipy_stft_complex_psd(audio_two)
+        freqs, Zxx_2 = frequency_band(freqs, Zxx_2)
+        
+        Pxx_2 = np.abs(Zxx_2)**2
+        global_noise_psd_2 = np.sum(2 * df * Pxx_2[noise_mask.data == 0]) / np.sum(2 * df * (noise_mask.data == 0))
+
+        signal_1_mean_power, noise_1_mean_power = compute_P_moy(Pxx_1, signal_mask.data, global_noise_psd_1)
+        signal_2_mean_power, noise_2_mean_power = compute_P_moy(Pxx_2, signal_mask.data, global_noise_psd_2)
+        
+
+        if noise_1_mean_power > 1e-12 and snr_ref < signal_1_mean_power / noise_1_mean_power :
+            snr_ref = signal_1_mean_power / noise_1_mean_power
+        if noise_2_mean_power > 1e-12 and snr_delta < signal_2_mean_power / noise_2_mean_power:
+            snr_delta = signal_2_mean_power / noise_2_mean_power
+        
+        # print("new snr")
+        # print(f"snr_ref {snr_ref}")
+        # print(f"snr_delta {snr_delta}")
+    
+    snr = snr_ref * snr_delta /(1+ snr_ref + snr_delta)
+    omega0 = metadata.central_frequency * 2 * np.pi
+    delay = 2.0 * hydrophone_pair.max_delay_idx / metadata.sample_rate
+
+    if snr < 0 : 
+            return delay**2/12., False
+        
+    ###### Main function #####
+    
+    if metadata.beluga_call_type == 'Whistle':
+        return whistle_crb_from_pair(metadata, snr, omega0, duration, delay, bandwidth)
+    
+    if metadata.beluga_call_type == 'HFPC':
+        return hfpc_crb_from_pair(metadata, snr, omega0, duration, delay, bandwidth)
+
+
+def tdoas(audio_array: AudioArray, use_gcc : bool = False, compute_scores : bool = False, use_mask_based_tdoa : bool = False):
     """
     Compute TDOAs from an audio array.
 
@@ -367,12 +480,35 @@ def tdoas(audio_array: AudioArray, use_gcc : bool = False, compute_scores : bool
     crb_vector = []
     tdoas_mask = []
     all_scores = [] if compute_scores else None
+
+    blobs = []
+    mask = None
+
+    if use_mask_based_tdoa and audio_array.metadata.beluga_call_type == 'Whistle':
+        audio_array_data = audio_array.data_array.copy()
+        audio_array_data = pad_crop_audio_array(audio_array_data)
+        original_mask = AudioMask(get_mask_from_array(audio_array_data, debug=False))
+
+        blobs = output_blobs_from_mask(original_mask)
+        blobs = blob_filtering_heuristic(blobs)
+        
+        filtered_mask = output_mask_from_blobs(blobs)
     
     for hydrophone_pair in audio_array.pairs_dict.values():
         ##### Computing #####
-        tdoa, use_tdoa, scores = tdoa_from_pair(hydrophone_pair, audio_array.metadata.sample_rate, use_gcc, compute_scores)
-        duration = audio_array.data_array.shape[1] / audio_array.metadata.sample_rate
-        crb, use_crb = crb_from_pair(audio_array.metadata, duration, hydrophone_pair)
+        if use_mask_based_tdoa and audio_array.metadata.beluga_call_type == 'Whistle' and len(blobs) != 0:
+            audio_one = pad_crop_audio_canal(hydrophone_pair.hydrophone_ref.audio_r)
+            audio_two = pad_crop_audio_canal(hydrophone_pair.hydrophone_delta.audio_r)
+
+            tdoa, use_tdoa, scores = masked_tdoa_from_pair(audio_one, audio_two, hydrophone_pair.max_delay_idx, blobs, audio_array.metadata.sample_rate, compute_scores)            
+            
+            duration = DURATION
+            crb, use_crb = masked_crb_from_pair(audio_array.metadata, duration, hydrophone_pair, audio_one, audio_two, filtered_mask, original_mask)
+        else:
+            tdoa, use_tdoa, scores = tdoa_from_pair(hydrophone_pair, audio_array.metadata.sample_rate, use_gcc, compute_scores)
+
+            duration = audio_array.data_array.shape[1] / audio_array.metadata.sample_rate
+            crb, use_crb = crb_from_pair(audio_array.metadata, duration, hydrophone_pair)
         
         ##### Agregating #####
         tdoa_vector.append(tdoa)

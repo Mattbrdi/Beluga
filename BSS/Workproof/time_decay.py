@@ -1,6 +1,7 @@
 import os
 os.environ["OMP_NUM_THREADS"] = "1"
 
+from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 import numpy as np
@@ -8,6 +9,8 @@ from scipy import signal as sp_signal
 from ..Utils.signal_class import Signal, MultiSignal, Mixture
 from ..Algo_Separation.Sawada_separation import SawadaBSS
 from ..Utils.associated_dataclasses import StftParameters, EMClusteringParameters
+from ..Utils.save_module import save_sawada_result
+from datetime import datetime
 
 """
 Ce script sert de template à Sawada ainsi que de 
@@ -72,6 +75,26 @@ def test_sawada_separation():
     fig_init, axe_init = mixture_signal.plot_spectrograms(boundary=None, padded=False)
     # Récupération des signaux séparés
     separated_sources = bss.separate_source()
+
+    # Génère une chaîne du style : 20260525_143022
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+
+    save_dir = Path("BSS")/ Path("results") / f"bss_time_decay_example{timestamp}" 
+    save_sawada_result(
+        sawada_model=bss,
+        output_dir=save_dir,
+        original_sources=[MultiSignal([s1]), MultiSignal([s2])],
+        mixture=mixture_signal,
+        applied_mixture=mixer,
+        separated_sources=separated_sources,
+        metadata={
+            "id" : f"{timestamp}",
+            "workproof": "time_decay",
+            "example": "test_sawada_separation",
+        },
+        overwrite=True,
+    )
+    print(f"Resultat sauvegarde dans : {save_dir}")
     
     # --- 4. Visualisation des résultats ---
     
