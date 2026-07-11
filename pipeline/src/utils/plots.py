@@ -462,7 +462,13 @@ def plot_3d_pos(audio_arrays : list[AudioArray], environment : Environment, para
         position_enu, position_error_variance = low_fusion(tdoas_measured, tdoas_error_variance, tdoas_mask, environment, parameters.location_parameters.projection_plan)
         print(f'Low pos : {position_enu}')
     else : #fusion_type == 'high'
-        position_enu, position_error_variance = high_fusion(tdoas_measured, tdoas_error_variance, environment, projection_plan = parameters.location_parameters.projection_plan)
+        position_enu, position_error_variance = high_fusion(
+            tdoas_measured,
+            tdoas_error_variance,
+            environment,
+            projection_plan=parameters.location_parameters.projection_plan,
+            project_directions_to_xy=parameters.location_parameters.project_directions_to_xy,
+        )
         print(f'High pos : {position_enu}')
     output_path_3d = output_folder + '3D position '+parameters.location_parameters.fusion_type+ ' fusion.png'
     output_path_2d = output_folder + '2D position '+parameters.location_parameters.fusion_type+ ' fusion.png'

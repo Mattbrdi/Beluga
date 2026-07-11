@@ -4,6 +4,12 @@ from pathlib import Path
 
 
 AUDIO_DATA_DIR = Path(__file__).resolve().parent / "test_data2026_all" / "data"
+GROUND_TRUTH_PATH = (
+    r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\ground_truth\trace_gps_calibration.csv"
+)
+MODEL_PATH = "jsons/models/mobile_net_8_layers_qat.pt"
+PARAM_PATH = "jsons/parameters/default_parameters.json"
+ENV_PATH = "jsons/environments/env_cacouna_may2026.json"
 
 POINT_TIMESTAMPS: dict[int, str] = {
     7: "260511123530",
@@ -21,6 +27,8 @@ POINT_TIMESTAMPS: dict[int, str] = {
     19: "260511141906",
     20: "260511142534",
 }
+
+POINT_NUMBERS: list[int] = sorted(POINT_TIMESTAMPS)
 
 TEST_DATA2026_ALL_AUDIO_PATHS: dict[int, list[str]] = {
     point_number: [

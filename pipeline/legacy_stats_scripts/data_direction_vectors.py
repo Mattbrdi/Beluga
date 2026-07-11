@@ -6,7 +6,12 @@ import json
 from math import atan2, degrees, sqrt
 from pathlib import Path
 import re
+import sys
 from typing import Any
+
+PIPELINE_DIR = Path(__file__).resolve().parents[1]
+if str(PIPELINE_DIR) not in sys.path:
+    sys.path.insert(0, str(PIPELINE_DIR))
 
 import numpy as np
 
@@ -14,7 +19,7 @@ from src.location_bricks.high_level_fusion import direction_vector_from_tdoas
 from src.utils.sub_classes import Environment
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
+SCRIPT_DIR = PIPELINE_DIR
 DEFAULT_TDOA_RESULTS_DIR = SCRIPT_DIR / "test_data2026_all" / "results" / "tdoa_stats"
 DEFAULT_ENV_PATH = SCRIPT_DIR / "jsons" / "environments" / "env_cacouna_may2026.json"
 DEFAULT_PARAM_PATH = SCRIPT_DIR / "jsons" / "parameters" / "default_parameters.json"
