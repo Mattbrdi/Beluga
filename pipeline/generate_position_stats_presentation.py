@@ -4,10 +4,9 @@ Generation de la presentation HTML des resultats de localisation.
 Utilisation simple, depuis le dossier pipeline :
     python generate_position_stats_presentation.py
 
-Par defaut, le script utilise automatiquement :
-    - le dernier dossier test_data2026_all/results/position_stats/run_* contenant summary.csv
-    - le dernier dossier test_data2026_all/results/tdoa_stats/run_* contenant plots/
-    - le dernier dossier test_data2026_all/results/tdoa_stats/run_* contenant directions_detail.csv
+Par defaut, le script utilise automatiquement le dernier dossier de resultats
+contenant summary.csv. Si ce dossier contient aussi plots/ et
+directions_detail.csv, il est utilise pour les slides TDOA et directions.
 
 Le fichier de presentation est genere par defaut dans le meme dossier que
 les resultats de positions utilises, par exemple :
@@ -65,13 +64,19 @@ PRESENTATION_DIRECTION_LENGTH_M = PRESENTATION_ENU_SIZE_M * 1.6
 def find_results_dir() -> Path:
     run_dirs = [
         path
-        for path in RESULTS_ROOT.glob("run_*")
-        if path.is_dir() and (path / "summary.csv").exists()
+        for root in (RESULTS_ROOT, ALL_RESULTS_ROOT)
+        if root.is_dir()
+        for path in root.glob("*")
+        if path.is_dir()
+        and (path / "summary.csv").is_file()
+        and any(path.glob("point_*_positions_detail.csv"))
     ]
     return max(run_dirs, key=lambda path: path.stat().st_mtime) if run_dirs else RESULTS_ROOT
 
 
 def find_tdoa_results_dir() -> Path | None:
+    if (RESULTS_DIR / "plots").is_dir():
+        return RESULTS_DIR
     run_dirs = [
         path
         for path in TDOA_RESULTS_ROOT.glob("run_*")
@@ -81,6 +86,8 @@ def find_tdoa_results_dir() -> Path | None:
 
 
 def find_direction_results_dir() -> Path | None:
+    if (RESULTS_DIR / "directions_detail.csv").is_file():
+        return RESULTS_DIR
     run_dirs = [
         path
         for path in TDOA_RESULTS_ROOT.glob("run_*")
