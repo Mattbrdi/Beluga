@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any
 
@@ -10,16 +10,16 @@ from typing import Any
 class GeneratorConfig:
     """Parametres transmis a AudioSceneGenerator."""
 
-    fs: int = 8_000
-    scene_duration: float = 3.0
-    n_sources: int = 2
-    n_mics: int = 3
-    max_delay: int = 12
-    source_placement_rate: float = 0.75
-    local_noise_placement_rate: float = 1.0 / 3.0
-    source_gain_range: tuple[float, float] = (0.5, 1.0)
-    local_noise_gain_range: tuple[float, float] = (0.02, 0.15)
-    continuous_noise_gain_range: tuple[float, float] = (0.05, 0.05)
+    fs: int
+    scene_duration: float
+    n_sources: int
+    n_mics: int
+    max_delay: int
+    source_placement_rate: float
+    local_noise_placement_rate: float
+    source_gain_range: tuple[float, float]
+    local_noise_gain_range: tuple[float, float]
+    continuous_noise_gain_range: tuple[float, float]
 
     def __post_init__(self) -> None:
         if self.fs <= 0:
@@ -42,13 +42,11 @@ class GeneratorConfig:
 class DatasetConfig:
     """Configuration reproductible d'un dataset et de ses splits."""
 
-    generator: GeneratorConfig = field(default_factory=GeneratorConfig)
-    scenario: str = "default"
-    splits: dict[str, int] = field(
-        default_factory=lambda: {"train": 1_000, "validation": 100, "test": 100}
-    )
-    base_seed: int = 42
-    compressed: bool = True
+    generator: GeneratorConfig
+    scenario: str
+    splits: dict[str, int] #name : nombre d'echantillon ex : {"train": 1000, "test" : 100}
+    base_seed: int
+    compressed: bool
 
     def __post_init__(self) -> None:
         if not self.scenario or not self.scenario.isidentifier():
@@ -65,7 +63,7 @@ class DatasetConfig:
 
     @classmethod
     def from_dict(cls, raw: dict[str, Any]) -> "DatasetConfig":
-        generator_raw = dict(raw.get("generator", {}))
+        generator_raw = dict(raw["generator"])
         for key in (
             "source_gain_range",
             "local_noise_gain_range",
@@ -75,10 +73,10 @@ class DatasetConfig:
                 generator_raw[key] = tuple(generator_raw[key])
         return cls(
             generator=GeneratorConfig(**generator_raw),
-            scenario=str(raw.get("scenario", "default")),
-            splits=dict(raw.get("splits", {"train": 1_000, "validation": 100, "test": 100})),
-            base_seed=int(raw.get("base_seed", 42)),
-            compressed=bool(raw.get("compressed", True)),
+            scenario=str(raw["scenario"]),
+            splits=dict(raw["splits"]),
+            base_seed=int(raw["base_seed"]),
+            compressed=bool(raw["compressed"]),
         )
 
     @classmethod
