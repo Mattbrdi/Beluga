@@ -21,3 +21,4 @@ sandbox*.ipynb
 results*/
 results*.py 
 .vscode/*
+time_frequency_mask/data_generation/data/

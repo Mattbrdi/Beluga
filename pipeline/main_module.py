@@ -285,7 +285,7 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
     tdoas_error_variance = []
     tdoas_mask = []
     for audio_array in audio_arrays:
-        new_tdoa, new_crb, new_mask, _ = tdoas(audio_array, use_gcc=False, compute_scores=False)
+        new_tdoa, new_crb, new_mask, _ = tdoas(audio_array, use_gcc=False, compute_scores=False, use_mask_based_tdoa=parameters.use_mask_based_tdoa)
         tdoas_measured.append(new_tdoa)
         tdoas_error_variance.append(new_crb)
         tdoas_mask.append(new_mask)
