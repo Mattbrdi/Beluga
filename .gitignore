@@ -21,10 +21,16 @@ test*/
 tests/**/__pycache__/
 tests/**/*.py[cod]
 sandbox*.py
-test*.py
 !tests/**/*.py
 results*/
 results*.py 
 .vscode/*
 BSS/Dataset/generated/
 *.txt
+test_data*/
+sandbox*.py
+sandbox*.ipynb 
+results*/
+results*.py 
+.vscode/*
+time_frequency_mask/data_generation/data/
