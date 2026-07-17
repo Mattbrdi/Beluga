@@ -15,7 +15,6 @@ impulsive_noise_denoising/ml_denoising/data/
 impulsive_noise_denoising/ml_denoising/runs/
 runs/
 *.py[cod]
-test*/
 !tests/
 !tests/**
 tests/**/__pycache__/
