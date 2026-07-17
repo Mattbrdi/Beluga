@@ -1,7 +1,8 @@
 """Trace la repartition des TDOA pour chaque point, tetraedre et paire.
 
 Par defaut, le script utilise le ``tdoas_detail.csv`` du run TDOA le plus
-recent et ne trace que les mesures marquees comme utilisables.
+recent et ne trace que les mesures marquees comme utilisables. Aucune valeur
+n'est exclue par un filtre statistique +/- 2 ecarts types.
 """
 
 import argparse
@@ -12,7 +13,7 @@ import re
 from statistics import median
 from typing import Any
 
-from data_tdoa_stats import two_pass_tdoa_stats
+from legacy_stats_scripts.data_tdoa_stats import two_pass_tdoa_stats
 
 
 PAIR_PATTERN = re.compile(r"(H\d+H\d+)$")
@@ -174,7 +175,7 @@ def plot_distributions(
 
         median_std_by_tetra = {
             tetra_id: median(
-                stats["std"]
+                stats["std_to_median"]
                 for (current_point, current_tetra, _), stats in group_stats.items()
                 if current_point == point and current_tetra == tetra_id
             )
@@ -186,7 +187,7 @@ def plot_distributions(
         )
 
         title_area_height = 2.2
-        figure_height = 3.7 * len(tetra_ids) + title_area_height
+        figure_height = 4.5 * len(tetra_ids) + title_area_height
         fig, axes = plt.subplots(
             len(tetra_ids),
             len(pairs),
@@ -205,6 +206,8 @@ def plot_distributions(
                 stats = group_stats[(point, tetra_id, pair)]
                 mean_us = stats["mean"]
                 std_us = stats["std"]
+                median_us = stats["median"]
+                std_to_median_us = stats["std_to_median"]
                 ax.hist(
                     values,
                     bins=bin_edges,
@@ -220,6 +223,13 @@ def plot_distributions(
                     linewidth=2.0,
                     label="Moyenne",
                 )
+                ax.axvline(
+                    median_us,
+                    color="#7B1FA2",
+                    linestyle="-",
+                    linewidth=2.0,
+                    label="Mediane",
+                )
                 ax.set_title(f"{tetra_id} - {pair}")
                 ax.set_xlabel("TDOA (microsecondes)")
                 ax.set_ylabel("Nombre de mesures")
@@ -228,11 +238,12 @@ def plot_distributions(
                 ax.grid(axis="y", alpha=0.25)
                 ax.text(
                     0.5,
-                    -0.28,
-                    f"Moyenne apres filtre : {mean_us:.3f} us\n"
-                    f"Ecart type apres filtre : {std_us:.3f} us\n"
-                    f"n = {len(values)}/{len(stats['initial_values'])} "
-                    f"({stats['excluded_count']} exclue(s))",
+                    -0.34,
+                    f"Moyenne : {mean_us:.3f} us\n"
+                    f"Ecart type : {std_us:.3f} us\n"
+                    f"Mediane : {median_us:.3f} us\n"
+                    f"Ecart type a la mediane : {std_to_median_us:.3f} us\n"
+                    f"n = {len(values)}",
                     transform=ax.transAxes,
                     ha="center",
                     va="top",
@@ -242,16 +253,15 @@ def plot_distributions(
         selection = "toutes les mesures" if include_rejected else "mesures utilisables"
         fig.suptitle(
             f"Point {point} - Repartition des TDOA par tetraedre et paire\n"
-            f"Mediane des ecarts types - {tetra_std_title}\n"
-            f"({selection}, filtre initial +/- 2 ecarts types, "
-            f"bins : {bin_width_us:.3f} us)",
+            f"Mediane des ecarts types a la mediane - {tetra_std_title}\n"
+            f"({selection}, sans exclusion statistique, bins : {bin_width_us:.3f} us)",
             fontsize=15,
             y=0.98,
         )
         fig.subplots_adjust(
             top=1.0 - title_area_height / figure_height,
-            bottom=0.16,
-            hspace=0.75,
+            bottom=0.22,
+            hspace=0.95,
             wspace=0.32,
         )
 

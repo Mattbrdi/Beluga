@@ -2,15 +2,23 @@
 
 Lancer ce script depuis le dossier ``pipeline``. Le CSV de detail contient
 toutes les mesures, y compris celles masquees par la pipeline. Les moyennes et
-ecarts types sont calcules uniquement avec les mesures dont ``usable`` est vrai.
+ecarts types sont calcules avec toutes les mesures dont ``usable`` est vrai,
+sans exclusion statistique supplementaire.
 """
 
 import csv
 from collections import defaultdict
 from datetime import datetime
 import os
-from statistics import fmean, pstdev
+from pathlib import Path
+from math import sqrt
+from statistics import fmean, median, pstdev
+import sys
 from typing import Any, Iterable
+
+PIPELINE_DIR = Path(__file__).resolve().parents[1]
+if str(PIPELINE_DIR) not in sys.path:
+    sys.path.insert(0, str(PIPELINE_DIR))
 
 DETAIL_FIELDS = [
     "point_number",
@@ -34,21 +42,25 @@ SUMMARY_FIELDS = [
     "count_total",
     "count_usable",
     "count_rejected",
-    "count_after_2std",
-    "count_excluded_2std",
-    "initial_mean_tdoa_s",
-    "initial_std_tdoa_s",
-    "initial_mean_tdoa_us",
-    "initial_std_tdoa_us",
     "mean_tdoa_s",
     "std_tdoa_s",
+    "median_tdoa_s",
+    "std_to_median_tdoa_s",
     "mean_tdoa_us",
     "std_tdoa_us",
+    "median_tdoa_us",
+    "std_to_median_tdoa_us",
 ]
 
 
 def two_pass_tdoa_stats(values: Iterable[float]) -> dict[str, Any]:
-    """Calcule les statistiques, filtre a 2 sigma, puis recalcule."""
+    """Calcule les statistiques sans retirer de valeurs extremes.
+
+    Le nom de fonction et les cles ``filtered_values`` / ``excluded_count`` sont
+    conserves pour compatibilite avec les scripts existants. Desormais,
+    ``filtered_values`` contient simplement toutes les valeurs d'entree et
+    ``excluded_count`` vaut toujours 0.
+    """
     initial_values = [float(value) for value in values]
     if not initial_values:
         return {
@@ -58,20 +70,18 @@ def two_pass_tdoa_stats(values: Iterable[float]) -> dict[str, Any]:
             "initial_std": None,
             "mean": None,
             "std": None,
+            "median": None,
+            "std_to_median": None,
             "excluded_count": 0,
         }
 
     initial_mean = fmean(initial_values)
     initial_std = pstdev(initial_values)
-    if initial_std == 0:
-        filtered_values = initial_values.copy()
-    else:
-        threshold = 2.0 * initial_std
-        filtered_values = [
-            value
-            for value in initial_values
-            if abs(value - initial_mean) <= threshold
-        ]
+    median_value = median(initial_values)
+    std_to_median = sqrt(
+        fmean((value - median_value) ** 2 for value in initial_values)
+    )
+    filtered_values = initial_values.copy()
 
     return {
         "initial_values": initial_values,
@@ -80,7 +90,9 @@ def two_pass_tdoa_stats(values: Iterable[float]) -> dict[str, Any]:
         "initial_std": initial_std,
         "mean": fmean(filtered_values),
         "std": pstdev(filtered_values),
-        "excluded_count": len(initial_values) - len(filtered_values),
+        "median": median_value,
+        "std_to_median": std_to_median,
+        "excluded_count": 0,
     }
 
 
@@ -127,10 +139,10 @@ def compute_tdoa_stats(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
         usable_values = [float(row["tdoa_s"]) for row in group if row["usable"]]
         stats = two_pass_tdoa_stats(usable_values)
         count_usable = len(usable_values)
-        initial_mean_s = stats["initial_mean"]
-        initial_std_s = stats["initial_std"]
         mean_s = stats["mean"]
         std_s = stats["std"]
+        median_s = stats["median"]
+        std_to_median_s = stats["std_to_median"]
         summaries.append(
             {
                 "point_number": point_number,
@@ -139,20 +151,16 @@ def compute_tdoa_stats(rows: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
                 "count_total": len(group),
                 "count_usable": count_usable,
                 "count_rejected": len(group) - count_usable,
-                "count_after_2std": len(stats["filtered_values"]),
-                "count_excluded_2std": stats["excluded_count"],
-                "initial_mean_tdoa_s": initial_mean_s,
-                "initial_std_tdoa_s": initial_std_s,
-                "initial_mean_tdoa_us": (
-                    None if initial_mean_s is None else initial_mean_s * 1_000_000.0
-                ),
-                "initial_std_tdoa_us": (
-                    None if initial_std_s is None else initial_std_s * 1_000_000.0
-                ),
                 "mean_tdoa_s": mean_s,
                 "std_tdoa_s": std_s,
+                "median_tdoa_s": median_s,
+                "std_to_median_tdoa_s": std_to_median_s,
                 "mean_tdoa_us": None if mean_s is None else mean_s * 1_000_000.0,
                 "std_tdoa_us": None if std_s is None else std_s * 1_000_000.0,
+                "median_tdoa_us": None if median_s is None else median_s * 1_000_000.0,
+                "std_to_median_tdoa_us": (
+                    None if std_to_median_s is None else std_to_median_s * 1_000_000.0
+                ),
             }
         )
     return summaries
@@ -189,12 +197,12 @@ def run_point(
 
 
 if __name__ == "__main__":
-    from data_position_stats import (
+    from data_paths_2026 import (
+        ENV_PATH,
+        MODEL_PATH,
+        PARAM_PATH,
         POINT_NUMBERS,
         TEST_DATA2026_ALL_AUDIO_PATHS,
-        env_path,
-        model_path,
-        param_path,
     )
 
     run_id = datetime.now().strftime("run_%Y%m%d_%H%M%S_%f")
@@ -214,9 +222,9 @@ if __name__ == "__main__":
                 run_point(
                     current_point,
                     TEST_DATA2026_ALL_AUDIO_PATHS[current_point],
-                    model_path,
-                    env_path,
-                    param_path,
+                    MODEL_PATH,
+                    ENV_PATH,
+                    PARAM_PATH,
                 )
             )
         except Exception as exc:

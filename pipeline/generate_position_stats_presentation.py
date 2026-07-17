@@ -4,13 +4,13 @@ Generation de la presentation HTML des resultats de localisation.
 Utilisation simple, depuis le dossier pipeline :
     python generate_position_stats_presentation.py
 
-Par defaut, le script utilise automatiquement :
-    - le dernier dossier test_data2026_all/results/position_stats/run_* contenant summary.csv
-    - le dernier dossier test_data2026_all/results/tdoa_stats/run_* contenant plots/
-    - le dernier dossier test_data2026_all/results/tdoa_stats/run_* contenant directions_detail.csv
+Par defaut, le script utilise automatiquement le dernier dossier de resultats
+contenant summary.csv. Si ce dossier contient aussi plots/ et
+directions_detail.csv, il est utilise pour les slides TDOA et directions.
 
-Le fichier de presentation est genere dans :
-    test_data2026_all/results/
+Le fichier de presentation est genere par defaut dans le meme dossier que
+les resultats de positions utilises, par exemple :
+    test_data2026_all/results/result_YYYYMMDD_HHMMSS_xxxxxx/
 
 avec un nom unique horodate, donc l'ancienne presentation n'est pas ecrasee.
 Les images sont integrees directement dans le HTML, ce qui evite les problemes
@@ -22,6 +22,11 @@ Pour choisir explicitement les resultats a utiliser :
       --tdoa-results "test_data2026_all/results/tdoa_stats/run_YYYYMMDD_HHMMSS_xxxxxx" ^
       --direction-results "test_data2026_all/results/tdoa_stats/run_YYYYMMDD_HHMMSS_xxxxxx" ^
       --output "presentation_projection_xy.html"
+
+Si les positions, TDOA et directions ont ete generes avec data_all_stats.py
+dans un meme dossier :
+    python generate_position_stats_presentation.py ^
+      --all-results "test_data2026_all/results/result_YYYYMMDD_HHMMSS_xxxxxx"
 
 Sous PowerShell, utiliser plutot le backtick ` en fin de ligne, ou tout mettre
 sur une seule ligne.
@@ -59,13 +64,19 @@ PRESENTATION_DIRECTION_LENGTH_M = PRESENTATION_ENU_SIZE_M * 1.6
 def find_results_dir() -> Path:
     run_dirs = [
         path
-        for path in RESULTS_ROOT.glob("run_*")
-        if path.is_dir() and (path / "summary.csv").exists()
+        for root in (RESULTS_ROOT, ALL_RESULTS_ROOT)
+        if root.is_dir()
+        for path in root.glob("*")
+        if path.is_dir()
+        and (path / "summary.csv").is_file()
+        and any(path.glob("point_*_positions_detail.csv"))
     ]
     return max(run_dirs, key=lambda path: path.stat().st_mtime) if run_dirs else RESULTS_ROOT
 
 
 def find_tdoa_results_dir() -> Path | None:
+    if (RESULTS_DIR / "plots").is_dir():
+        return RESULTS_DIR
     run_dirs = [
         path
         for path in TDOA_RESULTS_ROOT.glob("run_*")
@@ -75,6 +86,8 @@ def find_tdoa_results_dir() -> Path | None:
 
 
 def find_direction_results_dir() -> Path | None:
+    if (RESULTS_DIR / "directions_detail.csv").is_file():
+        return RESULTS_DIR
     run_dirs = [
         path
         for path in TDOA_RESULTS_ROOT.glob("run_*")
@@ -90,9 +103,8 @@ SUMMARY_PATH = RESULTS_DIR / "summary.csv"
 
 
 def default_output_path() -> Path:
-    run_name = RESULTS_DIR.name if RESULTS_DIR != RESULTS_ROOT else "root"
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return ALL_RESULTS_ROOT / f"position_stats_presentation_{run_name}_{timestamp}.html"
+    return RESULTS_DIR / f"position_stats_presentation_{timestamp}.html"
 
 
 OUTPUT_PATH = default_output_path()
@@ -101,6 +113,17 @@ OUTPUT_PATH = default_output_path()
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         description="Genere la presentation HTML des statistiques de position."
+    )
+    parser.add_argument(
+        "--all-results",
+        type=Path,
+        default=None,
+        help=(
+            "Dossier unique contenant summary.csv, plots/ et directions_detail.csv. "
+            "Pratique pour les sorties de data_all_stats.py. Les options "
+            "--position-results, --tdoa-results et --direction-results peuvent "
+            "encore surcharger ce choix."
+        ),
     )
     parser.add_argument(
         "--position-results",
@@ -159,7 +182,7 @@ def resolve_output_path(output_arg: Path | None) -> Path:
         return default_output_path()
     if output_arg.is_absolute():
         return output_arg
-    return ALL_RESULTS_ROOT / output_arg
+    return RESULTS_DIR / output_arg
 
 
 def validate_results_dirs() -> None:
@@ -191,8 +214,10 @@ def read_detail(point_number: int) -> pd.DataFrame:
     detail_path = RESULTS_DIR / f"point_{point_number}_positions_detail.csv"
     detail_df = pd.read_csv(detail_path, skipinitialspace=True)
     detail_df.columns = [column.strip() for column in detail_df.columns]
-    if "kept" in detail_df.columns:
-        detail_df["kept"] = detail_df["kept"].astype(str).str.strip().str.lower().eq("true")
+    # La presentation affiche maintenant toutes les positions finies. La colonne
+    # historique "kept" est forcee a True pour ne plus masquer les points issus
+    # d'anciens runs qui appliquaient un filtre statistique.
+    detail_df["kept"] = True
     return detail_df
 
 
@@ -217,20 +242,12 @@ def generate_presentation_enu_plot(
 
     fig, ax = plt.subplots(figsize=(10, 10))
     ax.scatter(
-        xy_positions[:, 0],
-        xy_positions[:, 1],
-        color="tab:gray",
-        marker="x",
-        s=35,
-        label="Positions trouvees",
-    )
-    ax.scatter(
         xy_positions[kept_mask, 0],
         xy_positions[kept_mask, 1],
         color="tab:blue",
         marker="x",
         s=55,
-        label="Positions gardees",
+        label="Positions trouvees",
     )
     ax.plot(
         ground_truth_xy[:, 0],
@@ -241,7 +258,8 @@ def generate_presentation_enu_plot(
         linewidth=1.5,
         label="Ground truth",
     )
-    mean_xy = np.mean(xy_positions[kept_mask], axis=0) if np.any(kept_mask) else np.mean(xy_positions, axis=0)
+    mean_xy = np.mean(xy_positions, axis=0)
+    median_xy = np.median(xy_positions, axis=0)
     ax.scatter(
         mean_xy[0],
         mean_xy[1],
@@ -249,7 +267,17 @@ def generate_presentation_enu_plot(
         marker="+",
         s=180,
         linewidths=2,
-        label="Position moyenne gardee",
+        label="Position moyenne",
+    )
+    ax.scatter(
+        median_xy[0],
+        median_xy[1],
+        color="tab:purple",
+        marker="D",
+        s=90,
+        edgecolor="black",
+        linewidths=0.8,
+        label="Position mediane",
     )
 
     tetra_ids = list(environment.tetrahedras.keys())
@@ -285,12 +313,17 @@ def generate_presentation_enu_plot(
     ax.set_aspect("equal", adjustable="box")
     ax.set_xlabel("x ENU (m)")
     ax.set_ylabel("y ENU (m)")
-    ax.set_title(f"Point {point_number} - Plan ENU 2 500 m x 2 500 m")
+    ax.set_title(
+        f"Point {point_number} - Plan ENU "
+        f"{PRESENTATION_ENU_SIZE_M:.0f} m x {PRESENTATION_ENU_SIZE_M:.0f} m"
+    )
     ax.grid(True, alpha=0.25)
     ax.legend()
     fig.tight_layout()
 
-    output_path = RESULTS_DIR / f"point_{point_number}_presentation_enu.png"
+    output_dir = RESULTS_DIR / "plots"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"point_{point_number}_presentation_enu.png"
     fig.savefig(output_path, dpi=200)
     plt.close(fig)
     return output_path
@@ -319,7 +352,7 @@ def generate_direction_map(
     environment: Environment,
     directions_df: pd.DataFrame,
 ) -> Path | None:
-    """Trace les directions liees aux positions conservees du point."""
+    """Trace les directions liees aux positions du point."""
     detail_df = read_detail(point_number)
     kept_df = detail_df[detail_df["kept"]].copy()
     if kept_df.empty or directions_df.empty:
@@ -354,7 +387,7 @@ def generate_direction_map(
         color="tab:blue",
         marker="x",
         s=55,
-        label=f"Positions gardees ({len(kept_df)})",
+        label=f"Positions ({len(kept_df)})",
         zorder=4,
     )
     ax.plot(
@@ -364,7 +397,7 @@ def generate_direction_map(
         marker="o",
         markersize=4,
         linewidth=1.5,
-        label="Ground truth des positions gardees",
+        label="Ground truth des positions",
         zorder=3,
     )
 
@@ -426,14 +459,16 @@ def generate_direction_map(
     ax.set_xlabel("x ENU (m)")
     ax.set_ylabel("y ENU (m)")
     ax.set_title(
-        f"Point {point_number} - Directions liees aux positions gardees\n"
+        f"Point {point_number} - Directions liees aux positions\n"
         f"Projection horizontale, fleches de {PRESENTATION_DIRECTION_LENGTH_M:.0f} m"
     )
     ax.grid(True, alpha=0.25)
     ax.legend(loc="upper left")
     fig.tight_layout()
 
-    output_path = RESULTS_DIR / f"point_{point_number}_direction_map.png"
+    output_dir = RESULTS_DIR / "plots"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_path = output_dir / f"point_{point_number}_direction_map.png"
     fig.savefig(output_path, dpi=200)
     plt.close(fig)
     return output_path
@@ -444,10 +479,38 @@ def add_kept_stats(summary_df: pd.DataFrame) -> pd.DataFrame:
     std_x_kept = []
     std_y_kept = []
 
-    for _, row in summary_df.iterrows():
+    for index, row in summary_df.iterrows():
         point_number = int(row["point_number"])
         detail_df = read_detail(point_number)
-        kept_df = detail_df[detail_df["kept"]]
+        kept_df = detail_df
+        xy = kept_df[["x", "y"]].to_numpy(dtype=float)
+        mean_xy = np.mean(xy, axis=0)
+        median_xy = np.median(xy, axis=0)
+        distances_to_mean = np.linalg.norm(xy - mean_xy, axis=1)
+        distances_to_median = np.linalg.norm(xy - median_xy, axis=1)
+
+        summary_df.loc[index, "kept_count"] = len(kept_df)
+        summary_df.loc[index, "total_count"] = len(kept_df)
+        summary_df.loc[index, "mean_x"] = mean_xy[0]
+        summary_df.loc[index, "mean_y"] = mean_xy[1]
+        summary_df.loc[index, "median_x"] = median_xy[0]
+        summary_df.loc[index, "median_y"] = median_xy[1]
+        summary_df.loc[index, "variance_x"] = float(np.var(xy[:, 0]))
+        summary_df.loc[index, "variance_y"] = float(np.var(xy[:, 1]))
+        summary_df.loc[index, "std_x"] = float(np.std(xy[:, 0]))
+        summary_df.loc[index, "std_y"] = float(np.std(xy[:, 1]))
+        summary_df.loc[index, "std_distance_to_median_xy_m"] = float(
+            np.std(distances_to_median)
+        )
+        summary_df.loc[index, "mean_distance_to_ground_truth_m"] = float(
+            kept_df["distance_m"].mean()
+        )
+        summary_df.loc[index, "mean_distance_to_mean_xy_m"] = float(
+            np.mean(distances_to_mean)
+        )
+        summary_df.loc[index, "mean_distance_to_median_xy_m"] = float(
+            np.mean(distances_to_median)
+        )
         std_x_kept.append(float(kept_df["x"].std(ddof=0)))
         std_y_kept.append(float(kept_df["y"].std(ddof=0)))
 
@@ -468,14 +531,14 @@ def metric_card(label: str, value: str) -> str:
 def summary_table(summary_df: pd.DataFrame) -> str:
     rows = []
     for _, row in summary_df.iterrows():
-        kept_ratio = row["kept_count"] / row["total_count"]
         rows.append(
             "<tr>"
             f"<td>{int(row['point_number'])}</td>"
-            f"<td>{int(row['kept_count'])}/{int(row['total_count'])}</td>"
-            f"<td>{pct(kept_ratio)}</td>"
+            f"<td>{int(row['total_count'])}</td>"
             f"<td>{fmt(row['mean_distance_to_ground_truth_m'])} m</td>"
             f"<td>{fmt(row['mean_distance_to_mean_xy_m'])} m</td>"
+            f"<td>{fmt(row['mean_distance_to_median_xy_m'])} m</td>"
+            f"<td>{fmt(row['std_distance_to_median_xy_m'])} m</td>"
             f"<td>({fmt(row['std_x_kept'])}, {fmt(row['std_y_kept'])}) m</td>"
             "</tr>"
         )
@@ -485,11 +548,12 @@ def summary_table(summary_df: pd.DataFrame) -> str:
       <thead>
         <tr>
           <th>Point</th>
-          <th>Gardees</th>
-          <th>Taux</th>
+          <th>Positions</th>
           <th>Dist. moy. GT</th>
           <th>Dist. moy. moyenne</th>
-          <th>Std x,y gardes</th>
+          <th>Dist. moy. mediane</th>
+          <th>Std dist. mediane</th>
+          <th>Std x,y</th>
         </tr>
       </thead>
       <tbody>
@@ -502,27 +566,37 @@ def summary_table(summary_df: pd.DataFrame) -> str:
 def point_slide(row: pd.Series) -> str:
     point_number = int(row["point_number"])
     detail_df = read_detail(point_number)
-    kept_df = detail_df[detail_df["kept"]]
-    kept_ratio = row["kept_count"] / row["total_count"]
+    kept_df = detail_df
 
     median_gt_distance = kept_df["distance_m"].median()
     max_gt_distance = kept_df["distance_m"].max()
-    median_mean_distance = kept_df["distance_to_mean_xy_m"].median()
+    xy = kept_df[["x", "y"]].to_numpy(dtype=float)
+    mean_xy = np.mean(xy, axis=0)
+    median_xy = np.median(xy, axis=0)
+    distances_to_mean = np.linalg.norm(xy - mean_xy, axis=1)
+    distances_to_median = np.linalg.norm(xy - median_xy, axis=1)
+    median_mean_distance = float(np.median(distances_to_mean))
+    median_median_distance = float(np.median(distances_to_median))
     max_sigma = kept_df["sigma_max"].max()
 
     position_img = image_src(
-        RESULTS_DIR / f"point_{point_number}_presentation_enu.png"
+        RESULTS_DIR / "plots" / f"point_{point_number}_presentation_enu.png"
     )
     metrics = "\n".join(
         [
-            metric_card("Positions gardees", f"{int(row['kept_count'])}/{int(row['total_count'])} ({pct(kept_ratio)})"),
+            metric_card("Positions utilisees", f"{int(row['total_count'])}"),
+            metric_card("Position moyenne", f"({fmt(row['mean_x'])}, {fmt(row['mean_y'])}) m"),
+            metric_card("Position mediane", f"({fmt(row['median_x'])}, {fmt(row['median_y'])}) m"),
             metric_card("Distance moyenne a la GT", f"{fmt(row['mean_distance_to_ground_truth_m'])} m"),
             metric_card("Distance mediane a la GT", f"{fmt(median_gt_distance)} m"),
             metric_card("Distance max a la GT", f"{fmt(max_gt_distance)} m"),
             metric_card("Distance moyenne a la moyenne", f"{fmt(row['mean_distance_to_mean_xy_m'])} m"),
             metric_card("Distance mediane a la moyenne", f"{fmt(median_mean_distance)} m"),
-            metric_card("Std x,y gardes", f"{fmt(row['std_x_kept'])} m, {fmt(row['std_y_kept'])} m"),
-            metric_card("Sigma max garde", fmt(max_sigma, 2)),
+            metric_card("Distance moyenne a la mediane", f"{fmt(row['mean_distance_to_median_xy_m'])} m"),
+            metric_card("Distance mediane a la mediane", f"{fmt(median_median_distance)} m"),
+            metric_card("Std distance a la mediane", f"{fmt(row['std_distance_to_median_xy_m'])} m"),
+            metric_card("Std x,y", f"{fmt(row['std_x_kept'])} m, {fmt(row['std_y_kept'])} m"),
+            metric_card("Sigma max", fmt(max_sigma, 2)),
         ]
     )
 
@@ -530,14 +604,14 @@ def point_slide(row: pd.Series) -> str:
     <section class="slide point-slide">
       <header>
         <h2>Point {point_number}</h2>
-        <p>Comparaison des positions localisees, du filtrage statistique et de la ground truth temporelle.</p>
+        <p>Comparaison des positions localisees, de leurs centres moyen/median et de la ground truth temporelle.</p>
       </header>
       <div class="point-layout">
         <div class="metrics-grid">{metrics}</div>
         <div class="images">
           <figure>
             <img src="{position_img}" alt="Positions vs ground truth point {point_number}">
-            <figcaption>Plan ENU: positions trouvees, positions gardees, moyenne des positions gardees et ground truth.</figcaption>
+            <figcaption>Plan ENU: positions trouvees, moyenne rouge, mediane violette et ground truth.</figcaption>
           </figure>
         </div>
       </div>
@@ -568,18 +642,18 @@ def tdoa_slide(point_number: int) -> str:
     <section class="slide tdoa-slide">
       <header>
         <h2>Point {point_number} - Dispersion des TDOA</h2>
-        <p>Repartition par tetraedre et paire d'hydrophones, apres exclusion des valeurs situees a plus de deux ecarts types.</p>
+        <p>Repartition par tetraedre et paire d'hydrophones, sans exclusion statistique des valeurs extremes.</p>
       </header>
       <figure class="tdoa-figure">
         <img src="{image_src_value}" alt="Distributions et ecarts types des TDOA du point {point_number}">
-        <figcaption>La ligne rouge indique la moyenne finale. La moyenne, l'ecart type et le nombre de mesures conservees sont indiques sous chaque paire.</figcaption>
+        <figcaption>La ligne rouge indique la moyenne et la ligne violette la mediane. La moyenne, la mediane, les ecarts types et le nombre de mesures sont indiques sous chaque paire.</figcaption>
       </figure>
     </section>
     """
 
 
 def direction_slide(point_number: int) -> str:
-    image_path = RESULTS_DIR / f"point_{point_number}_direction_map.png"
+    image_path = RESULTS_DIR / "plots" / f"point_{point_number}_direction_map.png"
     if not image_path.is_file():
         return ""
     image_src_value = image_src(image_path)
@@ -587,11 +661,11 @@ def direction_slide(point_number: int) -> str:
     <section class="slide direction-slide">
       <header>
         <h2>Point {point_number} - Vecteurs directeurs</h2>
-        <p>Directions ENU estimees independamment par chaque tetraedre et appariees aux positions conservees.</p>
+        <p>Directions ENU estimees independamment par chaque tetraedre et appariees aux positions disponibles.</p>
       </header>
       <figure class="direction-figure">
         <img src="{image_src_value}" alt="Carte des vecteurs directeurs du point {point_number}">
-        <figcaption>Seules les directions valides, issues d'un evenement localise et associees temporellement a une position gardee, sont affichees. Les fleches representent la projection horizontale des vecteurs unitaires.</figcaption>
+        <figcaption>Toutes les directions valides associees temporellement aux positions sont affichees. Les fleches representent la projection horizontale des vecteurs unitaires.</figcaption>
       </figure>
     </section>
     """
@@ -711,13 +785,27 @@ def build_html(summary_df: pd.DataFrame) -> str:
     th {{ color: var(--muted); font-size: 14px; text-transform: uppercase; }}
     .point-layout {{
       display: grid;
-      grid-template-columns: 340px 1fr;
+      grid-template-columns: 430px 1fr;
       gap: 24px;
       align-items: start;
     }}
     .metrics-grid {{
       display: grid;
       gap: 10px;
+    }}
+    .point-slide .metrics-grid {{
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }}
+    .point-slide .metric {{
+      padding: 8px 10px;
+    }}
+    .point-slide .metric-label {{
+      font-size: 10px;
+      margin-bottom: 4px;
+    }}
+    .point-slide .metric-value {{
+      font-size: 15px;
     }}
     .images {{
       display: block;
@@ -790,12 +878,12 @@ def build_html(summary_df: pd.DataFrame) -> str:
       {metric_card("Point le plus disperse vs GT", f"Point {int(worst_gt['point_number'])} - {fmt(worst_gt['mean_distance_to_ground_truth_m'])} m")}
       {metric_card("Point le plus compact", f"Point {int(most_compact['point_number'])} - {fmt(most_compact['mean_distance_to_mean_xy_m'])} m")}
     </div>
-    <div class="note">La distance a la ground truth est calculee point par point avec la ground truth correspondant au timestamp. La distance a la moyenne mesure la dispersion des positions gardees autour de leur position moyenne.</div>
+    <div class="note">La distance a la ground truth est calculee point par point avec la ground truth correspondant au timestamp. La distance a la moyenne mesure la dispersion des positions autour de leur position moyenne.</div>
   </section>
 
   <section class="slide">
     <h2>Synthese globale</h2>
-    <p>Les distances moyennes et les ecarts types affiches sont calcules uniquement sur les positions conservees par le filtre statistique.</p>
+    <p>Les distances moyennes et les ecarts types affiches sont calcules sur toutes les positions disponibles, sans retrait par ecart type.</p>
     {summary_table(summary_df)}
     <div class="note">Le point le moins compact est le point {int(least_compact['point_number'])}, avec une distance moyenne a la moyenne de {fmt(least_compact['mean_distance_to_mean_xy_m'])} m.</div>
   </section>
@@ -811,6 +899,13 @@ def main() -> None:
 
     args = parse_args()
 
+    if args.all_results is not None:
+        resolved_all_results = resolve_input_dir(args.all_results)
+        if resolved_all_results is None:
+            raise ValueError("--all-results ne peut pas valoir 'none'.")
+        RESULTS_DIR = resolved_all_results
+        TDOA_RESULTS_DIR = resolved_all_results
+        DIRECTION_RESULTS_DIR = resolved_all_results
     if args.position_results is not None:
         resolved_position_results = resolve_input_dir(args.position_results)
         if resolved_position_results is None:

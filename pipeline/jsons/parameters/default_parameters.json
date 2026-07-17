@@ -5,9 +5,10 @@
   "use_gcc": false,
   "use_mask_based_tdoa": true,
   "location_parameters": {
-    "use_h4": true,
-    "fusion_type": "high",
-    "projection_plan": 0.0
+    "use_h4": false,
+    "fusion_type": "low",
+    "projection_plan": 0.0,
+    "project_directions_to_xy": false
   },
   "vmd_denoise_parameters": {
     "use_woa": false,

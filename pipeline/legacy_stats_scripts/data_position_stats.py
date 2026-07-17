@@ -1,7 +1,21 @@
+from pathlib import Path
+import sys
+
+PIPELINE_DIR = Path(__file__).resolve().parents[1]
+if str(PIPELINE_DIR) not in sys.path:
+    sys.path.insert(0, str(PIPELINE_DIR))
+
 from main_module import positions_from_audio
 from src.utils.sub_classes import Environment, Parameters
 from src.utils.rotation_bricks import lla2enu
-from data_paths_2026 import TEST_DATA2026_ALL_AUDIO_PATHS
+from data_paths_2026 import (
+    ENV_PATH,
+    GROUND_TRUTH_PATH,
+    MODEL_PATH,
+    PARAM_PATH,
+    POINT_NUMBERS,
+    TEST_DATA2026_ALL_AUDIO_PATHS,
+)
 import csv
 from datetime import datetime
 from math import atan2, cos, radians, sin, sqrt
@@ -29,6 +43,7 @@ class StatRow(TypedDict):
     ground_truth_lon: float
     distance_m: float
     distance_to_mean_xy_m: float
+    distance_to_median_xy_m: float
     sigma_x: float
     sigma_y: float
     sigma_max: float
@@ -36,8 +51,11 @@ class StatRow(TypedDict):
 
 class PositionStats(TypedDict):
     mean_xy: np.ndarray
+    median_xy: np.ndarray
     variance_xy: np.ndarray
     std_xy: np.ndarray
+    std_distance_to_median_xy_m: float
+    mean_distance_to_median_xy_m: float
     xy_positions: np.ndarray
     ground_truth_xy: np.ndarray
     sigma_deviation_xy: np.ndarray
@@ -49,18 +67,16 @@ class PositionStats(TypedDict):
     mean_distance_to_mean_xy_m: float
     distances_m: list[float]
     distances_to_mean_xy_m: list[float]
+    distances_to_median_xy_m: list[float]
     rows: list[StatRow]
 
 
-POINT_NUMBERS: list[int] =list(range(7, 21))
 STD_FILTER_THRESHOLD: float = 1.0
 
-ground_truth_path: str = (
-    r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\ground_truth\trace_gps_calibration.csv"
-)
-model_path: str = "jsons/models/mobile_net_8_layers_qat.pt"
-param_path: str = "jsons/parameters/default_parameters.json"
-env_path: str = "jsons/environments/env_cacouna_may2026.json"
+ground_truth_path: str = GROUND_TRUTH_PATH
+model_path: str = MODEL_PATH
+param_path: str = PARAM_PATH
+env_path: str = ENV_PATH
 
 
 def _scalar(x: Any) -> float:
@@ -201,6 +217,7 @@ def compute_position_stats(
         raise ValueError("Aucune position valide pour calculer les statistiques.")
 
     mean_xy: np.ndarray = np.mean(xy_positions, axis=0)
+    median_xy: np.ndarray = np.median(xy_positions, axis=0)
     variance_xy: np.ndarray = np.var(xy_positions, axis=0)
     std_xy: np.ndarray = np.std(xy_positions, axis=0)
 
@@ -212,14 +229,10 @@ def compute_position_stats(
     )
     max_sigma_deviation: np.ndarray = np.max(sigma_deviation_xy, axis=1)
 
-    if np.any(nonzero_std_axes):
-        within_two_std: np.ndarray = np.all(
-            np.abs(xy_positions[:, nonzero_std_axes] - mean_xy[nonzero_std_axes])
-            <= STD_FILTER_THRESHOLD * std_xy[nonzero_std_axes],
-            axis=1,
-        )
-    else:
-        within_two_std = np.ones(len(xy_positions), dtype=bool)
+    # On conserve maintenant toutes les positions finies pour garder une
+    # analyse transparente. La colonne historique "kept" est gardee pour la
+    # compatibilite des CSV/presentations, mais elle vaut toujours True.
+    within_two_std = np.ones(len(xy_positions), dtype=bool)
 
     tetrahedrons_coords: list[LatLon] = [tuple(v.origin_lla[:2]) for v in environment.tetrahedras.values()]
     t1_lat, t1_lon = tetrahedrons_coords[0]
@@ -228,6 +241,7 @@ def compute_position_stats(
     rows: list[StatRow] = []
     distances_m: list[float] = []
     distances_to_mean_xy_m: list[float] = []
+    distances_to_median_xy_m: list[float] = []
     for i, (xy, timestamp, keep) in enumerate(zip(xy_positions, position_times, within_two_std)):
         predicted_lat_lon: LatLon = enu_to_lla(xy[0], xy[1], 0.0, t1_lat, t1_lon, 0.0)[:2]
         gt_datetime: str = format_ground_truth_datetime(timestamp)
@@ -240,6 +254,7 @@ def compute_position_stats(
 
         distance_m: float = haversine_m(predicted_lat_lon, ground_truth_lat_lon)
         distance_to_mean_xy_m: float = float(np.linalg.norm(xy - mean_xy))
+        distance_to_median_xy_m: float = float(np.linalg.norm(xy - median_xy))
         rows.append(
             {
                 "index": i,
@@ -253,25 +268,27 @@ def compute_position_stats(
                 "ground_truth_lon": ground_truth_lat_lon[1],
                 "distance_m": distance_m,
                 "distance_to_mean_xy_m": distance_to_mean_xy_m,
+                "distance_to_median_xy_m": distance_to_median_xy_m,
                 "sigma_x": sigma_deviation_xy[i, 0],
                 "sigma_y": sigma_deviation_xy[i, 1],
                 "sigma_max": max_sigma_deviation[i],
             }
         )
 
-        if not keep:
-            continue
-
         distances_m.append(distance_m)
         distances_to_mean_xy_m.append(distance_to_mean_xy_m)
+        distances_to_median_xy_m.append(distance_to_median_xy_m)
 
     if not distances_m:
-        raise ValueError("Aucune position conservee apres le filtre a deux ecarts types.")
+        raise ValueError("Aucune position valide apres alignement avec la ground truth.")
 
     return {
         "mean_xy": mean_xy,
+        "median_xy": median_xy,
         "variance_xy": variance_xy,
         "std_xy": std_xy,
+        "std_distance_to_median_xy_m": float(np.std(distances_to_median_xy_m)),
+        "mean_distance_to_median_xy_m": float(np.mean(distances_to_median_xy_m)),
         "xy_positions": xy_positions,
         "ground_truth_xy": np.array(ground_truth_xy, dtype=float),
         "sigma_deviation_xy": sigma_deviation_xy,
@@ -283,14 +300,16 @@ def compute_position_stats(
         "mean_distance_to_mean_xy_m": float(np.mean(distances_to_mean_xy_m)),
         "distances_m": distances_m,
         "distances_to_mean_xy_m": distances_to_mean_xy_m,
+        "distances_to_median_xy_m": distances_to_median_xy_m,
         "rows": rows,
     }
 
 
 def print_stats(stats: PositionStats) -> None:
     print("Statistiques des positions 2D (x, y)")
-    print(f"Nombre de positions conservees: {stats['kept_count']} / {stats['total_count']}")
+    print(f"Nombre de positions utilisees: {stats['kept_count']} / {stats['total_count']}")
     print(f"Position moyenne x, y: {stats['mean_xy']}")
+    print(f"Position mediane x, y: {stats['median_xy']}")
     print(f"Variance x, y: {stats['variance_xy']}")
     print(f"Ecart type x, y: {stats['std_xy']}")
     print(
@@ -300,6 +319,14 @@ def print_stats(stats: PositionStats) -> None:
     print(
         "Distance moyenne a la position moyenne: "
         f"{stats['mean_distance_to_mean_xy_m']:.3f} m"
+    )
+    print(
+        "Distance moyenne a la position mediane: "
+        f"{stats['mean_distance_to_median_xy_m']:.3f} m"
+    )
+    print(
+        "Ecart type des distances a la position mediane: "
+        f"{stats['std_distance_to_median_xy_m']:.3f} m"
     )
 
 
@@ -317,20 +344,12 @@ def plot_positions_and_ground_truth(
     fig, ax = plt.subplots(figsize=(10, 10))
 
     ax.scatter(
-        xy_positions[:, 0],
-        xy_positions[:, 1],
-        color="tab:gray",
-        marker="x",
-        s=35,
-        label="Positions trouvees",
-    )
-    ax.scatter(
         xy_positions[within_two_std, 0],
         xy_positions[within_two_std, 1],
         color="tab:blue",
         marker="x",
         s=55,
-        label=f"Positions gardees (< {STD_FILTER_THRESHOLD:g} ecarts types)",
+        label="Positions trouvees",
     )
     ax.plot(
         ground_truth_xy[:, 0],
@@ -350,6 +369,16 @@ def plot_positions_and_ground_truth(
         linewidths=2,
         label="Position moyenne",
     )
+    ax.scatter(
+        stats["median_xy"][0],
+        stats["median_xy"][1],
+        color="tab:purple",
+        marker="D",
+        s=90,
+        linewidths=1.2,
+        edgecolor="black",
+        label="Position mediane",
+    )
 
     tetra_x: list[float] = [tetrahedra.origin_enu[0] for tetrahedra in environment.tetrahedras.values()]
     tetra_y: list[float] = [tetrahedra.origin_enu[1] for tetrahedra in environment.tetrahedras.values()]
@@ -364,7 +393,8 @@ def plot_positions_and_ground_truth(
     ax.set_title(
         f"Point {point_number} - Positions trouvees vs ground truth\n"
         f"Dist. moyenne a la GT: {stats['mean_distance_to_ground_truth_m']:.2f} m | "
-        f"Dist. moyenne a la moyenne: {stats['mean_distance_to_mean_xy_m']:.2f} m"
+        f"Dist. moy. a la moyenne: {stats['mean_distance_to_mean_xy_m']:.2f} m | "
+        f"Dist. moy. a la mediane: {stats['mean_distance_to_median_xy_m']:.2f} m"
     )
     ax.grid(True, alpha=0.25)
     ax.legend()
@@ -397,20 +427,12 @@ def plot_kept_sigma_deviation(
     ax.bar(x - width, kept_sigma_xy[:, 0], width=width, label="|x - moyenne_x| / std_x")
     ax.bar(x, kept_sigma_xy[:, 1], width=width, label="|y - moyenne_y| / std_y")
     ax.bar(x + width, kept_sigma_max, width=width, label="max axes")
-    ax.axhline(
-        STD_FILTER_THRESHOLD,
-        color="tab:red",
-        linestyle="--",
-        linewidth=1.2,
-        label=f"seuil {STD_FILTER_THRESHOLD:g} ecarts types",
-    )
-
     ax.set_xticks(x)
     ax.set_xticklabels([str(i) for i in kept_indexes], rotation=45)
     ax.set_ylim(bottom=0)
-    ax.set_xlabel("Index de position gardee")
+    ax.set_xlabel("Index de position")
     ax.set_ylabel("Ecart a la moyenne (nombre d'ecarts types)")
-    ax.set_title(f"Point {point_number} - Ecarts normalises des positions gardees")
+    ax.set_title(f"Point {point_number} - Ecarts normalises des positions")
     ax.grid(True, axis="y", alpha=0.25)
     ax.legend()
     fig.tight_layout()
@@ -437,6 +459,7 @@ def write_position_details_csv(stats: PositionStats, output_path: str) -> None:
         "ground_truth_lon",
         "distance_m",
         "distance_to_mean_xy_m",
+        "distance_to_median_xy_m",
         "sigma_x",
         "sigma_y",
         "sigma_max",
@@ -486,13 +509,11 @@ def run_point(
         stats,
         environment,
         point_number,
-        output_path=os.path.join(output_dir, f"point_{point_number}_positions_vs_ground_truth.png"),
-        show=show_plots,
-    )
-    plot_kept_sigma_deviation(
-        stats,
-        point_number,
-        output_path=os.path.join(output_dir, f"point_{point_number}_sigma_deviation.png"),
+        output_path=os.path.join(
+            output_dir,
+            "plots",
+            f"point_{point_number}_positions_vs_ground_truth.png",
+        ),
         show=show_plots,
     )
     write_position_details_csv(
@@ -539,12 +560,16 @@ if __name__ == "__main__":
                 "total_count": stats["total_count"],
                 "mean_x": stats["mean_xy"][0],
                 "mean_y": stats["mean_xy"][1],
+                "median_x": stats["median_xy"][0],
+                "median_y": stats["median_xy"][1],
                 "variance_x": stats["variance_xy"][0],
                 "variance_y": stats["variance_xy"][1],
                 "std_x": stats["std_xy"][0],
                 "std_y": stats["std_xy"][1],
+                "std_distance_to_median_xy_m": stats["std_distance_to_median_xy_m"],
                 "mean_distance_to_ground_truth_m": stats["mean_distance_to_ground_truth_m"],
                 "mean_distance_to_mean_xy_m": stats["mean_distance_to_mean_xy_m"],
+                "mean_distance_to_median_xy_m": stats["mean_distance_to_median_xy_m"],
             }
         )
 

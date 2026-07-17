@@ -376,7 +376,8 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
     else:
         position_enu, position_error_variance = high_fusion(
             tdoas_measured, tdoas_error_variance, environment,
-            projection_plan=parameters.location_parameters.projection_plan
+            projection_plan=parameters.location_parameters.projection_plan,
+            project_directions_to_xy=parameters.location_parameters.project_directions_to_xy,
         )
 
     end_fusion = time()

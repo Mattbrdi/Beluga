@@ -102,20 +102,27 @@ def elevations(wave_vectors: List[np.ndarray]):
             elevations.append(np.nan) # 2D processing
     return elevations
 
-def two_tetra_intersection(wave_vector_pair, origins_enu_pair, projection_plan: Optional[float]):
+def two_tetra_intersection(
+    wave_vector_pair,
+    origins_enu_pair,
+    projection_plan: Optional[float],
+    project_directions_to_xy: bool = False,
+):
     """
     Calculate the intersection point of two tetrahedra.
 
     Parameters:
     - wave_vector_pair: Pair of wave vectors.
     - origins_enu_pair: Pair of origins in ENU coordinates.
-    - projection_plan: Optional projection plane for 2D processing.
+    - projection_plan: Optional Z value returned when XY projection is used.
+    - project_directions_to_xy: If True, project 3D directions to XY before
+      intersection. 2D wave vectors are always intersected in XY.
 
     Returns:
     - position: Intersection position or NaN if vectors are divergent.
     """
     vector_dimension = wave_vector_pair[0].shape[0]
-    project_to_xy = projection_plan is not None or vector_dimension == 2
+    project_to_xy = project_directions_to_xy or vector_dimension == 2
 
     if project_to_xy:
         # Les vecteurs peuvent avoir ete estimes en 3D avec les 6 TDOA. Pour
@@ -153,7 +160,13 @@ def two_tetra_intersection(wave_vector_pair, origins_enu_pair, projection_plan: 
     position = np.array([position_xy[0], position_xy[1], projection_plan])
     return position
 
-def high_fusion(tdoas_measured: List[np.ndarray], tdoas_error_variance: List[np.ndarray], environment, projection_plan: Optional[float]):
+def high_fusion(
+    tdoas_measured: List[np.ndarray],
+    tdoas_error_variance: List[np.ndarray],
+    environment,
+    projection_plan: Optional[float],
+    project_directions_to_xy: bool = False,
+):
     """
     Perform high-level fusion of audio arrays and TDOAs to estimate position.
 
@@ -162,7 +175,9 @@ def high_fusion(tdoas_measured: List[np.ndarray], tdoas_error_variance: List[np.
     - tdoas_measured: List of measured TDOA arrays.
     - tdoas_error_variance: List of TDOA error variances.
     - environment: Environment containing tetrahedra information.
-    - projection_plan: Optional projection plane for 2D processing.
+    - projection_plan: Optional Z value returned when XY projection is used.
+    - project_directions_to_xy: If True, project 3D wave vectors to XY before
+      intersecting them.
 
     Returns:
     - position: Estimated position.
@@ -175,7 +190,14 @@ def high_fusion(tdoas_measured: List[np.ndarray], tdoas_error_variance: List[np.
         return np.full((3, 1), np.nan), np.full((3, 1), np.nan)
     positions = []
     for wave_pair, origins in zip(combinations(wave_vectors_list, 2), combinations(tetrahedras_origins_enu, 2)):
-        positions.append(two_tetra_intersection(wave_pair, origins, projection_plan))
+        positions.append(
+            two_tetra_intersection(
+                wave_pair,
+                origins,
+                projection_plan,
+                project_directions_to_xy=project_directions_to_xy,
+            )
+        )
     positions = np.array(positions)
     position = np.mean(positions, axis=0)
     estimated_error = np.zeros(3) # TODO ajouter module d'erreur ici si on garde

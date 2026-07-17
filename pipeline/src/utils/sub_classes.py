@@ -123,6 +123,7 @@ class LocationParameters:
     use_h4 : bool
     fusion_type : str
     projection_plan : Optional[float] # Projection plan in ENU_ref for 2D processing
+    project_directions_to_xy : bool = False # If True, high fusion intersects wave vectors after XY projection
 
 class Parameters:
     def __init__(self, path_to_json):
