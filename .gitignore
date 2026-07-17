@@ -15,7 +15,6 @@ impulsive_noise_denoising/ml_denoising/data/
 impulsive_noise_denoising/ml_denoising/runs/
 runs/
 *.py[cod]
-test*/
 !tests/
 !tests/**
 tests/**/__pycache__/
@@ -28,3 +27,6 @@ results*.py
 .vscode/*
 BSS/Dataset/generated/
 *.txt
+test_data/
+.vscode/*
+time_frequency_mask/data_generation/data/
