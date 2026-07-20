@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from ..Utils.signal_generation import AudioSceneSpec, WhistleSignal, CompositeSignalSpec, LargeShipNoise
+from ..Utils.signal_generation import AudioSceneSpec, WhistleSignal, CompositeSignalSpec, LargeShipNoise, GaussianNoise, SpikeSignal
 
 """
 Un scénario sert à définir le Spec en fonction de l'endroit ou l'on est sur le dataset.
@@ -54,10 +54,18 @@ def whistles_only_scenario(
 
 @register_scenario("Whistles_and_boat")
 def whistle_and_boat(_split : str, _index: int, _seed: int) -> AudioSceneSpec: 
-    if _seed %2 == 0: 
-        return AudioSceneSpec(
-            allowed_source_signal_types=(WhistleSignal.signal_type),
-            source_specs=[CompositeSignalSpec(n_placements=1,allowed_signal_types=LargeShipNoise.signal_type)]
-        )
-    else : 
-        return AudioSceneSpec(allowed_source_signal_types=WhistleSignal.signal_type)
+
+    return AudioSceneSpec(
+        allowed_source_signal_types=(WhistleSignal.signal_type),
+        allowed_continuous_noise_signal_types=GaussianNoise.signal_type,
+        allowed_local_noise_signal_types= SpikeSignal.signal_type,
+        source_specs=[CompositeSignalSpec(n_placements=1,allowed_signal_types=LargeShipNoise.signal_type)],
+        snr_db= snr(_seed))
+    
+def snr(seed :int): 
+    if seed%3 == 0: 
+        return 1
+    elif seed%3 == 5: 
+        return 0 
+    else:
+        return -10

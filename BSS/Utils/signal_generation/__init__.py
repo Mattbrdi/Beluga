@@ -42,7 +42,6 @@ register_SourceSignal(SpikeSignal)
 register_SourceSignal(WhistleSignal)
 register_SourceSignal(LargeShipNoise)
 register_LocalNoiseSignal(SpikeSignal)
-register_LocalNoiseSignal(GaussianNoise)
 register_ContinuousNoiseSignal(GaussianNoise)
 
 
