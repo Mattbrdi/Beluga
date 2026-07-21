@@ -20,6 +20,32 @@ from ..Utils.associated_dataclasses import FrequencyIcaParameters, StftParameter
 from ..Utils.signal_class import MultiSignal, NSpectrogram
 
 
+def _reference_tdoas_to_pairwise(tdoas: np.ndarray) -> np.ndarray:
+    """
+    Convertit des TDOA relatifs a un micro de reference en TDOA pairwise.
+
+    Entree : (n_sources, n_mics). Sortie : (n_sources, n_pairs).
+    Pour quatre micros, les colonnes sont :
+    [M1M2, M1M3, M1M4, M2M3, M2M4, M3M4].
+    Convention : M_iM_j = delay(M_j) - delay(M_i).
+    """
+    values = np.asarray(tdoas)
+    if values.ndim != 2:
+        raise ValueError("tdoas doit avoir la forme (n_sources, n_mics).")
+
+    n_sources, n_mics = values.shape
+    pairwise = np.empty(
+        (n_sources, n_mics * (n_mics - 1) // 2),
+        dtype=values.dtype,
+    )
+    pair_index = 0
+    for first in range(n_mics - 1):
+        for second in range(first + 1, n_mics):
+            pairwise[:, pair_index] = values[:, second] - values[:, first]
+            pair_index += 1
+    return pairwise
+
+
 @dataclass(frozen=True)
 class FrequencyICAResult:
     """Résultat complet d'un appel à :meth:`FrequencyDomainICA.process_signal`.
@@ -39,6 +65,30 @@ class FrequencyICAResult:
             return np.empty_like(self.tdoas)
         return self.tdoas * self.sources[0].freq
 
+    @property
+    def pairwise_tdoas(self) -> np.ndarray:
+        """TDOA pairwise en secondes, dans l'ordre M1M2, M1M3, etc."""
+        return _reference_tdoas_to_pairwise(self.tdoas)
+
+    @property
+    def pairwise_tdoas_samples(self) -> np.ndarray:
+        """TDOA pairwise en echantillons."""
+        if not self.sources:
+            return np.empty_like(self.pairwise_tdoas)
+        return self.pairwise_tdoas * self.sources[0].freq
+
+    @property
+    def pairwise_tdoa_labels(self) -> list[str]:
+        """Labels des colonnes de pairwise_tdoas."""
+        if self.tdoas.ndim != 2:
+            return []
+        n_mics = self.tdoas.shape[1]
+        return [
+            f"M{first + 1}M{second + 1}"
+            for first in range(n_mics - 1)
+            for second in range(first + 1, n_mics)
+        ]
+
 
 @dataclass
 class FrequencyDomainICA:
@@ -54,6 +104,7 @@ class FrequencyDomainICA:
     n_iter: int = 100
     tolerance: float = 1e-6
     max_tdoa_seconds: float = 0.01
+    max_lag_samples: int | None = None
     reference_microphone: int = 0
     random_state: int | None = 0
     eps: float = 1e-10
@@ -75,6 +126,7 @@ class FrequencyDomainICA:
             n_iter=self.n_iter,
             tolerance=self.tolerance,
             max_tdoa_seconds=self.max_tdoa_seconds,
+            max_lag_samples=self.max_lag_samples,
             reference_microphone=self.reference_microphone,
             random_state=self.random_state,
             eps=self.eps,
@@ -95,6 +147,17 @@ class FrequencyDomainICA:
             raise ValueError("Paramètres numériques ICA invalides.")
         if self.max_tdoa_seconds <= 0:
             raise ValueError("max_tdoa_seconds doit être strictement positif.")
+        if self.max_lag_samples is not None and self.max_lag_samples < 0:
+            raise ValueError("max_lag_samples doit etre positif ou nul.")
+
+    def _tdoa_search_limit_seconds(self) -> float:
+        if self.max_lag_samples is None:
+            return self.max_tdoa_seconds
+        if self.input_spectrogram is None:
+            raise RuntimeError(
+                "input_spectrogram est requis pour convertir max_lag_samples en secondes."
+            )
+        return self.max_lag_samples / self.input_spectrogram.fs
 
     @staticmethod
     def _symmetric_decorrelation(vectors: np.ndarray, eps: float) -> np.ndarray:
@@ -282,13 +345,14 @@ class FrequencyDomainICA:
         def robust_loss(residual: np.ndarray) -> np.ndarray:
             return np.minimum(1.0 - np.cos(residual), outlier_cap)
 
-        grid = np.linspace(-self.max_tdoa_seconds, self.max_tdoa_seconds, 4001)
+        search_limit_seconds = self._tdoa_search_limit_seconds()
+        grid = np.linspace(-search_limit_seconds, search_limit_seconds, 4001)
         residual = p[:, np.newaxis] + 2.0 * np.pi * f[:, np.newaxis] * grid
         costs = np.sum(w[:, np.newaxis] * robust_loss(residual), axis=0)
         best_index = int(np.argmin(costs))
         step = float(grid[1] - grid[0])
-        lower = max(-self.max_tdoa_seconds, grid[best_index] - step)
-        upper = min(self.max_tdoa_seconds, grid[best_index] + step)
+        lower = max(-search_limit_seconds, grid[best_index] - step)
+        upper = min(search_limit_seconds, grid[best_index] + step)
 
         def objective(delay: float) -> float:
             residual_at_delay = p + 2.0 * np.pi * f * delay
@@ -341,6 +405,17 @@ class FrequencyDomainICA:
                     frequencies, phase, weights
                 )
         return tdoas
+
+    def estimate_pairwise_tdoas(self) -> np.ndarray:
+        """
+        Renvoie les TDOA pairwise issus de l'estimation ICA par pente de phase.
+
+        La sortie a la forme (n_sources, n_pairs). Pour quatre micros, les
+        colonnes sont [M1M2, M1M3, M1M4, M2M3, M2M4, M3M4].
+        """
+        if self.tdoas_ is None:
+            self.tdoas_ = self.estimate_tdoas()
+        return _reference_tdoas_to_pairwise(self.tdoas_)
 
     def _build_source_spectrograms(self) -> None:
         if (

@@ -10,6 +10,54 @@ from typing import List, Dict, Optional
 from itertools import permutations
 
 
+def _normalize_for_correlation(signal: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+    data = np.asarray(signal, dtype=float)
+    data = data - np.mean(data)
+    norm = np.linalg.norm(data)
+    if norm <= eps:
+        return data
+    return data / norm
+
+
+def _estimate_lag_by_correlation(
+    reference: np.ndarray,
+    target: np.ndarray,
+    max_lag_samples: int | None = None,
+) -> int:
+    """
+    Estime delay(target) - delay(reference) par maximum de correlation.
+    """
+    if max_lag_samples is not None and max_lag_samples < 0:
+        raise ValueError("max_lag_samples doit etre positif ou nul.")
+
+    reference_data = _normalize_for_correlation(reference)
+    target_data = _normalize_for_correlation(target)
+    correlation = sp_signal.correlate(
+        target_data,
+        reference_data,
+        mode="full",
+        method="fft",
+    )
+    lags = sp_signal.correlation_lags(
+        target_data.size,
+        reference_data.size,
+        mode="full",
+    )
+
+    if max_lag_samples is not None:
+        valid = np.abs(lags) <= max_lag_samples
+        correlation = correlation[valid]
+        lags = lags[valid]
+        if lags.size == 0:
+            raise ValueError("Aucun lag valide avec ce max_lag_samples.")
+
+    return int(lags[int(np.argmax(np.abs(correlation)))])
+
+
+def _pairwise_tdoa_count(n_mics: int) -> int:
+    return n_mics * (n_mics - 1) // 2
+
+
 @dataclass
 class EMClustering:
     """
@@ -440,3 +488,49 @@ class SawadaBSS:
             padded=Nspectro.padded,
             signal_lengths=Nspectro.signal_lengths
         )
+
+    def estimate_pairwise_tdoas(
+        self,
+        max_lag_samples: int | None = None,
+    ) -> np.ndarray:
+        """
+        Estime les TDOA pairwise pour chaque source separee.
+
+        La sortie a la forme (n_sources, n_pairs). Pour quatre micros, les
+        colonnes sont [M1M2, M1M3, M1M4, M2M3, M2M4, M3M4].
+        Convention : M_iM_j = delay(M_j) - delay(M_i).
+        """
+        if self.signal is None:
+            raise RuntimeError("Il faut appeler process_signal avant estimate_pairwise_tdoas.")
+
+        separated_sources = self.separate_source()
+        if not separated_sources:
+            return np.empty((0, 0), dtype=float)
+
+        n_mics = separated_sources[0].num_signals
+        tdoas = np.empty(
+            (len(separated_sources), _pairwise_tdoa_count(n_mics)),
+            dtype=float,
+        )
+
+        for source_index, source in enumerate(separated_sources):
+            source_data = source.data
+            pair_index = 0
+            for first in range(n_mics - 1):
+                for second in range(first + 1, n_mics):
+                    lag = _estimate_lag_by_correlation(
+                        reference=source_data[first],
+                        target=source_data[second],
+                        max_lag_samples=max_lag_samples,
+                    )
+                    tdoas[source_index, pair_index] = lag / source.freq
+                    pair_index += 1
+
+        return tdoas
+
+    def estimate_tdoas(
+        self,
+        max_lag_samples: int | None = None,
+    ) -> np.ndarray:
+        """Alias benchmark : renvoie les TDOA pairwise en secondes."""
+        return self.estimate_pairwise_tdoas(max_lag_samples=max_lag_samples)
