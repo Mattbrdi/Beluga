@@ -8,7 +8,7 @@ from pathlib import Path
 from ..Utils.signal_generation import AudioSceneGenerator
 from .config import DatasetConfig
 from .io import FORMAT_VERSION, metadata_to_dict, save_scene, write_json
-from .scenarios import get_scenario_factory
+from .scenarios import get_scenario_factory, ScenarioFactory
 
 
 def _prepare_output_dir(output_dir: Path, overwrite: bool) -> None:
@@ -116,3 +116,43 @@ def build_dataset(
                 global_index += 1
 
     return root
+
+
+class GeneratedSceneDataset:
+    def __init__(self, config: DatasetConfig, split: str = "train"):
+        if split not in config.splits:
+            raise ValueError(f"Split inconnu: {split!r}")
+
+        self.config = config
+        self.split = split
+        self.size = config.splits[split]
+        self.split_offset = self._compute_split_offset(split)
+
+        self.spec_factory = get_scenario_factory(config.scenario)
+        self.generator = AudioSceneGenerator(
+            **config.generator.__dict__,
+            source_registry=None,
+            local_noise_registry=None,
+            continuous_noise_registry=None,
+            seed=None,
+        )
+
+    def _compute_split_offset(self, split: str) -> int:
+        offset = 0
+        for split_name, split_size in self.config.splits.items():
+            if split_name == split:
+                return offset
+            offset += split_size
+        raise ValueError(f"Split inconnu: {split!r}")
+
+    def __len__(self) -> int:
+        return self.size
+
+    def __getitem__(self, idx: int):
+        if idx < 0 or idx >= self.size:
+            raise IndexError(idx)
+
+        seed = self.config.base_seed + self.split_offset + idx
+        spec = self.spec_factory(self.split, idx, seed)
+        return self.generator.generate(spec=spec, seed=seed)
+        
