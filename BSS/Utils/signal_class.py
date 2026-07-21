@@ -926,6 +926,55 @@ class Mixture:
         assert self.is_delay_mixture(), "La mixture n'est pas une mixture de retard"
         delay_matrix = np.argmax(self.filters, axis = 2)
         return delay_matrix  
+
+    @staticmethod
+    def pairwise_tdoa_labels(n_mics: int) -> list[str]:
+        """
+        Retourne l'ordre canonique des paires de microphones.
+
+        Pour quatre micros, l'ordre est :
+        ["M1M2", "M1M3", "M1M4", "M2M3", "M2M4", "M3M4"].
+        """
+        if n_mics < 2:
+            raise ValueError("Il faut au moins deux microphones pour former des TDOA.")
+        return [
+            f"M{first + 1}M{second + 1}"
+            for first in range(n_mics - 1)
+            for second in range(first + 1, n_mics)
+        ]
+
+    @staticmethod
+    def delay_matrix_to_pairwise_tdoas(delay_matrix: np.ndarray) -> np.ndarray:
+        """
+        Convertit une delay_matrix (n_mics, n_sources) en TDOA pairwise.
+
+        La sortie a la forme (n_sources, n_pairs), avec l'ordre donne par
+        pairwise_tdoa_labels. La convention est :
+        M_iM_j = delay(M_j) - delay(M_i).
+        """
+        delays = np.asarray(delay_matrix)
+        if delays.ndim != 2:
+            raise ValueError(
+                "delay_matrix doit avoir la forme (n_mics, n_sources)."
+            )
+
+        n_mics, n_sources = delays.shape
+        pairwise = np.empty(
+            (n_sources, n_mics * (n_mics - 1) // 2),
+            dtype=delays.dtype,
+        )
+        pair_index = 0
+        for first in range(n_mics - 1):
+            for second in range(first + 1, n_mics):
+                pairwise[:, pair_index] = delays[second, :] - delays[first, :]
+                pair_index += 1
+        return pairwise
+
+    def get_pairwise_tdoas(self) -> np.ndarray:
+        """
+        Renvoie les TDOA pairwise de la mixture de retards, en echantillons.
+        """
+        return self.delay_matrix_to_pairwise_tdoas(self.get_delay_matrix())
         
     def __repr__(self):
         return f"Mixture(Entrées={self.E}, Sorties={self.S}, Longueur du filtre={self.L})"

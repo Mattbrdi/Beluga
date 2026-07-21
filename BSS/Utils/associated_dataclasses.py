@@ -42,6 +42,7 @@ class FrequencyIcaParameters(BssParameters):
     n_iter: int = 100
     tolerance: float = 1e-6
     max_tdoa_seconds: float = 0.01
+    max_lag_samples: int | None = None
     reference_microphone: int = 0
     random_state: int | None = 0
     eps: float = 1e-10
