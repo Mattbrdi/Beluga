@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import json
+import csv
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
+
+import numpy as np
 
 from ..Dataset import load_scene
 
@@ -94,3 +97,99 @@ def iter_scenes(
             ) from exc
 
         yield record, scene
+
+
+def _json_value(value: Any) -> Any:
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: _json_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_value(item) for item in value]
+    return value
+
+
+def scene_result_dir(output_root: str | Path, split: str, scene_id: str) -> Path:
+    return Path(output_root) / split / scene_id
+
+
+def sources_to_array(sources: list[Any]) -> np.ndarray:
+    """Convertit une liste de MultiSignal en array (n_sources, n_mics, n_samples)."""
+    if not sources:
+        return np.empty((0, 0, 0), dtype=float)
+
+    n_sources = len(sources)
+    n_mics = sources[0].num_signals
+    max_length = max(source.data.shape[1] for source in sources)
+    array = np.zeros((n_sources, n_mics, max_length), dtype=float)
+
+    for source_index, source in enumerate(sources):
+        data = source.data
+        if data.shape[0] != n_mics:
+            raise ValueError("Toutes les sources doivent avoir le meme nombre de micros.")
+        array[source_index, :, : data.shape[1]] = data
+
+    return array
+
+
+def save_sources_npz(
+    path: str | Path,
+    result: Any,
+    true_tdoas_seconds: np.ndarray,
+    true_tdoas_samples: np.ndarray,
+    aligned_tdoas_seconds: np.ndarray,
+    aligned_tdoas_samples: np.ndarray,
+    pairwise_labels: list[str],
+) -> Path:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    fs = 0 if not result.sources else result.sources[0].freq
+    np.savez_compressed(
+        target,
+        sources=sources_to_array(result.sources),
+        fs=np.asarray(fs),
+        estimated_tdoas_seconds=result.estimated_tdoas_seconds,
+        estimated_tdoas_samples=result.estimated_tdoas_samples,
+        aligned_tdoas_seconds=aligned_tdoas_seconds,
+        aligned_tdoas_samples=aligned_tdoas_samples,
+        true_tdoas_seconds=true_tdoas_seconds,
+        true_tdoas_samples=true_tdoas_samples,
+        pairwise_labels=np.asarray(pairwise_labels),
+    )
+    return target
+
+
+def write_json(path: str | Path, payload: dict[str, Any]) -> Path:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(
+        json.dumps(_json_value(payload), indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
+    return target
+
+
+def write_summary_csv(path: str | Path, rows: list[dict[str, Any]]) -> Path:
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    if not rows:
+        target.write_text("", encoding="utf-8")
+        return target
+
+    fieldnames: list[str] = []
+    for row in rows:
+        for key in row:
+            if key not in fieldnames:
+                fieldnames.append(key)
+
+    with target.open(mode="w", encoding="utf-8", newline="") as file:
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+        for row in rows:
+            writer.writerow({key: _json_value(row.get(key)) for key in fieldnames})
+
+    return target
