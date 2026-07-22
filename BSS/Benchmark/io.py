@@ -246,6 +246,7 @@ def save_sawada_model_npz(path: str | Path, result: Any) -> Path | None:
     np.savez_compressed(
         target,
         masks=np.asarray(payload["masks"]),
+        posteriors=np.asarray(payload["posteriors"]),
         frequencies=np.asarray(payload["frequencies"]),
         times=np.asarray(payload["times"]),
         centroids=np.asarray(payload["centroids"]),

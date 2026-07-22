@@ -73,6 +73,7 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
     return {
         "sawada_model": {
             "masks": model.get_final_masks().astype(np.uint8),
+            "posteriors": model.get_final_posteriors(),
             "frequencies": np.asarray(model.nspectro_preprocessed.f, dtype=float),
             "times": np.asarray(model.nspectro_preprocessed.t, dtype=float),
             "centroids": model.all_centroids,

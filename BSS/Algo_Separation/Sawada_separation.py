@@ -76,6 +76,7 @@ class EMClustering:
     centroids: np.ndarray = field(init=False)  # Vecteurs directeurs a_i
     variances: np.ndarray = field(init=False)  # Sigmas_i^2
     weights: np.ndarray = field(init=False)    # Alpha_i (proportions)
+    posteriors: Optional[np.ndarray] = field(init=False, default=None)
 
     def _initialize(self, X):
         """
@@ -167,6 +168,7 @@ class EMClustering:
             # Cycle EM
             posteriors = self.e_step(X)
             self.m_step(X, posteriors)
+        self.posteriors = self.e_step(X)
             
     def predict(self, X: np.ndarray) -> np.ndarray:
         """
@@ -224,6 +226,7 @@ class SawadaBSS:
     nspectro_preprocessed: Optional[NSpectrogram] = None
     bin_models: Dict[int, 'EMClustering'] = field(default_factory=dict)
     bin_masks: Dict[int, np.ndarray] = field(default_factory=dict)
+    bin_posteriors: Dict[int, np.ndarray] = field(default_factory=dict)
     
     eigenvalues_matrix: Optional[np.ndarray] = None
     eigenvector_matrix: Optional[np.ndarray] = None
@@ -293,9 +296,13 @@ class SawadaBSS:
             # 4. Génération du masque binaire (Hard labeling) pour ce bin
             # mask_f shape: (n_sources, n_times)
             mask_f = model.predict(X_f)
+            posterior_f = model.posteriors
+            if posterior_f is None:
+                posterior_f = model.e_step(X_f)
             
             self.bin_models[f_idx] = model
             self.bin_masks[f_idx] = mask_f
+            self.bin_posteriors[f_idx] = posterior_f
             print(f"\r frequence numéro {f_idx} terminée", end="", flush=True )
         print(" ")
         print("Clustering par bin terminé.")
@@ -368,6 +375,8 @@ class SawadaBSS:
             
             # 4. Appliquer la meilleure permutation au bin actuel
             self.bin_masks[f] = current_masks[list(best_perm), :]
+            if f in self.bin_posteriors:
+                self.bin_posteriors[f] = self.bin_posteriors[f][list(best_perm), :]
             
             # 5. Mise à jour de la référence (Moyenne glissante pour stabilité)
             # Cela permet de lisser l'évolution temporelle des sources
@@ -413,6 +422,16 @@ class SawadaBSS:
         for f in range(n_freqs):
             final_masks[:, f, :] = self.bin_masks[f]
         return final_masks
+
+    def get_final_posteriors(self) -> np.ndarray:
+        """Retourne les probabilites posterieures EM alignees (Sources, Freqs, Temps)."""
+        n_freqs = len(self.bin_posteriors)
+        n_times = self.bin_posteriors[0].shape[1]
+
+        final_posteriors = np.zeros((self.n_sources, n_freqs, n_times))
+        for f in range(n_freqs):
+            final_posteriors[:, f, :] = self.bin_posteriors[f]
+        return final_posteriors
         
     def process_signal(self, multi_signal: MultiSignal) :
         """

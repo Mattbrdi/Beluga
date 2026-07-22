@@ -491,18 +491,28 @@ def _sawada_mask_figure(
     sawada_model: dict[str, np.ndarray],
     source_index: int,
     frequency_scale: str = "linear",
+    map_kind: str = "mask",
 ) -> go.Figure:
     masks = np.asarray(sawada_model.get("masks", []), dtype=float)
+    posteriors = np.asarray(sawada_model.get("posteriors", []), dtype=float)
     frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
     times = np.asarray(sawada_model.get("times", []), dtype=float)
     fig = go.Figure()
 
-    if masks.ndim != 3 or masks.size == 0:
+    values_tensor = posteriors if map_kind == "posterior" else masks
+    missing_posterior = map_kind == "posterior" and (
+        posteriors.ndim != 3 or posteriors.size == 0
+    )
+    if values_tensor.ndim != 3 or values_tensor.size == 0:
         fig.update_layout(
             title="Masques Sawada indisponibles",
             annotations=[
                 {
-                    "text": "Relance le benchmark Sawada pour generer sawada_model.npz.",
+                    "text": (
+                        "Relance le benchmark Sawada pour generer sawada_model.npz."
+                        if not missing_posterior
+                        else "Relance le benchmark Sawada pour generer les probabilites EM."
+                    ),
                     "xref": "paper",
                     "yref": "paper",
                     "x": 0.5,
@@ -512,20 +522,23 @@ def _sawada_mask_figure(
             ],
         )
     else:
-        source_index = min(max(int(source_index or 0), 0), masks.shape[0] - 1)
-        values = masks[source_index]
+        source_index = min(max(int(source_index or 0), 0), values_tensor.shape[0] - 1)
+        values = values_tensor[source_index]
         yaxis_type = "log" if frequency_scale == "log" else "linear"
         if yaxis_type == "log":
             mask = frequencies > 0
             frequencies = frequencies[mask]
             values = values[mask, :]
 
+        is_posterior = map_kind == "posterior"
         fig.add_trace(
             go.Heatmap(
                 z=values,
                 x=times,
                 y=frequencies,
-                colorscale=[
+                colorscale="Viridis"
+                if is_posterior
+                else [
                     [0.0, "#f7f7f3"],
                     [0.499, "#f7f7f3"],
                     [0.5, "#0f766e"],
@@ -533,12 +546,20 @@ def _sawada_mask_figure(
                 ],
                 zmin=0,
                 zmax=1,
-                colorbar={"title": "mask"},
-                hovertemplate="t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>mask=%{z}<extra></extra>",
+                colorbar={"title": "P(source)" if is_posterior else "mask"},
+                hovertemplate=(
+                    "t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>P=%{z:.3f}<extra></extra>"
+                    if is_posterior
+                    else "t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>mask=%{z}<extra></extra>"
+                ),
             )
         )
         fig.update_layout(
-            title=f"Masque Sawada - Source {source_index + 1}",
+            title=(
+                f"Probabilite EM - Source {source_index + 1}"
+                if is_posterior
+                else f"Masque Sawada - Source {source_index + 1}"
+            ),
             xaxis_title="Temps (s)",
             yaxis_title="Frequence (Hz)",
             yaxis_type=yaxis_type,
@@ -1009,6 +1030,21 @@ def build_app(config: AppConfig) -> dash.Dash:
                                             html.H2("Masques Sawada", className="panel-title"),
                                             html.Div(
                                                 [
+                                                    html.Label("Carte"),
+                                                    dcc.Dropdown(
+                                                        id="sawada-map-kind-dropdown",
+                                                        options=[
+                                                            {"label": "Masque", "value": "mask"},
+                                                            {"label": "Probabilite EM", "value": "posterior"},
+                                                        ],
+                                                        value="mask",
+                                                        clearable=False,
+                                                    ),
+                                                ],
+                                                style={"width": "150px"},
+                                            ),
+                                            html.Div(
+                                                [
                                                     html.Label("Source"),
                                                     dcc.Dropdown(
                                                         id="mask-source-dropdown",
@@ -1239,6 +1275,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         Input("algorithm-dropdown", "value"),
         Input("mask-source-dropdown", "value"),
         Input("mask-frequency-scale-dropdown", "value"),
+        Input("sawada-map-kind-dropdown", "value"),
     )
     def update_sawada_mask(
         split: str,
@@ -1246,6 +1283,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         algorithm: str,
         source_index: int,
         frequency_scale: str,
+        map_kind: str,
     ) -> tuple[go.Figure, str]:
         if not split or not scene_id or algorithm != "sawada":
             return _sawada_mask_figure({}, 0), "Disponible uniquement pour Sawada."
@@ -1259,12 +1297,26 @@ def build_app(config: AppConfig) -> dash.Dash:
             )
 
         source_index = min(max(int(source_index or 0), 0), masks.shape[0] - 1)
-        active_ratio = float(np.mean(masks[source_index]))
-        caption = (
-            f"Masque source {source_index + 1}: {masks.shape[1]} bins frequences x "
-            f"{masks.shape[2]} trames, occupation {active_ratio:.1%}."
-        )
-        return _sawada_mask_figure(model, source_index, frequency_scale), caption
+        if map_kind == "posterior":
+            posteriors = np.asarray(model.get("posteriors", []))
+            if posteriors.ndim != 3 or posteriors.size == 0:
+                return (
+                    _sawada_mask_figure(model, source_index, frequency_scale, map_kind),
+                    "Probabilites EM absentes. Relance le benchmark Sawada avec cette version.",
+                )
+            mean_probability = float(np.mean(posteriors[source_index]))
+            caption = (
+                f"Probabilite EM source {source_index + 1}: "
+                f"{posteriors.shape[1]} bins frequences x {posteriors.shape[2]} trames, "
+                f"moyenne {mean_probability:.3f}."
+            )
+        else:
+            active_ratio = float(np.mean(masks[source_index]))
+            caption = (
+                f"Masque source {source_index + 1}: {masks.shape[1]} bins frequences x "
+                f"{masks.shape[2]} trames, occupation {active_ratio:.1%}."
+            )
+        return _sawada_mask_figure(model, source_index, frequency_scale, map_kind), caption
 
     @app.callback(
         Output("overview", "children"),
