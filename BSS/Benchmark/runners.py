@@ -8,13 +8,21 @@ import numpy as np
 
 from ..Algo_Separation.Frequency_ica_separation import FrequencyDomainICA
 from ..Algo_Separation.Sawada_separation import SawadaBSS
-from ..Utils.associated_dataclasses import StftParameters
+from ..Utils.associated_dataclasses import EMClusteringParameters, StftParameters
 from ..Utils.signal_class import MultiSignal
 
 
 BENCHMARK_STFT_PARAMETERS = StftParameters(
     nperseg=4096,
     noverlap=3072,
+)
+BENCHMARK_SAWADA_EM_PARAMETERS = EMClusteringParameters(
+    n_iter=20,
+    phi=1.0,
+    eps=1e-12,
+    energy_threshold_db_above_floor=6.0,
+    energy_floor_percentile=20.0,
+    min_active_frames_per_frequency=2,
 )
 
 
@@ -63,11 +71,18 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
     if model.nspectro_preprocessed is None:
         return {}
 
-    if model.signal is not None:
+    if model.tf_energy is not None:
+        tf_energy = model.tf_energy
+    elif model.signal is not None:
         raw_spectro = model.get_spectro(model.signal)
         tf_energy = np.sum(np.abs(raw_spectro.Sxx) ** 2, axis=0)
     else:
         tf_energy = np.sum(np.abs(model.nspectro_preprocessed.Sxx) ** 2, axis=0)
+    active_tf_mask = (
+        model.active_tf_mask
+        if model.active_tf_mask is not None
+        else np.ones_like(tf_energy, dtype=bool)
+    )
 
     n_freqs = len(model.bin_models)
     variances = np.zeros((n_freqs, model.n_sources), dtype=float)
@@ -82,6 +97,10 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
             "posteriors": model.get_final_posteriors(),
             "tf_energy": tf_energy,
             "frequency_energy": np.mean(tf_energy, axis=1),
+            "active_tf_mask": active_tf_mask.astype(np.uint8),
+            "energy_threshold_db": np.asarray(
+                np.nan if model.energy_threshold_db is None else model.energy_threshold_db
+            ),
             "frequencies": np.asarray(model.nspectro_preprocessed.f, dtype=float),
             "times": np.asarray(model.nspectro_preprocessed.t, dtype=float),
             "centroids": model.all_centroids,
@@ -102,6 +121,7 @@ def run_sawada(
     model = SawadaBSS(
         n_sources=scene.metadata.n_sources,
         stft_parameters=BENCHMARK_STFT_PARAMETERS,
+        em_clustering_parameters=BENCHMARK_SAWADA_EM_PARAMETERS,
     )
     model.process_signal(scene.mixed)
     sources = model.separate_source()
@@ -121,6 +141,20 @@ def run_sawada(
                 "noverlap": BENCHMARK_STFT_PARAMETERS.noverlap,
                 "nfft": BENCHMARK_STFT_PARAMETERS.nfft,
                 "window": BENCHMARK_STFT_PARAMETERS.window,
+            },
+            "em_clustering_parameters": {
+                "n_iter": BENCHMARK_SAWADA_EM_PARAMETERS.n_iter,
+                "phi": BENCHMARK_SAWADA_EM_PARAMETERS.phi,
+                "eps": BENCHMARK_SAWADA_EM_PARAMETERS.eps,
+                "energy_threshold_db_above_floor": (
+                    BENCHMARK_SAWADA_EM_PARAMETERS.energy_threshold_db_above_floor
+                ),
+                "energy_floor_percentile": (
+                    BENCHMARK_SAWADA_EM_PARAMETERS.energy_floor_percentile
+                ),
+                "min_active_frames_per_frequency": (
+                    BENCHMARK_SAWADA_EM_PARAMETERS.min_active_frames_per_frequency
+                ),
             },
             "reference_microphone": reference_microphone,
             "max_lag_samples": max_lag_samples,

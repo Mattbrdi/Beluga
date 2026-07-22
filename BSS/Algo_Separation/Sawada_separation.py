@@ -228,6 +228,9 @@ class SawadaBSS:
     bin_models: Dict[int, 'EMClustering'] = field(default_factory=dict)
     bin_masks: Dict[int, np.ndarray] = field(default_factory=dict)
     bin_posteriors: Dict[int, np.ndarray] = field(default_factory=dict)
+    tf_energy: Optional[np.ndarray] = None
+    active_tf_mask: Optional[np.ndarray] = None
+    energy_threshold_db: Optional[float] = None
     
     eigenvalues_matrix: Optional[np.ndarray] = None
     eigenvector_matrix: Optional[np.ndarray] = None
@@ -240,6 +243,21 @@ class SawadaBSS:
             em_clustering_parameters=self.em_clustering_parameters,
             whitening=self.whitening,
         )
+
+    def _compute_active_tf_mask(self, tf_energy: np.ndarray) -> np.ndarray:
+        threshold_margin = self.em_clustering_parameters.energy_threshold_db_above_floor
+        active_mask = np.ones_like(tf_energy, dtype=bool)
+        self.energy_threshold_db = None
+        if threshold_margin is None:
+            return active_mask
+
+        energy_db = 10 * np.log10(tf_energy + self.em_clustering_parameters.eps)
+        floor_db = np.percentile(
+            energy_db,
+            self.em_clustering_parameters.energy_floor_percentile,
+        )
+        self.energy_threshold_db = float(floor_db + threshold_margin)
+        return energy_db >= self.energy_threshold_db
     
     
     
@@ -264,7 +282,11 @@ class SawadaBSS:
         return spectro.apply_transformation(W = whitening_matrix)
     
     
-    def fit_bins(self, nspectro: 'NSpectrogram'):
+    def fit_bins(
+        self,
+        nspectro: 'NSpectrogram',
+        active_tf_mask: np.ndarray | None = None,
+    ):
         """
         Exécute le clustering EM pour chaque bin de fréquence indépendamment.
         
@@ -280,6 +302,17 @@ class SawadaBSS:
             # 1. Extraction des données pour la fréquence f
             # X_f shape: (n_micros, n_times)
             X_f = nspectro.Sxx[:, f_idx, :]
+            active_frames = (
+                np.ones(n_times, dtype=bool)
+                if active_tf_mask is None
+                else np.asarray(active_tf_mask[f_idx], dtype=bool)
+            )
+            min_active = max(
+                self.n_sources,
+                self.em_clustering_parameters.min_active_frames_per_frequency,
+            )
+            has_enough_active_frames = int(np.sum(active_frames)) >= min_active
+            X_fit = X_f[:, active_frames] if has_enough_active_frames else X_f
             
             # 2. Initialisation de l'EM pour ce bin
             # On utilise les paramètres de la classe Sawada
@@ -292,14 +325,18 @@ class SawadaBSS:
             
             # 3. Entraînement (M-Step et E-Step alternés)
             # Cette étape estime a_i(f) et sigma_i(f)
-            model.fit(X_f)
+            model.fit(X_fit)
             
             # 4. Génération du masque binaire (Hard labeling) pour ce bin
             # mask_f shape: (n_sources, n_times)
-            mask_f = model.predict(X_f)
-            posterior_f = model.posteriors
-            if posterior_f is None:
-                posterior_f = model.e_step(X_f)
+            mask_f = np.zeros((self.n_sources, n_times), dtype=int)
+            posterior_f = np.zeros((self.n_sources, n_times), dtype=float)
+            if has_enough_active_frames:
+                mask_f[:, active_frames] = model.predict(X_fit)
+                posterior_active = model.posteriors
+                if posterior_active is None:
+                    posterior_active = model.e_step(X_fit)
+                posterior_f[:, active_frames] = posterior_active
             
             self.bin_models[f_idx] = model
             self.bin_masks[f_idx] = mask_f
@@ -447,11 +484,16 @@ class SawadaBSS:
         """
         self.signal = multi_signal
         # 1. Prétraitement (STFT + Normalisation + Blanchiment)
-        nspectro_whitened = self.preprocess(multi_signal)
-        self.nspectro_preprocessed = self.preprocess(multi_signal)
+        raw_spectro = self.get_spectro(multi_signal)
+        self.tf_energy = np.sum(np.abs(raw_spectro.Sxx) ** 2, axis=0)
+        self.active_tf_mask = self._compute_active_tf_mask(self.tf_energy)
+        nspectro_whitened = raw_spectro.normalize_each_bin()
+        if self.whitening:
+            nspectro_whitened = self.apply_whitening(nspectro_whitened)
+        self.nspectro_preprocessed = nspectro_whitened
         # 2. Algo : Clustering par bin (EM)
         print("Démarrage du clustering EM par bin...")
-        self.fit_bins(nspectro_whitened)
+        self.fit_bins(nspectro_whitened, self.active_tf_mask)
         
         # 3. Algo : Alignement des permutations entre les fréquences
         print("Alignement des permutations...")

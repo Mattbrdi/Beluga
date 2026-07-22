@@ -495,11 +495,17 @@ def _sawada_mask_figure(
 ) -> go.Figure:
     masks = np.asarray(sawada_model.get("masks", []), dtype=float)
     posteriors = np.asarray(sawada_model.get("posteriors", []), dtype=float)
+    active_tf_mask = np.asarray(sawada_model.get("active_tf_mask", []), dtype=float)
     frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
     times = np.asarray(sawada_model.get("times", []), dtype=float)
     fig = go.Figure()
 
-    values_tensor = posteriors if map_kind == "posterior" else masks
+    if map_kind == "posterior":
+        values_tensor = posteriors
+    elif map_kind == "active":
+        values_tensor = active_tf_mask[np.newaxis, :, :] if active_tf_mask.ndim == 2 else active_tf_mask
+    else:
+        values_tensor = masks
     missing_posterior = map_kind == "posterior" and (
         posteriors.ndim != 3 or posteriors.size == 0
     )
@@ -531,6 +537,7 @@ def _sawada_mask_figure(
             values = values[mask, :]
 
         is_posterior = map_kind == "posterior"
+        is_active = map_kind == "active"
         fig.add_trace(
             go.Heatmap(
                 z=values,
@@ -546,10 +553,12 @@ def _sawada_mask_figure(
                 ],
                 zmin=0,
                 zmax=1,
-                colorbar={"title": "P(source)" if is_posterior else "mask"},
+                colorbar={"title": "P(source)" if is_posterior else "active" if is_active else "mask"},
                 hovertemplate=(
                     "t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>P=%{z:.3f}<extra></extra>"
                     if is_posterior
+                    else "t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>active=%{z}<extra></extra>"
+                    if is_active
                     else "t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>mask=%{z}<extra></extra>"
                 ),
             )
@@ -558,6 +567,8 @@ def _sawada_mask_figure(
             title=(
                 f"Probabilite EM - Source {source_index + 1}"
                 if is_posterior
+                else "Bins actifs EM"
+                if is_active
                 else f"Masque Sawada - Source {source_index + 1}"
             ),
             xaxis_title="Temps (s)",
@@ -1096,10 +1107,11 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                     html.Label("Carte"),
                                                     dcc.Dropdown(
                                                         id="sawada-map-kind-dropdown",
-                                                        options=[
-                                                            {"label": "Masque", "value": "mask"},
-                                                            {"label": "Probabilite EM", "value": "posterior"},
-                                                        ],
+                                                            options=[
+                                                                {"label": "Masque", "value": "mask"},
+                                                                {"label": "Probabilite EM", "value": "posterior"},
+                                                                {"label": "Bins actifs EM", "value": "active"},
+                                                            ],
                                                         value="mask",
                                                         clearable=False,
                                                     ),
@@ -1369,7 +1381,20 @@ def build_app(config: AppConfig) -> dash.Dash:
             )
 
         source_index = min(max(int(source_index or 0), 0), masks.shape[0] - 1)
-        if map_kind == "posterior":
+        if map_kind == "active":
+            active_tf_mask = np.asarray(model.get("active_tf_mask", []), dtype=float)
+            if active_tf_mask.ndim != 2 or active_tf_mask.size == 0:
+                return (
+                    _sawada_mask_figure(model, source_index, frequency_scale, map_kind),
+                    "Masque des bins actifs absent. Relance le benchmark Sawada avec cette version.",
+                )
+            threshold = np.asarray(model.get("energy_threshold_db", np.nan)).item()
+            threshold_text = "-" if np.isnan(threshold) else f"{float(threshold):.1f} dB"
+            caption = (
+                f"Bins actifs EM: {float(np.mean(active_tf_mask)):.1%} des bins gardes, "
+                f"seuil {threshold_text}."
+            )
+        elif map_kind == "posterior":
             posteriors = np.asarray(model.get("posteriors", []))
             if posteriors.ndim != 3 or posteriors.size == 0:
                 return (
@@ -1415,13 +1440,22 @@ def build_app(config: AppConfig) -> dash.Dash:
                 "Energie absente. Relance le benchmark Sawada avec cette version.",
             )
 
+        threshold = np.asarray(model.get("energy_threshold_db", np.nan)).item()
+        active_tf_mask = np.asarray(model.get("active_tf_mask", []), dtype=float)
         frequency_energy = np.mean(energy, axis=1)
         db = 10 * np.log10(frequency_energy + 1e-20)
-        threshold = np.nanpercentile(db, 10)
-        quiet_count = int(np.sum(db <= threshold))
+        quiet_threshold = np.nanpercentile(db, 10)
+        quiet_count = int(np.sum(db <= quiet_threshold))
+        threshold_text = "-" if np.isnan(threshold) else f"{float(threshold):.1f} dB"
+        active_text = (
+            "-"
+            if active_tf_mask.ndim != 2 or active_tf_mask.size == 0
+            else f"{float(np.mean(active_tf_mask)):.1%}"
+        )
         caption = (
             f"Energie brute avant normalisation: {energy.shape[0]} bins frequences x "
-            f"{energy.shape[1]} trames. {quiet_count} bins sont dans les 10% les plus faibles."
+            f"{energy.shape[1]} trames. Seuil EM {threshold_text}, bins actifs {active_text}. "
+            f"{quiet_count} bins frequences sont dans les 10% les plus faibles."
         )
         return _sawada_energy_figure(model, frequency_scale), caption
 
