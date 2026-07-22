@@ -149,9 +149,10 @@ class EMClustering:
             weighted_X = X * np.sqrt(gamma)
             R_i = weighted_X @ weighted_X.conj().T
             
-            # diagonalisation pour extraire la direction dominante (u1)
+            # np.linalg.eigh trie les valeurs propres par ordre croissant:
+            # la direction dominante est donc le dernier vecteur propre.
             _, u = np.linalg.eigh(R_i)
-            self.centroids[:, i] = u[:, 0]
+            self.centroids[:, i] = u[:, -1]
             self.centroids /= (np.linalg.norm(self.centroids, axis=0) + self.eps)
             
             #  Mise à jour de la variance sigma_i^2
