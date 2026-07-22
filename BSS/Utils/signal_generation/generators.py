@@ -29,11 +29,17 @@ class SignalPlacementGenerator:
         spec = spec or SignalPlacementSpec()
         type_name = _random_type_name(rng, spec.signal_type, self.registry)
         signal_cls = self.registry[type_name]
-        signal_cls.validate_fixed_params(spec.signal_params)
+        signal_params = self._params_with_scene_limited_duration(
+            rng=rng,
+            signal_cls=signal_cls,
+            signal_params=spec.signal_params,
+            scene_duration=scene_duration,
+        )
+        signal_cls.validate_fixed_params(signal_params)
         signal = signal_cls.generate_random(
             rng=rng,
             freq=freq,
-            **spec.signal_params,
+            **signal_params,
         )
         max_start = max(0.0, scene_duration - signal.duration)
         start_time = _random_value(rng, spec.start_time, 0.0, max_start)
@@ -49,6 +55,33 @@ class SignalPlacementGenerator:
             window=window,
             gain=gain,
         )
+
+    @staticmethod
+    def _params_with_scene_limited_duration(
+        rng: np.random.Generator,
+        signal_cls: type[TypedSignal],
+        signal_params: dict,
+        scene_duration: float,
+    ) -> dict:
+        """Evite de normaliser un signal long puis de n'en garder qu'un extrait faible.
+
+        Un time_duration fixe reste toujours prioritaire. Pour les placements
+        aleatoires, on limite la duree tiree a la scene afin que le niveau du
+        signal corresponde bien a ce qui sera rendu.
+        """
+        params = dict(signal_params)
+        if "time_duration" in params or scene_duration <= 0:
+            return params
+
+        duration_range = getattr(signal_cls, "DURATION_RANGE", None)
+        if duration_range is None:
+            return params
+
+        low, high = duration_range
+        high = min(float(high), float(scene_duration))
+        low = min(float(low), high)
+        params["time_duration"] = _random_value(rng, None, low, high)
+        return params
 
 
 class CompositeSignalGenerator:

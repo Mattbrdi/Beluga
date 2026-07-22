@@ -56,8 +56,9 @@ class LargeShipNoise(TypedSignal):
 
     ``w_cavitation = 1 - tonal_mix - engine_mix``.
 
-    Le pic du resultat est finalement ramene a 1. Le niveau acoustique relatif
-    dans une scene est ensuite fixe par le gain du bruit continu.
+    Le resultat est finalement normalise en valeur efficace. Le niveau
+    acoustique relatif dans une scene est ensuite fixe par le gain du bruit
+    continu ou par le SNR demande.
 
     Cavitation large bande
     ----------------------
@@ -338,9 +339,7 @@ class LargeShipNoise(TypedSignal):
             + tonal_mix * propeller_tones
             + engine_mix * engine_tones
         )
-        peak = float(np.max(np.abs(data)))
-        if peak > 0:
-            data /= peak
+        data = cls._normalize_rms(data)
 
         return cls(
             freq=freq,

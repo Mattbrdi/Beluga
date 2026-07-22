@@ -1,8 +1,12 @@
 ﻿from __future__ import annotations # Permet d'utiliser Spectrogram comme type même s'il est défini plus loin
 import numpy as np 
 from scipy import signal as sp_signal 
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Button
+try:
+    import matplotlib.pyplot as plt
+    from matplotlib.widgets import Button
+except ModuleNotFoundError:
+    plt = None
+    Button = None
 import io
 import threading
 import tempfile

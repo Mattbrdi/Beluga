@@ -26,12 +26,12 @@ def _ship_noise(seed=42, tonal_mix=0.3, engine_mix=0.2):
     )
 
 
-def test_large_ship_noise_is_reproducible_and_peak_normalized():
+def test_large_ship_noise_is_reproducible_and_rms_normalized():
     first = _ship_noise(seed=12)
     second = _ship_noise(seed=12)
 
     np.testing.assert_array_equal(first.data, second.data)
-    assert np.max(np.abs(first.data)) == pytest.approx(1.0)
+    assert np.sqrt(np.mean(np.square(first.data))) == pytest.approx(1.0)
     assert first.duration == pytest.approx(1.0)
 
 

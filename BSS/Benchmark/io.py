@@ -8,7 +8,7 @@ from typing import Any, Iterator
 
 import numpy as np
 
-from ..Dataset import load_scene
+from ..Utils.signal_class import Mixture, MultiSignal
 
 
 DEFAULT_SPLITS = ("train", "validation", "test")
@@ -23,6 +23,78 @@ class SceneRecord:
     path: Path
     seed: int | None = None
     metadata: dict[str, Any] | None = None
+
+
+@dataclass(frozen=True)
+class BenchmarkSceneMetadata:
+    fs: int
+    duration: float
+    n_sources: int
+    n_mics: int
+    max_delay: int
+    delay_matrix: np.ndarray
+    seed: int | None = None
+    snr_db: float | None = None
+
+
+@dataclass(frozen=True)
+class BenchmarkScene:
+    sources: MultiSignal
+    mixing: Mixture
+    clean_mixed: MultiSignal
+    noise: MultiSignal
+    mixed: MultiSignal
+    metadata: BenchmarkSceneMetadata
+
+
+def _metadata_from_dict(raw: dict[str, Any]) -> BenchmarkSceneMetadata:
+    return BenchmarkSceneMetadata(
+        fs=int(raw["fs"]),
+        duration=float(raw["duration"]),
+        n_sources=int(raw["n_sources"]),
+        n_mics=int(raw["n_mics"]),
+        max_delay=int(raw["max_delay"]),
+        delay_matrix=np.asarray(raw["delay_matrix"], dtype=int),
+        seed=None if raw.get("seed") is None else int(raw["seed"]),
+        snr_db=None if raw.get("snr_db") is None else float(raw["snr_db"]),
+    )
+
+
+def load_scene(path: str | Path) -> BenchmarkScene:
+    """Charge une scene NPZ sans importer le generateur de dataset complet."""
+    target = Path(path)
+    with np.load(target, allow_pickle=False) as payload:
+        if "format_version" not in payload or "metadata_json" not in payload:
+            raise ValueError(
+                f"Le fichier {target} utilise l'ancien format sans metadonnees. "
+                "Regenere le dataset avec la version actuelle."
+            )
+
+        fs = int(np.asarray(payload["fs"]).item())
+        sources_data = np.asarray(payload["sources"]).copy()
+        clean_mixed_data = np.asarray(payload["clean_mixed"]).copy()
+        noise_data = np.asarray(payload["noise"]).copy()
+        mixed_data = np.asarray(payload["mixed"]).copy()
+        mixing_filters = np.asarray(payload["mixing_filters"]).copy()
+        metadata_raw = json.loads(str(np.asarray(payload["metadata_json"]).item()))
+
+    if mixing_filters.ndim != 3:
+        raise ValueError(
+            "mixing_filters doit avoir la forme (n_mics, n_sources, filter_length)."
+        )
+
+    n_mics, n_sources, filter_length = mixing_filters.shape
+    mixing = Mixture(E=n_sources, S=n_mics, L=filter_length)
+    mixing.filters = mixing_filters
+
+    return BenchmarkScene(
+        sources=MultiSignal.from_array(sources_data, fs),
+        mixing=mixing,
+        clean_mixed=MultiSignal.from_array(clean_mixed_data, fs),
+        noise=MultiSignal.from_array(noise_data, fs),
+        mixed=MultiSignal.from_array(mixed_data, fs),
+        metadata=_metadata_from_dict(metadata_raw),
+    )
 
 
 def read_manifest(dataset_root: str | Path, split: str) -> list[SceneRecord]:

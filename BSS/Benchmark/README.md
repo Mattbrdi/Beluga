@@ -52,3 +52,16 @@ M1M2, M1M3, M1M4, M2M3, M2M4, M3M4
 ```
 
 avec la convention `M_iM_j = delay(M_j) - delay(M_i)`.
+
+## Visualisation des resultats
+
+```bash
+python3 -m BSS.Benchmark.visualize_results \
+  --results BSS/Benchmark/results/boat_and_whistle_v2 \
+  --dataset BSS/Dataset/generated/boat_and_whistle_v2
+```
+
+L'interface Dash permet de parcourir les splits, scenes et algorithmes, puis de
+visualiser les sources originales, les melanges, les estimations, leurs
+spectrogrammes, l'audio associe et les TDOA estimes/alignees face aux valeurs de
+reference.

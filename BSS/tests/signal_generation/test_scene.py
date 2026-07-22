@@ -153,3 +153,4 @@ def test_large_ship_noise_can_be_selected_as_source():
     placements = scene.metadata.source_composites[0].placements
     assert len(placements) == 1
     assert placements[0].signal_type == "large_ship_noise"
+    assert placements[0].duration == pytest.approx(0.5)

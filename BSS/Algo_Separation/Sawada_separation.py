@@ -1,7 +1,10 @@
 from __future__ import annotations 
 import numpy as np 
 from scipy import signal as sp_signal 
-import matplotlib.pyplot as plt
+try:
+    import matplotlib.pyplot as plt
+except ModuleNotFoundError:
+    plt = None
 from ..Utils.signal_class import Signal, MultiSignal, NSpectrogram
 from dataclasses import dataclass, field, asdict
 from ..Utils.associated_dataclasses import StftParameters, EMClusteringParameters, SawadaBssParameters
