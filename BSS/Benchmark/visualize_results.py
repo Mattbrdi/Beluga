@@ -188,6 +188,10 @@ def _sources_path(results_root: Path, split: str, scene_id: str, algorithm: str)
     return results_root / split / scene_id / f"{algorithm}_sources.npz"
 
 
+def _sawada_model_path(results_root: Path, split: str, scene_id: str) -> Path:
+    return results_root / split / scene_id / "sawada_model.npz"
+
+
 def _scene_path_from_manifest(dataset_root: Path, split: str, scene_id: str) -> Path | None:
     manifest = dataset_root / split / "manifest.jsonl"
     if not manifest.exists():
@@ -234,6 +238,13 @@ def _npz_array(path: Path, key: str) -> np.ndarray | None:
         return np.asarray(payload[key]).copy()
 
 
+def _load_sawada_model(path: Path) -> dict[str, np.ndarray]:
+    if not path.exists():
+        return {}
+    with np.load(path, allow_pickle=False) as payload:
+        return {key: np.asarray(payload[key]).copy() for key in payload.files}
+
+
 @lru_cache(maxsize=16)
 def _load_bundle(
     results_root_text: str,
@@ -249,6 +260,11 @@ def _load_bundle(
     sources_npz_path = _sources_path(results_root, split, scene_id, algorithm)
     estimated_sources = _npz_array(sources_npz_path, "sources")
     fs = int(metrics.get("fs") or _npz_array(sources_npz_path, "fs") or 0)
+    sawada_model = (
+        _load_sawada_model(_sawada_model_path(results_root, split, scene_id))
+        if algorithm == "sawada"
+        else {}
+    )
  
 
     scene_path = _resolve_scene_path(dataset_root, split, scene_id, metrics)
@@ -278,6 +294,7 @@ def _load_bundle(
         "scene_arrays": scene_arrays,
         "scene_metadata": scene_metadata,
         "estimated_sources": estimated_sources,
+        "sawada_model": sawada_model,
         "fs": fs,
     }
 
@@ -464,6 +481,71 @@ def _spectrogram_figure(
         xaxis_title="Temps (s)",
         yaxis_title="Frequence (Hz)",
         yaxis_type=yaxis_type,
+        paper_bgcolor="#f7f7f3",
+        plot_bgcolor="#ffffff",
+    )
+    return fig
+
+
+def _sawada_mask_figure(
+    sawada_model: dict[str, np.ndarray],
+    source_index: int,
+    frequency_scale: str = "linear",
+) -> go.Figure:
+    masks = np.asarray(sawada_model.get("masks", []), dtype=float)
+    frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
+    times = np.asarray(sawada_model.get("times", []), dtype=float)
+    fig = go.Figure()
+
+    if masks.ndim != 3 or masks.size == 0:
+        fig.update_layout(
+            title="Masques Sawada indisponibles",
+            annotations=[
+                {
+                    "text": "Relance le benchmark Sawada pour generer sawada_model.npz.",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x": 0.5,
+                    "y": 0.5,
+                    "showarrow": False,
+                }
+            ],
+        )
+    else:
+        source_index = min(max(int(source_index or 0), 0), masks.shape[0] - 1)
+        values = masks[source_index]
+        yaxis_type = "log" if frequency_scale == "log" else "linear"
+        if yaxis_type == "log":
+            mask = frequencies > 0
+            frequencies = frequencies[mask]
+            values = values[mask, :]
+
+        fig.add_trace(
+            go.Heatmap(
+                z=values,
+                x=times,
+                y=frequencies,
+                colorscale=[
+                    [0.0, "#f7f7f3"],
+                    [0.499, "#f7f7f3"],
+                    [0.5, "#0f766e"],
+                    [1.0, "#0f766e"],
+                ],
+                zmin=0,
+                zmax=1,
+                colorbar={"title": "mask"},
+                hovertemplate="t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>mask=%{z}<extra></extra>",
+            )
+        )
+        fig.update_layout(
+            title=f"Masque Sawada - Source {source_index + 1}",
+            xaxis_title="Temps (s)",
+            yaxis_title="Frequence (Hz)",
+            yaxis_type=yaxis_type,
+        )
+
+    fig.update_layout(
+        margin={"l": 58, "r": 18, "t": 34, "b": 42},
         paper_bgcolor="#f7f7f3",
         plot_bgcolor="#ffffff",
     )
@@ -923,6 +1005,52 @@ def build_app(config: AppConfig) -> dash.Dash:
                             html.Div(
                                 [
                                     html.Div(
+                                        [
+                                            html.H2("Masques Sawada", className="panel-title"),
+                                            html.Div(
+                                                [
+                                                    html.Label("Source"),
+                                                    dcc.Dropdown(
+                                                        id="mask-source-dropdown",
+                                                        value=0,
+                                                        clearable=False,
+                                                    ),
+                                                ],
+                                                style={"width": "120px"},
+                                            ),
+                                            html.Div(
+                                                [
+                                                    html.Label("Freq."),
+                                                    dcc.Dropdown(
+                                                        id="mask-frequency-scale-dropdown",
+                                                        options=[
+                                                            {"label": "Lineaire", "value": "linear"},
+                                                            {"label": "Log", "value": "log"},
+                                                        ],
+                                                        value="linear",
+                                                        clearable=False,
+                                                    ),
+                                                ],
+                                                style={"width": "120px"},
+                                            ),
+                                        ],
+                                        className="panel-header",
+                                    ),
+                                    dcc.Graph(
+                                        id="sawada-mask-graph",
+                                        config={"displayModeBar": True},
+                                        style={"height": "300px"},
+                                    ),
+                                    html.Div(
+                                        id="sawada-mask-caption",
+                                        className="muted panel-body",
+                                    ),
+                                ],
+                                className="panel",
+                            ),
+                            html.Div(
+                                [
+                                    html.Div(
                                         [html.H2("TDOA", className="panel-title")],
                                         className="panel-header",
                                     ),
@@ -1074,6 +1202,69 @@ def build_app(config: AppConfig) -> dash.Dash:
             {"label": label, "value": index}
             for index, label in enumerate(group.traces)
         ], value
+
+    @app.callback(
+        Output("mask-source-dropdown", "options"),
+        Output("mask-source-dropdown", "value"),
+        Input("split-dropdown", "value"),
+        Input("scene-dropdown", "value"),
+        Input("algorithm-dropdown", "value"),
+        State("mask-source-dropdown", "value"),
+    )
+    def update_mask_sources(
+        split: str,
+        scene_id: str,
+        algorithm: str,
+        current_source: int | None,
+    ) -> tuple[list[dict[str, int]], int]:
+        if not split or not scene_id or algorithm != "sawada":
+            return [], 0
+
+        masks = _bundle(config, split, scene_id, algorithm)["sawada_model"].get("masks")
+        if masks is None or np.asarray(masks).ndim != 3:
+            return [], 0
+
+        source_indexes = list(range(np.asarray(masks).shape[0]))
+        value = current_source if current_source in source_indexes else 0
+        return [
+            {"label": f"Source {source_index + 1}", "value": source_index}
+            for source_index in source_indexes
+        ], value
+
+    @app.callback(
+        Output("sawada-mask-graph", "figure"),
+        Output("sawada-mask-caption", "children"),
+        Input("split-dropdown", "value"),
+        Input("scene-dropdown", "value"),
+        Input("algorithm-dropdown", "value"),
+        Input("mask-source-dropdown", "value"),
+        Input("mask-frequency-scale-dropdown", "value"),
+    )
+    def update_sawada_mask(
+        split: str,
+        scene_id: str,
+        algorithm: str,
+        source_index: int,
+        frequency_scale: str,
+    ) -> tuple[go.Figure, str]:
+        if not split or not scene_id or algorithm != "sawada":
+            return _sawada_mask_figure({}, 0), "Disponible uniquement pour Sawada."
+
+        model = _bundle(config, split, scene_id, algorithm)["sawada_model"]
+        masks = np.asarray(model.get("masks", []))
+        if masks.ndim != 3 or masks.size == 0:
+            return (
+                _sawada_mask_figure({}, 0),
+                "Aucun sawada_model.npz trouve pour cette scene. Relance le benchmark Sawada.",
+            )
+
+        source_index = min(max(int(source_index or 0), 0), masks.shape[0] - 1)
+        active_ratio = float(np.mean(masks[source_index]))
+        caption = (
+            f"Masque source {source_index + 1}: {masks.shape[1]} bins frequences x "
+            f"{masks.shape[2]} trames, occupation {active_ratio:.1%}."
+        )
+        return _sawada_mask_figure(model, source_index, frequency_scale), caption
 
     @app.callback(
         Output("overview", "children"),

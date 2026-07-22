@@ -35,6 +35,7 @@ Pour chaque scene :
 results/<split>/<scene_id>/
 |-- sawada_sources.npz
 |-- sawada_metrics.json
+|-- sawada_model.npz
 |-- ica_sources.npz
 `-- ica_metrics.json
 ```
@@ -64,4 +65,5 @@ python3 -m BSS.Benchmark.visualize_results \
 L'interface Dash permet de parcourir les splits, scenes et algorithmes, puis de
 visualiser les sources originales, les melanges, les estimations, leurs
 spectrogrammes, l'audio associe et les TDOA estimes/alignees face aux valeurs de
-reference.
+reference. Pour Sawada, elle affiche aussi les masques temps-frequence si
+`sawada_model.npz` a ete genere par le benchmark.

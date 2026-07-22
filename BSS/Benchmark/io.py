@@ -235,6 +235,27 @@ def save_sources_npz(
     return target
 
 
+def save_sawada_model_npz(path: str | Path, result: Any) -> Path | None:
+    """Sauvegarde l'etat final utile de Sawada pour la visualisation/debug."""
+    payload = result.debug_artifacts.get("sawada_model", {})
+    if not payload:
+        return None
+
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    np.savez_compressed(
+        target,
+        masks=np.asarray(payload["masks"]),
+        frequencies=np.asarray(payload["frequencies"]),
+        times=np.asarray(payload["times"]),
+        centroids=np.asarray(payload["centroids"]),
+        variances=np.asarray(payload["variances"]),
+        weights=np.asarray(payload["weights"]),
+        whitening=np.asarray(payload["whitening"]),
+    )
+    return target
+
+
 def write_json(path: str | Path, payload: dict[str, Any]) -> Path:
     target = Path(path)
     target.parent.mkdir(parents=True, exist_ok=True)

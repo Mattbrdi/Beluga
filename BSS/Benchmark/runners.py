@@ -28,6 +28,7 @@ class SeparationResult:
     estimated_tdoas_samples: np.ndarray
     runtime_seconds: float
     parameters: dict[str, Any] = field(default_factory=dict)
+    debug_artifacts: dict[str, Any] = field(default_factory=dict)
 
 
 def _max_lag_samples(scene: Any) -> int | None:
@@ -42,6 +43,7 @@ def _result(
     estimated_tdoas_seconds: np.ndarray,
     runtime_seconds: float,
     parameters: dict[str, Any],
+    debug_artifacts: dict[str, Any] | None = None,
 ) -> SeparationResult:
     return SeparationResult(
         algorithm=algorithm,
@@ -53,7 +55,32 @@ def _result(
         * scene.metadata.fs,
         runtime_seconds=runtime_seconds,
         parameters=parameters,
+        debug_artifacts={} if debug_artifacts is None else debug_artifacts,
     )
+
+
+def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
+    if model.nspectro_preprocessed is None:
+        return {}
+
+    n_freqs = len(model.bin_models)
+    variances = np.zeros((n_freqs, model.n_sources), dtype=float)
+    weights = np.zeros((n_freqs, model.n_sources), dtype=float)
+    for frequency_index, bin_model in model.bin_models.items():
+        variances[frequency_index] = bin_model.variances
+        weights[frequency_index] = bin_model.weights
+
+    return {
+        "sawada_model": {
+            "masks": model.get_final_masks().astype(np.uint8),
+            "frequencies": np.asarray(model.nspectro_preprocessed.f, dtype=float),
+            "times": np.asarray(model.nspectro_preprocessed.t, dtype=float),
+            "centroids": model.all_centroids,
+            "variances": variances,
+            "weights": weights,
+            "whitening": np.asarray(model.whitening),
+        }
+    }
 
 
 def run_sawada(
@@ -89,6 +116,7 @@ def run_sawada(
             "reference_microphone": reference_microphone,
             "max_lag_samples": max_lag_samples,
         },
+        debug_artifacts=_sawada_debug_artifacts(model),
     )
 
 

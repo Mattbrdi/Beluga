@@ -7,6 +7,7 @@ from typing import Any
 from .config import BenchmarkConfig
 from .io import (
     iter_scenes,
+    save_sawada_model_npz,
     save_sources_npz,
     scene_result_dir,
     write_json,
@@ -122,6 +123,8 @@ def _run_one_algorithm(
         aligned_tdoas_samples=aligned_samples,
         pairwise_labels=labels,
     )
+    if algorithm == "sawada":
+        save_sawada_model_npz(output_dir / "sawada_model.npz", result)
 
     metrics_payload = {
         "status": "ok",
