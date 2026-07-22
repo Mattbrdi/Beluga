@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import base64
 import csv
+import errno
 import io
 import json
 import math
@@ -248,6 +249,7 @@ def _load_bundle(
     sources_npz_path = _sources_path(results_root, split, scene_id, algorithm)
     estimated_sources = _npz_array(sources_npz_path, "sources")
     fs = int(metrics.get("fs") or _npz_array(sources_npz_path, "fs") or 0)
+ 
 
     scene_path = _resolve_scene_path(dataset_root, split, scene_id, metrics)
     scene_arrays: dict[str, np.ndarray] = {}
@@ -403,6 +405,8 @@ def _spectrogram_figure(
     trace_index: int,
     nperseg: int,
     max_frequency: float | None,
+    frequency_scale: str = "linear",
+    spectrogram_scale: str = "db",
 ) -> go.Figure:
     signal = np.asarray(group.data[trace_index], dtype=float)
     if signal.size < 8:
@@ -411,7 +415,7 @@ def _spectrogram_figure(
     nperseg = nperseg or 2048
     nperseg = max(64, min(int(nperseg), signal.size))
     noverlap = min(nperseg // 2, nperseg - 1)
-    freqs, times, power = sp_signal.spectrogram(
+    freqs, times, magnitude = sp_signal.spectrogram(
         signal,
         fs=group.fs,
         window="hann",
@@ -420,26 +424,38 @@ def _spectrogram_figure(
         scaling="spectrum",
         mode="magnitude",
     )
-    db = 20 * np.log10(power + 1e-12)
+
+    values = (
+        20 * np.log10(magnitude + 1e-12)
+        if spectrogram_scale == "db"
+        else magnitude
+    )
     if max_frequency is not None and max_frequency > 0:
         mask = freqs <= max_frequency
         freqs = freqs[mask]
-        db = db[mask, :]
+        values = values[mask, :]
 
-    zmin = float(np.nanpercentile(db, 5)) if db.size else -120.0
-    zmax = float(np.nanpercentile(db, 99)) if db.size else 0.0
+    yaxis_type = "log" if frequency_scale == "log" else "linear"
+    if yaxis_type == "log":
+        mask = freqs > 0
+        freqs = freqs[mask]
+        values = values[mask, :]
+
+    lower_percentile = 5 if spectrogram_scale == "db" else 1
+    zmin = float(np.nanpercentile(values, lower_percentile)) if values.size else 0.0
+    zmax = float(np.nanpercentile(values, 99)) if values.size else 1.0
     if zmax <= zmin:
         zmax = zmin + 1.0
 
     fig = go.Figure(
         data=go.Heatmap(
-            z=db,
+            z=values,
             x=times,
             y=freqs,
             colorscale="Turbo",
             zmin=zmin,
             zmax=zmax,
-            colorbar={"title": "dB"},
+            colorbar={"title": "dB" if spectrogram_scale == "db" else "mag."},
         )
     )
     fig.update_layout(
@@ -447,6 +463,7 @@ def _spectrogram_figure(
         title=f"Spectrogramme - {group.traces[trace_index]}",
         xaxis_title="Temps (s)",
         yaxis_title="Frequence (Hz)",
+        yaxis_type=yaxis_type,
         paper_bgcolor="#f7f7f3",
         plot_bgcolor="#ffffff",
     )
@@ -495,6 +512,7 @@ def _overview_children(bundle: dict[str, Any]) -> list[Any]:
         ("Micros", metrics.get("n_mics", meta.get("n_mics", "-"))),
         ("Fs", f"{int(bundle['fs'])} Hz" if bundle["fs"] else "-"),
         ("SNR", "-" if meta.get("snr_db") is None else f"{meta['snr_db']} dB"),
+        ("Scene", Path(meta.get("scene_path", metrics.get("scene_path", "-"))).name),
     ]
     return [
         html.Div(
@@ -536,11 +554,11 @@ def _tdoa_rows(metrics: dict[str, Any]) -> list[dict[str, Any]]:
                     "source": f"S{source_index + 1}",
                     "pair": label,
                     "true_samples": round(float(truth), 3),
-                    "estimated_samples": round(float(estimated), 3),
-                    "aligned_samples": round(float(aligned), 3),
+                    "estimated_samples": round(float(aligned), 3),
+                    "raw_estimated_samples": round(float(estimated), 3),
                     "error_samples": round(float(aligned - truth), 3),
                     "true_ms": round(float(true_seconds[source_index, pair_index] * 1000), 4),
-                    "aligned_ms": round(float(aligned_seconds[source_index, pair_index] * 1000), 4),
+                    "estimated_ms": round(float(aligned_seconds[source_index, pair_index] * 1000), 4),
                 }
             )
     return rows
@@ -627,6 +645,7 @@ def _style() -> str:
             display: flex;
             align-items: center;
             justify-content: space-between;
+            flex-wrap: wrap;
             gap: 12px;
             min-height: 42px;
             padding: 10px 12px;
@@ -721,7 +740,11 @@ def build_app(config: AppConfig) -> dash.Dash:
                     html.Div(
                         [
                             html.H1("BSS Benchmark"),
-                            html.P(str(config.results_root)),
+                            html.P(f"Resultats: {config.results_root}"),
+                            html.P(
+                                "Dataset: "
+                                + ("-" if config.dataset_root is None else str(config.dataset_root))
+                            ),
                         ],
                         className="brand",
                     ),
@@ -832,6 +855,36 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                         ],
                                                         style={"width": "120px"},
                                                     ),
+                                                    html.Div(
+                                                        [
+                                                            html.Label("Freq."),
+                                                            dcc.Dropdown(
+                                                                id="frequency-scale-dropdown",
+                                                                options=[
+                                                                    {"label": "Lineaire", "value": "linear"},
+                                                                    {"label": "Log", "value": "log"},
+                                                                ],
+                                                                value="linear",
+                                                                clearable=False,
+                                                            ),
+                                                        ],
+                                                        style={"width": "120px"},
+                                                    ),
+                                                    html.Div(
+                                                        [
+                                                            html.Label("Valeurs"),
+                                                            dcc.Dropdown(
+                                                                id="spectrogram-scale-dropdown",
+                                                                options=[
+                                                                    {"label": "dB", "value": "db"},
+                                                                    {"label": "Lineaire", "value": "linear"},
+                                                                ],
+                                                                value="db",
+                                                                clearable=False,
+                                                            ),
+                                                        ],
+                                                        style={"width": "130px"},
+                                                    ),
                                                 ],
                                                 className="panel-header",
                                             ),
@@ -886,10 +939,10 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                 {"name": "Paire", "id": "pair"},
                                                 {"name": "Vrai (samples)", "id": "true_samples"},
                                                 {"name": "Estime (samples)", "id": "estimated_samples"},
-                                                {"name": "Aligne (samples)", "id": "aligned_samples"},
                                                 {"name": "Erreur", "id": "error_samples"},
+                                                {"name": "Estime brut", "id": "raw_estimated_samples"},
                                                 {"name": "Vrai (ms)", "id": "true_ms"},
-                                                {"name": "Aligne (ms)", "id": "aligned_ms"},
+                                                {"name": "Estime (ms)", "id": "estimated_ms"},
                                             ],
                                             data=[],
                                             sort_action="native",
@@ -1038,6 +1091,8 @@ def build_app(config: AppConfig) -> dash.Dash:
         Input("trace-dropdown", "value"),
         Input("nperseg-dropdown", "value"),
         Input("max-frequency-input", "value"),
+        Input("frequency-scale-dropdown", "value"),
+        Input("spectrogram-scale-dropdown", "value"),
     )
     def update_view(
         split: str,
@@ -1047,6 +1102,8 @@ def build_app(config: AppConfig) -> dash.Dash:
         trace_index: int,
         nperseg: int,
         max_frequency: float | None,
+        frequency_scale: str,
+        spectrogram_scale: str,
     ) -> tuple[Any, Any, go.Figure, go.Figure, str, str, go.Figure, list[dict[str, Any]]]:
         if not split or not scene_id or not algorithm or not group_key:
             empty = go.Figure()
@@ -1080,7 +1137,14 @@ def build_app(config: AppConfig) -> dash.Dash:
             _overview_children(bundle),
             warning,
             _time_figure(group),
-            _spectrogram_figure(group, trace_index, nperseg, max_frequency),
+            _spectrogram_figure(
+                group,
+                trace_index,
+                nperseg,
+                max_frequency,
+                frequency_scale,
+                spectrogram_scale,
+            ),
             _wav_data_uri(signal, group.fs),
             audio_caption,
             _tdoa_figure(bundle["metrics"]),
@@ -1100,7 +1164,20 @@ def main() -> None:
     config = AppConfig(results_root=results_root, dataset_root=dataset_root)
     app = build_app(config)
     print(f"Interface BSS Benchmark: http://{args.host}:{args.port}")
-    app.run(host=args.host, port=args.port, debug=args.debug)
+    print(f"  resultats: {config.results_root.resolve()}")
+    print(
+        "  dataset:   "
+        + ("-" if config.dataset_root is None else str(config.dataset_root.resolve()))
+    )
+    try:
+        app.run(host=args.host, port=args.port, debug=args.debug)
+    except OSError as exc:
+        if exc.errno == errno.EADDRINUSE:
+            raise SystemExit(
+                f"Le port {args.port} est deja utilise. Arrete l'ancien serveur "
+                f"ou relance avec --port {args.port + 1}."
+            ) from exc
+        raise
 
 
 if __name__ == "__main__":
