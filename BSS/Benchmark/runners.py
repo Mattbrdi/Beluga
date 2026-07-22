@@ -95,6 +95,7 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
         "sawada_model": {
             "masks": model.get_final_masks().astype(np.uint8),
             "posteriors": model.get_final_posteriors(),
+            "bin_vectors": model.nspectro_preprocessed.Sxx,
             "tf_energy": tf_energy,
             "frequency_energy": np.mean(tf_energy, axis=1),
             "active_tf_mask": active_tf_mask.astype(np.uint8),

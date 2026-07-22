@@ -247,6 +247,7 @@ def save_sawada_model_npz(path: str | Path, result: Any) -> Path | None:
         target,
         masks=np.asarray(payload["masks"]),
         posteriors=np.asarray(payload["posteriors"]),
+        bin_vectors=np.asarray(payload.get("bin_vectors", np.empty((0, 0, 0)))),
         tf_energy=np.asarray(payload.get("tf_energy", np.empty((0, 0)))),
         frequency_energy=np.asarray(payload.get("frequency_energy", np.empty((0,)))),
         active_tf_mask=np.asarray(payload.get("active_tf_mask", np.empty((0, 0)))),

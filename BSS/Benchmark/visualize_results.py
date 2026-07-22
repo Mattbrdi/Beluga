@@ -19,6 +19,7 @@ try:
     import dash
     from dash import Input, Output, State, dash_table, dcc, html
     import plotly.graph_objects as go
+    from plotly.subplots import make_subplots
 except ModuleNotFoundError as exc:  # pragma: no cover - message shown at runtime
     raise SystemExit(
         "Dependances manquantes pour l'interface. Installe numpy, scipy, dash et plotly, "
@@ -647,6 +648,156 @@ def _sawada_energy_figure(
     return fig
 
 
+def _sawada_complex_plane_figure(
+    sawada_model: dict[str, np.ndarray],
+    frequency_index: int | None,
+) -> go.Figure:
+    bin_vectors = np.asarray(sawada_model.get("bin_vectors", []))
+    masks = np.asarray(sawada_model.get("masks", []), dtype=float)
+    centroids = np.asarray(sawada_model.get("centroids", []))
+    frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
+    times = np.asarray(sawada_model.get("times", []), dtype=float)
+
+    if (
+        bin_vectors.ndim != 3
+        or masks.ndim != 3
+        or centroids.ndim != 3
+        or bin_vectors.size == 0
+        or masks.size == 0
+        or centroids.size == 0
+    ):
+        fig = go.Figure()
+        fig.update_layout(
+            title="Plans complexes Sawada indisponibles",
+            annotations=[
+                {
+                    "text": "Relance le benchmark Sawada pour sauvegarder les vecteurs complexes des bins.",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x": 0.5,
+                    "y": 0.5,
+                    "showarrow": False,
+                }
+            ],
+            margin={"l": 58, "r": 18, "t": 42, "b": 42},
+            paper_bgcolor="#f7f7f3",
+            plot_bgcolor="#ffffff",
+        )
+        return fig
+
+    n_mics, n_freqs, n_times = bin_vectors.shape
+    n_sources = masks.shape[0]
+    frequency_index = min(max(int(frequency_index or 0), 0), n_freqs - 1)
+    frequency_label = (
+        f"{float(frequencies[frequency_index]):.1f} Hz"
+        if frequencies.size > frequency_index
+        else f"bin {frequency_index}"
+    )
+
+    rows = int(math.ceil(n_mics / 2))
+    fig = make_subplots(
+        rows=rows,
+        cols=2,
+        subplot_titles=[f"Micro {mic_index + 1}" for mic_index in range(n_mics)],
+    )
+    source_colors = ["#dc2626", "#2563eb", "#16a34a", "#7c3aed", "#0891b2", "#db2777"]
+    source_masks = masks[:, frequency_index, :]
+    assigned = np.argmax(source_masks, axis=0)
+    assigned_strength = np.max(source_masks, axis=0)
+    has_assignment = assigned_strength > 0.5
+    time_values = times if times.size == n_times else np.arange(n_times)
+
+    for mic_index in range(n_mics):
+        row = mic_index // 2 + 1
+        col = mic_index % 2 + 1
+        values = bin_vectors[mic_index, frequency_index, :]
+
+        inactive = ~has_assignment
+        if np.any(inactive):
+            fig.add_trace(
+                go.Scattergl(
+                    x=np.real(values[inactive]),
+                    y=np.imag(values[inactive]),
+                    mode="markers",
+                    name="Inactif",
+                    legendgroup="inactive",
+                    showlegend=mic_index == 0,
+                    marker={"size": 5, "color": "#9ca3af", "opacity": 0.24},
+                    customdata=time_values[inactive],
+                    hovertemplate=(
+                        "t=%{customdata:.4f}s<br>Re=%{x:.4f}<br>Im=%{y:.4f}"
+                        "<br>bin ignore<extra></extra>"
+                    ),
+                ),
+                row=row,
+                col=col,
+            )
+
+        for source_index in range(n_sources):
+            selector = has_assignment & (assigned == source_index)
+            if not np.any(selector):
+                continue
+            color = source_colors[source_index % len(source_colors)]
+            fig.add_trace(
+                go.Scattergl(
+                    x=np.real(values[selector]),
+                    y=np.imag(values[selector]),
+                    mode="markers",
+                    name=f"Source {source_index + 1}",
+                    legendgroup=f"source-{source_index}",
+                    showlegend=mic_index == 0,
+                    marker={"size": 6, "color": color, "opacity": 0.72},
+                    customdata=time_values[selector],
+                    hovertemplate=(
+                        f"Source {source_index + 1}<br>"
+                        "t=%{customdata:.4f}s<br>Re=%{x:.4f}<br>Im=%{y:.4f}"
+                        "<extra></extra>"
+                    ),
+                ),
+                row=row,
+                col=col,
+            )
+
+        for source_index in range(min(n_sources, centroids.shape[2])):
+            centroid = centroids[frequency_index, mic_index, source_index]
+            fig.add_trace(
+                go.Scatter(
+                    x=[float(np.real(centroid))],
+                    y=[float(np.imag(centroid))],
+                    mode="markers+text",
+                    name=f"Centroide S{source_index + 1}",
+                    legendgroup=f"centroid-{source_index}",
+                    showlegend=mic_index == 0,
+                    text=[f"C{source_index + 1}"],
+                    textposition="top center",
+                    marker={
+                        "size": 12,
+                        "color": "#f59e0b",
+                        "symbol": "diamond",
+                        "line": {"width": 1.4, "color": "#111827"},
+                    },
+                    hovertemplate=(
+                        f"Centroide S{source_index + 1}<br>"
+                        "Re=%{x:.4f}<br>Im=%{y:.4f}<extra></extra>"
+                    ),
+                ),
+                row=row,
+                col=col,
+            )
+
+        fig.update_xaxes(title_text="Re", zeroline=True, row=row, col=col)
+        fig.update_yaxes(title_text="Im", zeroline=True, row=row, col=col)
+
+    fig.update_layout(
+        title=f"Vecteurs complexes des bins - {frequency_label}",
+        margin={"l": 58, "r": 18, "t": 64, "b": 42},
+        paper_bgcolor="#f7f7f3",
+        plot_bgcolor="#ffffff",
+        legend={"orientation": "h", "y": -0.12},
+    )
+    return fig
+
+
 def _wav_data_uri(signal: np.ndarray, fs: int) -> str:
     signal = np.asarray(signal, dtype=float)
     signal = np.nan_to_num(signal)
@@ -1171,6 +1322,37 @@ def build_app(config: AppConfig) -> dash.Dash:
                             html.Div(
                                 [
                                     html.Div(
+                                        [
+                                            html.H2("Plans complexes EM", className="panel-title"),
+                                            html.Div(
+                                                [
+                                                    html.Label("Frequence"),
+                                                    dcc.Dropdown(
+                                                        id="complex-frequency-dropdown",
+                                                        value=0,
+                                                        clearable=False,
+                                                    ),
+                                                ],
+                                                style={"width": "190px"},
+                                            ),
+                                        ],
+                                        className="panel-header",
+                                    ),
+                                    dcc.Graph(
+                                        id="sawada-complex-plane-graph",
+                                        config={"displayModeBar": True},
+                                        style={"height": "520px"},
+                                    ),
+                                    html.Div(
+                                        id="sawada-complex-plane-caption",
+                                        className="muted panel-body",
+                                    ),
+                                ],
+                                className="panel",
+                            ),
+                            html.Div(
+                                [
+                                    html.Div(
                                         [html.H2("TDOA", className="panel-title")],
                                         className="panel-header",
                                     ),
@@ -1352,6 +1534,50 @@ def build_app(config: AppConfig) -> dash.Dash:
         ], value
 
     @app.callback(
+        Output("complex-frequency-dropdown", "options"),
+        Output("complex-frequency-dropdown", "value"),
+        Input("split-dropdown", "value"),
+        Input("scene-dropdown", "value"),
+        Input("algorithm-dropdown", "value"),
+        State("complex-frequency-dropdown", "value"),
+    )
+    def update_complex_frequencies(
+        split: str,
+        scene_id: str,
+        algorithm: str,
+        current_frequency: int | None,
+    ) -> tuple[list[dict[str, int]], int]:
+        if not split or not scene_id or algorithm != "sawada":
+            return [], 0
+
+        model = _bundle(config, split, scene_id, algorithm)["sawada_model"]
+        bin_vectors = np.asarray(model.get("bin_vectors", []))
+        frequencies = np.asarray(model.get("frequencies", []), dtype=float)
+        if bin_vectors.ndim != 3 or bin_vectors.size == 0:
+            return [], 0
+
+        n_freqs = bin_vectors.shape[1]
+        frequency_indexes = list(range(n_freqs))
+        if current_frequency in frequency_indexes:
+            value = int(current_frequency)
+        else:
+            frequency_energy = np.asarray(model.get("frequency_energy", []), dtype=float)
+            value = (
+                int(np.nanargmax(frequency_energy))
+                if frequency_energy.ndim == 1 and frequency_energy.size == n_freqs
+                else 0
+            )
+
+        options = []
+        for frequency_index in frequency_indexes:
+            if frequencies.size > frequency_index:
+                label = f"{frequency_index} - {float(frequencies[frequency_index]):.1f} Hz"
+            else:
+                label = str(frequency_index)
+            options.append({"label": label, "value": frequency_index})
+        return options, value
+
+    @app.callback(
         Output("sawada-mask-graph", "figure"),
         Output("sawada-mask-caption", "children"),
         Input("split-dropdown", "value"),
@@ -1458,6 +1684,62 @@ def build_app(config: AppConfig) -> dash.Dash:
             f"{quiet_count} bins frequences sont dans les 10% les plus faibles."
         )
         return _sawada_energy_figure(model, frequency_scale), caption
+
+    @app.callback(
+        Output("sawada-complex-plane-graph", "figure"),
+        Output("sawada-complex-plane-caption", "children"),
+        Input("split-dropdown", "value"),
+        Input("scene-dropdown", "value"),
+        Input("algorithm-dropdown", "value"),
+        Input("complex-frequency-dropdown", "value"),
+    )
+    def update_sawada_complex_plane(
+        split: str,
+        scene_id: str,
+        algorithm: str,
+        frequency_index: int,
+    ) -> tuple[go.Figure, str]:
+        if not split or not scene_id or algorithm != "sawada":
+            return _sawada_complex_plane_figure({}, 0), "Disponible uniquement pour Sawada."
+
+        model = _bundle(config, split, scene_id, algorithm)["sawada_model"]
+        bin_vectors = np.asarray(model.get("bin_vectors", []))
+        masks = np.asarray(model.get("masks", []), dtype=float)
+        centroids = np.asarray(model.get("centroids", []))
+        if bin_vectors.ndim != 3 or bin_vectors.size == 0:
+            return (
+                _sawada_complex_plane_figure(model, frequency_index),
+                "Vecteurs complexes absents. Relance le benchmark Sawada avec cette version.",
+            )
+        if masks.ndim != 3 or masks.size == 0 or centroids.ndim != 3 or centroids.size == 0:
+            return (
+                _sawada_complex_plane_figure(model, frequency_index),
+                "Masques ou centroides absents dans sawada_model.npz.",
+            )
+
+        n_mics, n_freqs, n_times = bin_vectors.shape
+        frequency_index = min(max(int(frequency_index or 0), 0), n_freqs - 1)
+        frequencies = np.asarray(model.get("frequencies", []), dtype=float)
+        frequency_text = (
+            f"{float(frequencies[frequency_index]):.1f} Hz"
+            if frequencies.size > frequency_index
+            else f"bin {frequency_index}"
+        )
+        source_masks = masks[:, frequency_index, :]
+        assigned = np.argmax(source_masks, axis=0)
+        assigned_strength = np.max(source_masks, axis=0)
+        has_assignment = assigned_strength > 0.5
+        counts = [
+            f"S{source_index + 1}: {int(np.sum(has_assignment & (assigned == source_index)))}"
+            for source_index in range(source_masks.shape[0])
+        ]
+        inactive_count = int(np.sum(~has_assignment))
+        caption = (
+            f"Ligne frequencielle {frequency_index} ({frequency_text}): {n_times} trames x "
+            f"{n_mics} composantes complexes. Points assignes: {', '.join(counts)}. "
+            f"Non utilises par l'EM: {inactive_count}."
+        )
+        return _sawada_complex_plane_figure(model, frequency_index), caption
 
     @app.callback(
         Output("overview", "children"),

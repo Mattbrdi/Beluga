@@ -415,6 +415,10 @@ class SawadaBSS:
             self.bin_masks[f] = current_masks[list(best_perm), :]
             if f in self.bin_posteriors:
                 self.bin_posteriors[f] = self.bin_posteriors[f][list(best_perm), :]
+            if f in self.bin_models:
+                self.bin_models[f].centroids = self.bin_models[f].centroids[:, list(best_perm)]
+                self.bin_models[f].variances = self.bin_models[f].variances[list(best_perm)]
+                self.bin_models[f].weights = self.bin_models[f].weights[list(best_perm)]
             
             # 5. Mise à jour de la référence (Moyenne glissante pour stabilité)
             # Cela permet de lisser l'évolution temporelle des sources
