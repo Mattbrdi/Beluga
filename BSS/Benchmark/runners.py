@@ -8,7 +8,14 @@ import numpy as np
 
 from ..Algo_Separation.Frequency_ica_separation import FrequencyDomainICA
 from ..Algo_Separation.Sawada_separation import SawadaBSS
+from ..Utils.associated_dataclasses import StftParameters
 from ..Utils.signal_class import MultiSignal
+
+
+BENCHMARK_STFT_PARAMETERS = StftParameters(
+    nperseg=4096,
+    noverlap=3072,
+)
 
 
 @dataclass(frozen=True)
@@ -56,7 +63,10 @@ def run_sawada(
 ) -> SeparationResult:
     start = time.perf_counter()
     max_lag_samples = _max_lag_samples(scene)
-    model = SawadaBSS(n_sources=scene.metadata.n_sources)
+    model = SawadaBSS(
+        n_sources=scene.metadata.n_sources,
+        stft_parameters=BENCHMARK_STFT_PARAMETERS,
+    )
     model.process_signal(scene.mixed)
     sources = model.separate_source()
     estimated_tdoas = model.estimate_pairwise_tdoas(max_lag_samples=max_lag_samples)
@@ -70,6 +80,12 @@ def run_sawada(
         runtime_seconds=runtime,
         parameters={
             "n_sources": scene.metadata.n_sources,
+            "stft_parameters": {
+                "nperseg": BENCHMARK_STFT_PARAMETERS.nperseg,
+                "noverlap": BENCHMARK_STFT_PARAMETERS.noverlap,
+                "nfft": BENCHMARK_STFT_PARAMETERS.nfft,
+                "window": BENCHMARK_STFT_PARAMETERS.window,
+            },
             "reference_microphone": reference_microphone,
             "max_lag_samples": max_lag_samples,
         },
@@ -85,6 +101,7 @@ def run_ica(
     max_lag_samples = _max_lag_samples(scene)
     model = FrequencyDomainICA(
         n_sources=scene.metadata.n_sources,
+        stft_parameters=BENCHMARK_STFT_PARAMETERS,
         reference_microphone=reference_microphone,
         max_lag_samples=max_lag_samples,
     )
@@ -100,6 +117,12 @@ def run_ica(
         runtime_seconds=runtime,
         parameters={
             "n_sources": scene.metadata.n_sources,
+            "stft_parameters": {
+                "nperseg": BENCHMARK_STFT_PARAMETERS.nperseg,
+                "noverlap": BENCHMARK_STFT_PARAMETERS.noverlap,
+                "nfft": BENCHMARK_STFT_PARAMETERS.nfft,
+                "window": BENCHMARK_STFT_PARAMETERS.window,
+            },
             "reference_microphone": reference_microphone,
             "max_lag_samples": max_lag_samples,
             "max_tdoa_seconds": model.max_tdoa_seconds,
