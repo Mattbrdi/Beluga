@@ -573,6 +573,69 @@ def _sawada_mask_figure(
     return fig
 
 
+def _sawada_energy_figure(
+    sawada_model: dict[str, np.ndarray],
+    frequency_scale: str = "linear",
+) -> go.Figure:
+    energy = np.asarray(sawada_model.get("tf_energy", []), dtype=float)
+    frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
+    times = np.asarray(sawada_model.get("times", []), dtype=float)
+    fig = go.Figure()
+
+    if energy.ndim != 2 or energy.size == 0:
+        fig.update_layout(
+            title="Energie Sawada indisponible",
+            annotations=[
+                {
+                    "text": "Relance le benchmark Sawada pour generer l'energie temps-frequence.",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x": 0.5,
+                    "y": 0.5,
+                    "showarrow": False,
+                }
+            ],
+        )
+    else:
+        values = 10 * np.log10(energy + 1e-20)
+        yaxis_type = "log" if frequency_scale == "log" else "linear"
+        if yaxis_type == "log":
+            mask = frequencies > 0
+            frequencies = frequencies[mask]
+            values = values[mask, :]
+
+        zmax = float(np.nanpercentile(values, 99)) if values.size else 0.0
+        zmin = max(float(np.nanpercentile(values, 5)), zmax - 100.0)
+        if zmax <= zmin:
+            zmax = zmin + 1.0
+
+        fig.add_trace(
+            go.Heatmap(
+                z=values,
+                x=times,
+                y=frequencies,
+                colorscale="Magma",
+                zmin=zmin,
+                zmax=zmax,
+                colorbar={"title": "dB"},
+                hovertemplate="t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>E=%{z:.1f}dB<extra></extra>",
+            )
+        )
+        fig.update_layout(
+            title="Energie temps-frequence du melange",
+            xaxis_title="Temps (s)",
+            yaxis_title="Frequence (Hz)",
+            yaxis_type=yaxis_type,
+        )
+
+    fig.update_layout(
+        margin={"l": 58, "r": 18, "t": 34, "b": 42},
+        paper_bgcolor="#f7f7f3",
+        plot_bgcolor="#ffffff",
+    )
+    return fig
+
+
 def _wav_data_uri(signal: np.ndarray, fs: int) -> str:
     signal = np.asarray(signal, dtype=float)
     signal = np.nan_to_num(signal)
@@ -1081,6 +1144,15 @@ def build_app(config: AppConfig) -> dash.Dash:
                                         id="sawada-mask-caption",
                                         className="muted panel-body",
                                     ),
+                                    dcc.Graph(
+                                        id="sawada-energy-graph",
+                                        config={"displayModeBar": True},
+                                        style={"height": "260px"},
+                                    ),
+                                    html.Div(
+                                        id="sawada-energy-caption",
+                                        className="muted panel-body",
+                                    ),
                                 ],
                                 className="panel",
                             ),
@@ -1317,6 +1389,41 @@ def build_app(config: AppConfig) -> dash.Dash:
                 f"{masks.shape[2]} trames, occupation {active_ratio:.1%}."
             )
         return _sawada_mask_figure(model, source_index, frequency_scale, map_kind), caption
+
+    @app.callback(
+        Output("sawada-energy-graph", "figure"),
+        Output("sawada-energy-caption", "children"),
+        Input("split-dropdown", "value"),
+        Input("scene-dropdown", "value"),
+        Input("algorithm-dropdown", "value"),
+        Input("mask-frequency-scale-dropdown", "value"),
+    )
+    def update_sawada_energy(
+        split: str,
+        scene_id: str,
+        algorithm: str,
+        frequency_scale: str,
+    ) -> tuple[go.Figure, str]:
+        if not split or not scene_id or algorithm != "sawada":
+            return _sawada_energy_figure({}, frequency_scale), "Disponible uniquement pour Sawada."
+
+        model = _bundle(config, split, scene_id, algorithm)["sawada_model"]
+        energy = np.asarray(model.get("tf_energy", []), dtype=float)
+        if energy.ndim != 2 or energy.size == 0:
+            return (
+                _sawada_energy_figure(model, frequency_scale),
+                "Energie absente. Relance le benchmark Sawada avec cette version.",
+            )
+
+        frequency_energy = np.mean(energy, axis=1)
+        db = 10 * np.log10(frequency_energy + 1e-20)
+        threshold = np.nanpercentile(db, 10)
+        quiet_count = int(np.sum(db <= threshold))
+        caption = (
+            f"Energie brute avant normalisation: {energy.shape[0]} bins frequences x "
+            f"{energy.shape[1]} trames. {quiet_count} bins sont dans les 10% les plus faibles."
+        )
+        return _sawada_energy_figure(model, frequency_scale), caption
 
     @app.callback(
         Output("overview", "children"),

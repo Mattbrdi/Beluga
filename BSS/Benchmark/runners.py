@@ -63,6 +63,12 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
     if model.nspectro_preprocessed is None:
         return {}
 
+    if model.signal is not None:
+        raw_spectro = model.get_spectro(model.signal)
+        tf_energy = np.sum(np.abs(raw_spectro.Sxx) ** 2, axis=0)
+    else:
+        tf_energy = np.sum(np.abs(model.nspectro_preprocessed.Sxx) ** 2, axis=0)
+
     n_freqs = len(model.bin_models)
     variances = np.zeros((n_freqs, model.n_sources), dtype=float)
     weights = np.zeros((n_freqs, model.n_sources), dtype=float)
@@ -74,6 +80,8 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
         "sawada_model": {
             "masks": model.get_final_masks().astype(np.uint8),
             "posteriors": model.get_final_posteriors(),
+            "tf_energy": tf_energy,
+            "frequency_energy": np.mean(tf_energy, axis=1),
             "frequencies": np.asarray(model.nspectro_preprocessed.f, dtype=float),
             "times": np.asarray(model.nspectro_preprocessed.t, dtype=float),
             "centroids": model.all_centroids,

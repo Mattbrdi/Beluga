@@ -65,6 +65,6 @@ python3 -m BSS.Benchmark.visualize_results \
 L'interface Dash permet de parcourir les splits, scenes et algorithmes, puis de
 visualiser les sources originales, les melanges, les estimations, leurs
 spectrogrammes, l'audio associe et les TDOA estimes/alignees face aux valeurs de
-reference. Pour Sawada, elle affiche aussi les masques temps-frequence et les
-probabilites posterieures EM si `sawada_model.npz` a ete genere par le
-benchmark.
+reference. Pour Sawada, elle affiche aussi les masques temps-frequence, les
+probabilites posterieures EM et l'energie temps-frequence brute du melange si
+`sawada_model.npz` a ete genere par le benchmark.
