@@ -778,6 +778,7 @@ def _sawada_complex_plane_figure(
     sawada_model: dict[str, np.ndarray],
     frequency_index: int | None,
     vector_space: str = "whitened",
+    coordinate_mode: str = "relative",
     color_mode: str = "source",
     gt_correctness: np.ndarray | None = None,
 ) -> go.Figure:
@@ -840,6 +841,25 @@ def _sawada_complex_plane_figure(
     assigned_strength = np.max(source_masks, axis=0)
     has_assignment = assigned_strength > 0.5
     time_values = times if times.size == n_times else np.arange(n_times)
+    bin_values = bin_vectors[:, frequency_index, :].copy()
+    centroid_values = centroids[frequency_index].copy()
+    invalid_reference = np.zeros(n_times, dtype=bool)
+    reference_text = "composantes directes"
+    if coordinate_mode == "relative":
+        eps = 1e-12
+        reference = bin_values[0]
+        invalid_reference = np.abs(reference) <= eps
+        safe_reference = np.where(invalid_reference, np.nan + 0j, reference)
+        bin_values = bin_values / safe_reference[np.newaxis, :]
+
+        centroid_reference = centroid_values[0]
+        safe_centroid_reference = np.where(
+            np.abs(centroid_reference) <= eps,
+            np.nan + 0j,
+            centroid_reference,
+        )
+        centroid_values = centroid_values / safe_centroid_reference[np.newaxis, :]
+        reference_text = "rapports M/M1"
     gt_values = np.asarray(gt_correctness if gt_correctness is not None else [])
     has_gt = color_mode == "gt" and gt_values.ndim == 2 and gt_values.shape[0] > frequency_index
     correctness = np.zeros(n_times, dtype=float)
@@ -847,12 +867,43 @@ def _sawada_complex_plane_figure(
         common_times = min(n_times, gt_values.shape[1])
         correctness[:common_times] = gt_values[frequency_index, :common_times]
 
+    finite_bin_values = bin_values[:, ~invalid_reference].reshape(-1)
+    finite_values = np.concatenate(
+        [
+            finite_bin_values[np.isfinite(finite_bin_values)],
+            centroid_values.reshape(-1)[np.isfinite(centroid_values.reshape(-1))],
+        ]
+    )
+    if finite_values.size:
+        axis_values = np.concatenate([np.real(finite_values), np.imag(finite_values)])
+        axis_min = float(np.nanmin(axis_values))
+        axis_max = float(np.nanmax(axis_values))
+        axis_center = 0.5 * (axis_min + axis_max)
+        axis_half_width = 0.5 * (axis_max - axis_min)
+        if axis_half_width <= 1e-9:
+            axis_half_width = 1.0
+        axis_half_width *= 1.08
+        common_axis_range = [
+            axis_center - axis_half_width,
+            axis_center + axis_half_width,
+        ]
+    else:
+        common_axis_range = [-1.0, 1.0]
+
     for mic_index in range(n_mics):
         row = mic_index // 2 + 1
         col = mic_index % 2 + 1
-        values = bin_vectors[mic_index, frequency_index, :]
+        values = bin_values[mic_index]
+        component_label = (
+            f"M{mic_index + 1}/M1"
+            if coordinate_mode == "relative"
+            else f"Micro {mic_index + 1}"
+        )
 
-        inactive = ~has_assignment if color_mode != "gt" else correctness == 0
+        inactive = (
+            (~has_assignment if color_mode != "gt" else correctness == 0)
+            | invalid_reference
+        )
         if np.any(inactive):
             fig.add_trace(
                 go.Scattergl(
@@ -912,7 +963,7 @@ def _sawada_complex_plane_figure(
             )
 
         for source_index in range(min(n_sources, centroids.shape[2])):
-            centroid = centroids[frequency_index, mic_index, source_index]
+            centroid = centroid_values[mic_index, source_index]
             fig.add_trace(
                 go.Scatter(
                     x=[float(np.real(centroid))],
@@ -938,13 +989,27 @@ def _sawada_complex_plane_figure(
                 col=col,
             )
 
-        fig.update_xaxes(title_text="Re", zeroline=True, row=row, col=col)
-        fig.update_yaxes(title_text="Im", zeroline=True, row=row, col=col)
+        fig.update_xaxes(
+            title_text="Re",
+            range=common_axis_range,
+            zeroline=True,
+            row=row,
+            col=col,
+        )
+        fig.update_yaxes(
+            title_text="Im",
+            range=common_axis_range,
+            zeroline=True,
+            row=row,
+            col=col,
+        )
+        fig.layout.annotations[mic_index].text = component_label
 
     fig.update_layout(
         title=(
             f"Vecteurs complexes des bins - {frequency_label} "
-            f"({'non blanchi' if vector_space == 'unwhitened' else 'blanchi'})"
+            f"({'non blanchi' if vector_space == 'unwhitened' else 'blanchi'}, "
+            f"{reference_text})"
         ),
         margin={"l": 58, "r": 18, "t": 64, "b": 42},
         paper_bgcolor="#f7f7f3",
@@ -1524,6 +1589,21 @@ def build_app(config: AppConfig) -> dash.Dash:
                                             ),
                                             html.Div(
                                                 [
+                                                    html.Label("Coord."),
+                                                    dcc.Dropdown(
+                                                        id="complex-coordinate-mode-dropdown",
+                                                        options=[
+                                                            {"label": "Rapports M/M1", "value": "relative"},
+                                                            {"label": "Directes", "value": "direct"},
+                                                        ],
+                                                        value="relative",
+                                                        clearable=False,
+                                                    ),
+                                                ],
+                                                style={"width": "160px"},
+                                            ),
+                                            html.Div(
+                                                [
                                                     html.Label("Couleur"),
                                                     dcc.Dropdown(
                                                         id="complex-color-mode-dropdown",
@@ -1927,6 +2007,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         Input("algorithm-dropdown", "value"),
         Input("complex-frequency-dropdown", "value"),
         Input("complex-vector-space-dropdown", "value"),
+        Input("complex-coordinate-mode-dropdown", "value"),
         Input("complex-color-mode-dropdown", "value"),
         Input("sawada-gt-permutation-dropdown", "value"),
     )
@@ -1936,12 +2017,16 @@ def build_app(config: AppConfig) -> dash.Dash:
         algorithm: str,
         frequency_index: int,
         vector_space: str,
+        coordinate_mode: str,
         color_mode: str,
         gt_permutation: str,
     ) -> tuple[go.Figure, str]:
         if not split or not scene_id or algorithm != "sawada":
             return _sawada_complex_plane_figure({}, 0), "Disponible uniquement pour Sawada."
 
+        vector_space = vector_space or "whitened"
+        coordinate_mode = coordinate_mode or "relative"
+        color_mode = color_mode or "source"
         bundle = _bundle(config, split, scene_id, algorithm)
         model = bundle["sawada_model"]
         vector_key = "bin_vectors_unwhitened" if vector_space == "unwhitened" else "bin_vectors"
@@ -1951,12 +2036,24 @@ def build_app(config: AppConfig) -> dash.Dash:
         centroids = np.asarray(model.get(centroid_key, []))
         if bin_vectors.ndim != 3 or bin_vectors.size == 0:
             return (
-                _sawada_complex_plane_figure(model, frequency_index, vector_space, color_mode),
+                _sawada_complex_plane_figure(
+                    model,
+                    frequency_index,
+                    vector_space,
+                    coordinate_mode,
+                    color_mode,
+                ),
                 "Vecteurs complexes absents. Relance le benchmark Sawada avec cette version.",
             )
         if masks.ndim != 3 or masks.size == 0 or centroids.ndim != 3 or centroids.size == 0:
             return (
-                _sawada_complex_plane_figure(model, frequency_index, vector_space, color_mode),
+                _sawada_complex_plane_figure(
+                    model,
+                    frequency_index,
+                    vector_space,
+                    coordinate_mode,
+                    color_mode,
+                ),
                 "Masques ou centroides absents dans sawada_model.npz.",
             )
 
@@ -1972,6 +2069,10 @@ def build_app(config: AppConfig) -> dash.Dash:
         assigned = np.argmax(source_masks, axis=0)
         assigned_strength = np.max(source_masks, axis=0)
         has_assignment = assigned_strength > 0.5
+        invalid_reference_count = 0
+        if coordinate_mode == "relative":
+            reference_values = bin_vectors[0, frequency_index, :]
+            invalid_reference_count = int(np.sum(np.abs(reference_values) <= 1e-12))
         gt_correctness = (
             _sawada_gt_correctness(bundle, model, gt_permutation)
             if color_mode == "gt"
@@ -1999,7 +2100,9 @@ def build_app(config: AppConfig) -> dash.Dash:
             f"Ligne frequencielle {frequency_index} ({frequency_text}): {n_times} trames x "
             f"{n_mics} composantes complexes. Points assignes: {', '.join(counts)}. "
             f"Non utilises par l'EM: {inactive_count}. "
-            f"Repere: {'non blanchi' if vector_space == 'unwhitened' else 'blanchi'}."
+            f"Repere: {'non blanchi' if vector_space == 'unwhitened' else 'blanchi'}, "
+            f"{'rapports M/M1' if coordinate_mode == 'relative' else 'composantes directes'}."
+            f"{f' Reference M1 trop faible: {invalid_reference_count}.' if invalid_reference_count else ''}"
             f"{gt_text}"
         )
         return (
@@ -2007,6 +2110,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                 model,
                 frequency_index,
                 vector_space,
+                coordinate_mode,
                 color_mode,
                 gt_correctness=gt_correctness,
             ),
