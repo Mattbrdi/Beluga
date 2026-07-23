@@ -248,6 +248,9 @@ def save_sawada_model_npz(path: str | Path, result: Any) -> Path | None:
         masks=np.asarray(payload["masks"]),
         posteriors=np.asarray(payload["posteriors"]),
         bin_vectors=np.asarray(payload.get("bin_vectors", np.empty((0, 0, 0)))),
+        bin_vectors_unwhitened=np.asarray(
+            payload.get("bin_vectors_unwhitened", np.empty((0, 0, 0)))
+        ),
         tf_energy=np.asarray(payload.get("tf_energy", np.empty((0, 0)))),
         frequency_energy=np.asarray(payload.get("frequency_energy", np.empty((0,)))),
         active_tf_mask=np.asarray(payload.get("active_tf_mask", np.empty((0, 0)))),
@@ -255,6 +258,9 @@ def save_sawada_model_npz(path: str | Path, result: Any) -> Path | None:
         frequencies=np.asarray(payload["frequencies"]),
         times=np.asarray(payload["times"]),
         centroids=np.asarray(payload["centroids"]),
+        centroids_unwhitened=np.asarray(
+            payload.get("centroids_unwhitened", np.empty((0, 0, 0)))
+        ),
         variances=np.asarray(payload["variances"]),
         weights=np.asarray(payload["weights"]),
         whitening=np.asarray(payload["whitening"]),

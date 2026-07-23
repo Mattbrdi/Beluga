@@ -90,12 +90,37 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
     for frequency_index, bin_model in model.bin_models.items():
         variances[frequency_index] = bin_model.variances
         weights[frequency_index] = bin_model.weights
+    centroids = model.all_centroids
+    centroids_unwhitened = centroids
+    if (
+        model.whitening
+        and model.nspectro_normalized_unwhitened is not None
+        and model.eigenvalues_matrix is not None
+        and model.eigenvector_matrix is not None
+    ):
+        whitening_matrix = model.nspectro_normalized_unwhitened.compute_whitening_matrix(
+            model.eigenvalues_matrix,
+            model.eigenvector_matrix,
+        )
+        centroids_unwhitened = np.einsum(
+            "ij,fjs->fis",
+            np.linalg.pinv(whitening_matrix),
+            centroids,
+        )
+        centroids_unwhitened /= (
+            np.linalg.norm(centroids_unwhitened, axis=1, keepdims=True) + 1e-12
+        )
 
     return {
         "sawada_model": {
             "masks": model.get_final_masks().astype(np.uint8),
             "posteriors": model.get_final_posteriors(),
             "bin_vectors": model.nspectro_preprocessed.Sxx,
+            "bin_vectors_unwhitened": (
+                np.empty((0, 0, 0))
+                if model.nspectro_normalized_unwhitened is None
+                else model.nspectro_normalized_unwhitened.Sxx
+            ),
             "tf_energy": tf_energy,
             "frequency_energy": np.mean(tf_energy, axis=1),
             "active_tf_mask": active_tf_mask.astype(np.uint8),
@@ -104,7 +129,8 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
             ),
             "frequencies": np.asarray(model.nspectro_preprocessed.f, dtype=float),
             "times": np.asarray(model.nspectro_preprocessed.t, dtype=float),
-            "centroids": model.all_centroids,
+            "centroids": centroids,
+            "centroids_unwhitened": centroids_unwhitened,
             "variances": variances,
             "weights": weights,
             "whitening": np.asarray(model.whitening),
@@ -142,6 +168,8 @@ def run_sawada(
                 "noverlap": BENCHMARK_STFT_PARAMETERS.noverlap,
                 "nfft": BENCHMARK_STFT_PARAMETERS.nfft,
                 "window": BENCHMARK_STFT_PARAMETERS.window,
+                "boundary": BENCHMARK_STFT_PARAMETERS.boundary,
+                "padded": BENCHMARK_STFT_PARAMETERS.padded,
             },
             "em_clustering_parameters": {
                 "n_iter": BENCHMARK_SAWADA_EM_PARAMETERS.n_iter,
@@ -194,6 +222,8 @@ def run_ica(
                 "noverlap": BENCHMARK_STFT_PARAMETERS.noverlap,
                 "nfft": BENCHMARK_STFT_PARAMETERS.nfft,
                 "window": BENCHMARK_STFT_PARAMETERS.window,
+                "boundary": BENCHMARK_STFT_PARAMETERS.boundary,
+                "padded": BENCHMARK_STFT_PARAMETERS.padded,
             },
             "reference_microphone": reference_microphone,
             "max_lag_samples": max_lag_samples,

@@ -224,6 +224,7 @@ class SawadaBSS:
     # État de l'algorithme (Champs calculés plus tard)
     # On utilise default_factory pour les dictionnaires vides
     signal: Optional['MultiSignal'] = None
+    nspectro_normalized_unwhitened: Optional[NSpectrogram] = None
     nspectro_preprocessed: Optional[NSpectrogram] = None
     bin_models: Dict[int, 'EMClustering'] = field(default_factory=dict)
     bin_masks: Dict[int, np.ndarray] = field(default_factory=dict)
@@ -491,13 +492,15 @@ class SawadaBSS:
         raw_spectro = self.get_spectro(multi_signal)
         self.tf_energy = np.sum(np.abs(raw_spectro.Sxx) ** 2, axis=0)
         self.active_tf_mask = self._compute_active_tf_mask(self.tf_energy)
-        nspectro_whitened = raw_spectro.normalize_each_bin()
+        nspectro_normalized = raw_spectro.normalize_each_bin()
+        self.nspectro_normalized_unwhitened = nspectro_normalized
+        nspectro_preprocessed = nspectro_normalized
         if self.whitening:
-            nspectro_whitened = self.apply_whitening(nspectro_whitened)
-        self.nspectro_preprocessed = nspectro_whitened
+            nspectro_preprocessed = self.apply_whitening(nspectro_preprocessed)
+        self.nspectro_preprocessed = nspectro_preprocessed
         # 2. Algo : Clustering par bin (EM)
         print("Démarrage du clustering EM par bin...")
-        self.fit_bins(nspectro_whitened, self.active_tf_mask)
+        self.fit_bins(nspectro_preprocessed, self.active_tf_mask)
         
         # 3. Algo : Alignement des permutations entre les fréquences
         print("Alignement des permutations...")

@@ -310,6 +310,90 @@ def _bundle(config: AppConfig, split: str, scene_id: str, algorithm: str) -> dic
     )
 
 
+def _stft_kwargs_from_metrics(
+    metrics: dict[str, Any],
+    sawada_model: dict[str, np.ndarray],
+    fs: int,
+) -> dict[str, Any]:
+    raw = metrics.get("parameters", {}).get("stft_parameters", {})
+    frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
+    inferred_nperseg = 2 * (frequencies.size - 1) if frequencies.size > 1 else 256
+    nperseg = int(raw.get("nperseg") or inferred_nperseg)
+    nfft_raw = raw.get("nfft")
+    noverlap_raw = raw.get("noverlap")
+    return {
+        "fs": fs,
+        "window": raw.get("window", "hann"),
+        "nperseg": nperseg,
+        "noverlap": None if noverlap_raw is None else int(noverlap_raw),
+        "nfft": None if nfft_raw is None else int(nfft_raw),
+        "boundary": raw.get("boundary", "zeros"),
+        "padded": bool(raw.get("padded", True)),
+        "axis": -1,
+    }
+
+
+def _ground_truth_tf_labels(
+    bundle: dict[str, Any],
+    sawada_model: dict[str, np.ndarray],
+    gt_permutation: str = "identity",
+) -> tuple[np.ndarray, np.ndarray]:
+    scene_sources = np.asarray(bundle.get("scene_arrays", {}).get("sources", []), dtype=float)
+    if scene_sources.ndim != 2 or scene_sources.size == 0 or not int(bundle.get("fs", 0)):
+        return np.empty((0, 0), dtype=int), np.empty((0, 0), dtype=bool)
+
+    stft_kwargs = _stft_kwargs_from_metrics(
+        bundle["metrics"],
+        sawada_model,
+        int(bundle["fs"]),
+    )
+    if scene_sources.shape[-1] < stft_kwargs["nperseg"]:
+        stft_kwargs["nperseg"] = scene_sources.shape[-1]
+        if stft_kwargs["noverlap"] is not None:
+            stft_kwargs["noverlap"] = min(stft_kwargs["noverlap"], stft_kwargs["nperseg"] - 1)
+    _, _, source_stft = sp_signal.stft(scene_sources, **stft_kwargs)
+    source_energy = np.abs(source_stft) ** 2
+    if source_energy.ndim != 3 or source_energy.size == 0:
+        return np.empty((0, 0), dtype=int), np.empty((0, 0), dtype=bool)
+
+    labels = np.argmax(source_energy, axis=0).astype(int)
+    max_energy = np.max(source_energy, axis=0)
+    valid_threshold = float(np.nanmax(max_energy)) * 1e-12 if max_energy.size else 0.0
+    valid = max_energy > valid_threshold
+
+    n_sources = source_energy.shape[0]
+    permutation = np.arange(n_sources)
+    if gt_permutation == "swap" and n_sources >= 2:
+        permutation[0], permutation[1] = permutation[1], permutation[0]
+    labels = permutation[labels]
+    return labels, valid
+
+
+def _sawada_gt_correctness(
+    bundle: dict[str, Any],
+    sawada_model: dict[str, np.ndarray],
+    gt_permutation: str = "identity",
+) -> np.ndarray:
+    masks = np.asarray(sawada_model.get("masks", []), dtype=float)
+    if masks.ndim != 3 or masks.size == 0:
+        return np.empty((0, 0), dtype=float)
+
+    gt_labels, gt_valid = _ground_truth_tf_labels(bundle, sawada_model, gt_permutation)
+    if gt_labels.ndim != 2 or gt_labels.size == 0:
+        return np.empty((0, 0), dtype=float)
+
+    n_freqs = min(masks.shape[1], gt_labels.shape[0])
+    n_times = min(masks.shape[2], gt_labels.shape[1])
+    predicted = np.argmax(masks[:, :n_freqs, :n_times], axis=0)
+    assigned = np.max(masks[:, :n_freqs, :n_times], axis=0) > 0.5
+    valid = assigned & gt_valid[:n_freqs, :n_times]
+
+    correctness = np.zeros((n_freqs, n_times), dtype=float)
+    correctness[valid & (predicted == gt_labels[:n_freqs, :n_times])] = 1.0
+    correctness[valid & (predicted != gt_labels[:n_freqs, :n_times])] = -1.0
+    return correctness
+
+
 def _trace_labels(prefix: str, count: int) -> tuple[str, ...]:
     return tuple(f"{prefix} {index + 1}" for index in range(count))
 
@@ -493,6 +577,7 @@ def _sawada_mask_figure(
     source_index: int,
     frequency_scale: str = "linear",
     map_kind: str = "mask",
+    gt_correctness: np.ndarray | None = None,
 ) -> go.Figure:
     masks = np.asarray(sawada_model.get("masks", []), dtype=float)
     posteriors = np.asarray(sawada_model.get("posteriors", []), dtype=float)
@@ -505,6 +590,9 @@ def _sawada_mask_figure(
         values_tensor = posteriors
     elif map_kind == "active":
         values_tensor = active_tf_mask[np.newaxis, :, :] if active_tf_mask.ndim == 2 else active_tf_mask
+    elif map_kind == "gt_error":
+        gt_values = np.asarray(gt_correctness if gt_correctness is not None else [])
+        values_tensor = gt_values[np.newaxis, :, :] if gt_values.ndim == 2 else gt_values
     else:
         values_tensor = masks
     missing_posterior = map_kind == "posterior" and (
@@ -531,6 +619,16 @@ def _sawada_mask_figure(
     else:
         source_index = min(max(int(source_index or 0), 0), values_tensor.shape[0] - 1)
         values = values_tensor[source_index]
+        frequencies = (
+            frequencies[: values.shape[0]]
+            if frequencies.size >= values.shape[0]
+            else np.arange(values.shape[0])
+        )
+        times = (
+            times[: values.shape[1]]
+            if times.size >= values.shape[1]
+            else np.arange(values.shape[1])
+        )
         yaxis_type = "log" if frequency_scale == "log" else "linear"
         if yaxis_type == "log":
             mask = frequencies > 0
@@ -539,6 +637,7 @@ def _sawada_mask_figure(
 
         is_posterior = map_kind == "posterior"
         is_active = map_kind == "active"
+        is_gt_error = map_kind == "gt_error"
         fig.add_trace(
             go.Heatmap(
                 z=values,
@@ -547,17 +646,42 @@ def _sawada_mask_figure(
                 colorscale="Viridis"
                 if is_posterior
                 else [
+                    [0.0, "#dc2626"],
+                    [0.49, "#dc2626"],
+                    [0.5, "#e5e7eb"],
+                    [0.51, "#16a34a"],
+                    [1.0, "#16a34a"],
+                ]
+                if is_gt_error
+                else [
                     [0.0, "#f7f7f3"],
                     [0.499, "#f7f7f3"],
                     [0.5, "#0f766e"],
                     [1.0, "#0f766e"],
                 ],
-                zmin=0,
+                zmin=-1 if is_gt_error else 0,
                 zmax=1,
-                colorbar={"title": "P(source)" if is_posterior else "active" if is_active else "mask"},
+                colorbar={
+                    "title": (
+                        "P(source)"
+                        if is_posterior
+                        else "GT"
+                        if is_gt_error
+                        else "active"
+                        if is_active
+                        else "mask"
+                    ),
+                    **(
+                        {"tickvals": [-1, 0, 1], "ticktext": ["faux", "ignore", "correct"]}
+                        if is_gt_error
+                        else {}
+                    ),
+                },
                 hovertemplate=(
                     "t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>P=%{z:.3f}<extra></extra>"
                     if is_posterior
+                    else "t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>GT=%{z}<extra></extra>"
+                    if is_gt_error
                     else "t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>active=%{z}<extra></extra>"
                     if is_active
                     else "t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>mask=%{z}<extra></extra>"
@@ -568,6 +692,8 @@ def _sawada_mask_figure(
             title=(
                 f"Probabilite EM - Source {source_index + 1}"
                 if is_posterior
+                else "Correct vs GT"
+                if is_gt_error
                 else "Bins actifs EM"
                 if is_active
                 else f"Masque Sawada - Source {source_index + 1}"
@@ -651,10 +777,15 @@ def _sawada_energy_figure(
 def _sawada_complex_plane_figure(
     sawada_model: dict[str, np.ndarray],
     frequency_index: int | None,
+    vector_space: str = "whitened",
+    color_mode: str = "source",
+    gt_correctness: np.ndarray | None = None,
 ) -> go.Figure:
-    bin_vectors = np.asarray(sawada_model.get("bin_vectors", []))
+    vector_key = "bin_vectors_unwhitened" if vector_space == "unwhitened" else "bin_vectors"
+    centroid_key = "centroids_unwhitened" if vector_space == "unwhitened" else "centroids"
+    bin_vectors = np.asarray(sawada_model.get(vector_key, []))
     masks = np.asarray(sawada_model.get("masks", []), dtype=float)
-    centroids = np.asarray(sawada_model.get("centroids", []))
+    centroids = np.asarray(sawada_model.get(centroid_key, []))
     frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
     times = np.asarray(sawada_model.get("times", []), dtype=float)
 
@@ -671,7 +802,10 @@ def _sawada_complex_plane_figure(
             title="Plans complexes Sawada indisponibles",
             annotations=[
                 {
-                    "text": "Relance le benchmark Sawada pour sauvegarder les vecteurs complexes des bins.",
+                    "text": (
+                        "Relance le benchmark Sawada pour sauvegarder les vecteurs complexes "
+                        "dans ce repere."
+                    ),
                     "xref": "paper",
                     "yref": "paper",
                     "x": 0.5,
@@ -706,13 +840,19 @@ def _sawada_complex_plane_figure(
     assigned_strength = np.max(source_masks, axis=0)
     has_assignment = assigned_strength > 0.5
     time_values = times if times.size == n_times else np.arange(n_times)
+    gt_values = np.asarray(gt_correctness if gt_correctness is not None else [])
+    has_gt = color_mode == "gt" and gt_values.ndim == 2 and gt_values.shape[0] > frequency_index
+    correctness = np.zeros(n_times, dtype=float)
+    if has_gt:
+        common_times = min(n_times, gt_values.shape[1])
+        correctness[:common_times] = gt_values[frequency_index, :common_times]
 
     for mic_index in range(n_mics):
         row = mic_index // 2 + 1
         col = mic_index % 2 + 1
         values = bin_vectors[mic_index, frequency_index, :]
 
-        inactive = ~has_assignment
+        inactive = ~has_assignment if color_mode != "gt" else correctness == 0
         if np.any(inactive):
             fig.add_trace(
                 go.Scattergl(
@@ -726,30 +866,43 @@ def _sawada_complex_plane_figure(
                     customdata=time_values[inactive],
                     hovertemplate=(
                         "t=%{customdata:.4f}s<br>Re=%{x:.4f}<br>Im=%{y:.4f}"
-                        "<br>bin ignore<extra></extra>"
+                        "<br>ignore/GT absente<extra></extra>"
                     ),
                 ),
                 row=row,
                 col=col,
             )
 
-        for source_index in range(n_sources):
-            selector = has_assignment & (assigned == source_index)
+        if color_mode == "gt":
+            classes = [
+                ("Correct", correctness > 0, "#16a34a"),
+                ("Faux", correctness < 0, "#dc2626"),
+            ]
+        else:
+            classes = [
+                (
+                    f"Source {source_index + 1}",
+                    has_assignment & (assigned == source_index),
+                    source_colors[source_index % len(source_colors)],
+                )
+                for source_index in range(n_sources)
+            ]
+
+        for label, selector, color in classes:
             if not np.any(selector):
                 continue
-            color = source_colors[source_index % len(source_colors)]
             fig.add_trace(
                 go.Scattergl(
                     x=np.real(values[selector]),
                     y=np.imag(values[selector]),
                     mode="markers",
-                    name=f"Source {source_index + 1}",
-                    legendgroup=f"source-{source_index}",
+                    name=label,
+                    legendgroup=label,
                     showlegend=mic_index == 0,
                     marker={"size": 6, "color": color, "opacity": 0.72},
                     customdata=time_values[selector],
                     hovertemplate=(
-                        f"Source {source_index + 1}<br>"
+                        f"{label}<br>"
                         "t=%{customdata:.4f}s<br>Re=%{x:.4f}<br>Im=%{y:.4f}"
                         "<extra></extra>"
                     ),
@@ -789,7 +942,10 @@ def _sawada_complex_plane_figure(
         fig.update_yaxes(title_text="Im", zeroline=True, row=row, col=col)
 
     fig.update_layout(
-        title=f"Vecteurs complexes des bins - {frequency_label}",
+        title=(
+            f"Vecteurs complexes des bins - {frequency_label} "
+            f"({'non blanchi' if vector_space == 'unwhitened' else 'blanchi'})"
+        ),
         margin={"l": 58, "r": 18, "t": 64, "b": 42},
         paper_bgcolor="#f7f7f3",
         plot_bgcolor="#ffffff",
@@ -1262,6 +1418,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                                 {"label": "Masque", "value": "mask"},
                                                                 {"label": "Probabilite EM", "value": "posterior"},
                                                                 {"label": "Bins actifs EM", "value": "active"},
+                                                                {"label": "Correct vs GT", "value": "gt_error"},
                                                             ],
                                                         value="mask",
                                                         clearable=False,
@@ -1294,6 +1451,21 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                     ),
                                                 ],
                                                 style={"width": "120px"},
+                                            ),
+                                            html.Div(
+                                                [
+                                                    html.Label("GT"),
+                                                    dcc.Dropdown(
+                                                        id="sawada-gt-permutation-dropdown",
+                                                        options=[
+                                                            {"label": "Normale", "value": "identity"},
+                                                            {"label": "Permutee 1/2", "value": "swap"},
+                                                        ],
+                                                        value="identity",
+                                                        clearable=False,
+                                                    ),
+                                                ],
+                                                style={"width": "150px"},
                                             ),
                                         ],
                                         className="panel-header",
@@ -1334,6 +1506,36 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                     ),
                                                 ],
                                                 style={"width": "190px"},
+                                            ),
+                                            html.Div(
+                                                [
+                                                    html.Label("Vecteurs"),
+                                                    dcc.Dropdown(
+                                                        id="complex-vector-space-dropdown",
+                                                        options=[
+                                                            {"label": "Blanchis", "value": "whitened"},
+                                                            {"label": "Non blanchis", "value": "unwhitened"},
+                                                        ],
+                                                        value="whitened",
+                                                        clearable=False,
+                                                    ),
+                                                ],
+                                                style={"width": "150px"},
+                                            ),
+                                            html.Div(
+                                                [
+                                                    html.Label("Couleur"),
+                                                    dcc.Dropdown(
+                                                        id="complex-color-mode-dropdown",
+                                                        options=[
+                                                            {"label": "Source estimee", "value": "source"},
+                                                            {"label": "Correct vs GT", "value": "gt"},
+                                                        ],
+                                                        value="source",
+                                                        clearable=False,
+                                                    ),
+                                                ],
+                                                style={"width": "160px"},
                                             ),
                                         ],
                                         className="panel-header",
@@ -1586,6 +1788,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         Input("mask-source-dropdown", "value"),
         Input("mask-frequency-scale-dropdown", "value"),
         Input("sawada-map-kind-dropdown", "value"),
+        Input("sawada-gt-permutation-dropdown", "value"),
     )
     def update_sawada_mask(
         split: str,
@@ -1594,11 +1797,13 @@ def build_app(config: AppConfig) -> dash.Dash:
         source_index: int,
         frequency_scale: str,
         map_kind: str,
+        gt_permutation: str,
     ) -> tuple[go.Figure, str]:
         if not split or not scene_id or algorithm != "sawada":
             return _sawada_mask_figure({}, 0), "Disponible uniquement pour Sawada."
 
-        model = _bundle(config, split, scene_id, algorithm)["sawada_model"]
+        bundle = _bundle(config, split, scene_id, algorithm)
+        model = bundle["sawada_model"]
         masks = np.asarray(model.get("masks", []))
         if masks.ndim != 3 or masks.size == 0:
             return (
@@ -1619,6 +1824,35 @@ def build_app(config: AppConfig) -> dash.Dash:
             caption = (
                 f"Bins actifs EM: {float(np.mean(active_tf_mask)):.1%} des bins gardes, "
                 f"seuil {threshold_text}."
+            )
+        elif map_kind == "gt_error":
+            gt_correctness = _sawada_gt_correctness(bundle, model, gt_permutation)
+            if gt_correctness.ndim != 2 or gt_correctness.size == 0:
+                return (
+                    _sawada_mask_figure(model, source_index, frequency_scale, map_kind),
+                    "GT indisponible. Verifie que le dataset original est bien charge.",
+                )
+            valid = gt_correctness != 0
+            correct_ratio = (
+                float(np.mean(gt_correctness[valid] > 0))
+                if np.any(valid)
+                else float("nan")
+            )
+            ratio_text = "-" if np.isnan(correct_ratio) else f"{correct_ratio:.1%}"
+            caption = (
+                f"Comparaison au spectro source dominant: {int(np.sum(valid))} bins compares, "
+                f"{ratio_text} corrects. Permutation GT: "
+                f"{'1/2 inversee' if gt_permutation == 'swap' else 'normale'}."
+            )
+            return (
+                _sawada_mask_figure(
+                    model,
+                    source_index,
+                    frequency_scale,
+                    map_kind,
+                    gt_correctness=gt_correctness,
+                ),
+                caption,
             )
         elif map_kind == "posterior":
             posteriors = np.asarray(model.get("posteriors", []))
@@ -1692,28 +1926,37 @@ def build_app(config: AppConfig) -> dash.Dash:
         Input("scene-dropdown", "value"),
         Input("algorithm-dropdown", "value"),
         Input("complex-frequency-dropdown", "value"),
+        Input("complex-vector-space-dropdown", "value"),
+        Input("complex-color-mode-dropdown", "value"),
+        Input("sawada-gt-permutation-dropdown", "value"),
     )
     def update_sawada_complex_plane(
         split: str,
         scene_id: str,
         algorithm: str,
         frequency_index: int,
+        vector_space: str,
+        color_mode: str,
+        gt_permutation: str,
     ) -> tuple[go.Figure, str]:
         if not split or not scene_id or algorithm != "sawada":
             return _sawada_complex_plane_figure({}, 0), "Disponible uniquement pour Sawada."
 
-        model = _bundle(config, split, scene_id, algorithm)["sawada_model"]
-        bin_vectors = np.asarray(model.get("bin_vectors", []))
+        bundle = _bundle(config, split, scene_id, algorithm)
+        model = bundle["sawada_model"]
+        vector_key = "bin_vectors_unwhitened" if vector_space == "unwhitened" else "bin_vectors"
+        centroid_key = "centroids_unwhitened" if vector_space == "unwhitened" else "centroids"
+        bin_vectors = np.asarray(model.get(vector_key, []))
         masks = np.asarray(model.get("masks", []), dtype=float)
-        centroids = np.asarray(model.get("centroids", []))
+        centroids = np.asarray(model.get(centroid_key, []))
         if bin_vectors.ndim != 3 or bin_vectors.size == 0:
             return (
-                _sawada_complex_plane_figure(model, frequency_index),
+                _sawada_complex_plane_figure(model, frequency_index, vector_space, color_mode),
                 "Vecteurs complexes absents. Relance le benchmark Sawada avec cette version.",
             )
         if masks.ndim != 3 or masks.size == 0 or centroids.ndim != 3 or centroids.size == 0:
             return (
-                _sawada_complex_plane_figure(model, frequency_index),
+                _sawada_complex_plane_figure(model, frequency_index, vector_space, color_mode),
                 "Masques ou centroides absents dans sawada_model.npz.",
             )
 
@@ -1729,17 +1972,46 @@ def build_app(config: AppConfig) -> dash.Dash:
         assigned = np.argmax(source_masks, axis=0)
         assigned_strength = np.max(source_masks, axis=0)
         has_assignment = assigned_strength > 0.5
+        gt_correctness = (
+            _sawada_gt_correctness(bundle, model, gt_permutation)
+            if color_mode == "gt"
+            else np.empty((0, 0), dtype=float)
+        )
         counts = [
             f"S{source_index + 1}: {int(np.sum(has_assignment & (assigned == source_index)))}"
             for source_index in range(source_masks.shape[0])
         ]
         inactive_count = int(np.sum(~has_assignment))
+        gt_text = ""
+        if color_mode == "gt":
+            if gt_correctness.ndim == 2 and gt_correctness.shape[0] > frequency_index:
+                correctness = gt_correctness[frequency_index, :n_times]
+                valid = correctness != 0
+                correct_count = int(np.sum(correctness > 0))
+                wrong_count = int(np.sum(correctness < 0))
+                gt_text = (
+                    f" GT: {correct_count} corrects, {wrong_count} faux, "
+                    f"{int(np.sum(~valid))} ignores."
+                )
+            else:
+                gt_text = " GT indisponible."
         caption = (
             f"Ligne frequencielle {frequency_index} ({frequency_text}): {n_times} trames x "
             f"{n_mics} composantes complexes. Points assignes: {', '.join(counts)}. "
-            f"Non utilises par l'EM: {inactive_count}."
+            f"Non utilises par l'EM: {inactive_count}. "
+            f"Repere: {'non blanchi' if vector_space == 'unwhitened' else 'blanchi'}."
+            f"{gt_text}"
         )
-        return _sawada_complex_plane_figure(model, frequency_index), caption
+        return (
+            _sawada_complex_plane_figure(
+                model,
+                frequency_index,
+                vector_space,
+                color_mode,
+                gt_correctness=gt_correctness,
+            ),
+            caption,
+        )
 
     @app.callback(
         Output("overview", "children"),
