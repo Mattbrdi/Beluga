@@ -786,6 +786,7 @@ def _sawada_complex_plane_figure(
     centroid_key = "centroids_unwhitened" if vector_space == "unwhitened" else "centroids"
     bin_vectors = np.asarray(sawada_model.get(vector_key, []))
     masks = np.asarray(sawada_model.get("masks", []), dtype=float)
+    active_clusters = np.asarray(sawada_model.get("active_clusters", []), dtype=bool)
     centroids = np.asarray(sawada_model.get(centroid_key, []))
     frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
     times = np.asarray(sawada_model.get("times", []), dtype=float)
@@ -837,6 +838,11 @@ def _sawada_complex_plane_figure(
     )
     source_colors = ["#dc2626", "#2563eb", "#16a34a", "#7c3aed", "#0891b2", "#db2777"]
     source_masks = masks[:, frequency_index, :]
+    source_active = (
+        active_clusters[frequency_index]
+        if active_clusters.ndim == 2 and active_clusters.shape[0] > frequency_index
+        else np.ones(n_sources, dtype=bool)
+    )
     assigned = np.argmax(source_masks, axis=0)
     assigned_strength = np.max(source_masks, axis=0)
     has_assignment = assigned_strength > 0.5
@@ -963,6 +969,8 @@ def _sawada_complex_plane_figure(
             )
 
         for source_index in range(min(n_sources, centroids.shape[2])):
+            if source_index < source_active.size and not source_active[source_index]:
+                continue
             centroid = centroid_values[mic_index, source_index]
             fig.add_trace(
                 go.Scatter(
@@ -1339,7 +1347,12 @@ def build_app(config: AppConfig) -> dash.Dash:
                 ],
                 className="topbar",
             ),
-            dcc.Interval(id="refresh-interval", interval=5000, n_intervals=0),
+            dcc.Interval(
+                id="refresh-interval",
+                interval=5000,
+                n_intervals=0,
+                disabled=True,
+            ),
             html.Div(
                 [
                     html.Div(
@@ -2033,6 +2046,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         centroid_key = "centroids_unwhitened" if vector_space == "unwhitened" else "centroids"
         bin_vectors = np.asarray(model.get(vector_key, []))
         masks = np.asarray(model.get("masks", []), dtype=float)
+        active_clusters = np.asarray(model.get("active_clusters", []), dtype=bool)
         centroids = np.asarray(model.get(centroid_key, []))
         if bin_vectors.ndim != 3 or bin_vectors.size == 0:
             return (
@@ -2069,6 +2083,11 @@ def build_app(config: AppConfig) -> dash.Dash:
         assigned = np.argmax(source_masks, axis=0)
         assigned_strength = np.max(source_masks, axis=0)
         has_assignment = assigned_strength > 0.5
+        active_cluster_count = (
+            int(np.sum(active_clusters[frequency_index]))
+            if active_clusters.ndim == 2 and active_clusters.shape[0] > frequency_index
+            else source_masks.shape[0]
+        )
         invalid_reference_count = 0
         if coordinate_mode == "relative":
             reference_values = bin_vectors[0, frequency_index, :]
@@ -2099,6 +2118,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         caption = (
             f"Ligne frequencielle {frequency_index} ({frequency_text}): {n_times} trames x "
             f"{n_mics} composantes complexes. Points assignes: {', '.join(counts)}. "
+            f"Clusters actifs: {active_cluster_count}/{source_masks.shape[0]}. "
             f"Non utilises par l'EM: {inactive_count}. "
             f"Repere: {'non blanchi' if vector_space == 'unwhitened' else 'blanchi'}, "
             f"{'rapports M/M1' if coordinate_mode == 'relative' else 'composantes directes'}."

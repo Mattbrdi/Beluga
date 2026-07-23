@@ -27,6 +27,7 @@ class EMClusteringParameters:
     energy_threshold_db_above_floor: float | None = None
     energy_floor_percentile: float = 20.0
     min_active_frames_per_frequency: int = 2
+    merge_centroid_distance_scale: float | None = None
   
 @dataclass
 class SawadaBssParameters(BssParameters): 

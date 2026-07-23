@@ -247,6 +247,7 @@ def save_sawada_model_npz(path: str | Path, result: Any) -> Path | None:
         target,
         masks=np.asarray(payload["masks"]),
         posteriors=np.asarray(payload["posteriors"]),
+        active_clusters=np.asarray(payload.get("active_clusters", np.empty((0, 0)))),
         bin_vectors=np.asarray(payload.get("bin_vectors", np.empty((0, 0, 0)))),
         bin_vectors_unwhitened=np.asarray(
             payload.get("bin_vectors_unwhitened", np.empty((0, 0, 0)))

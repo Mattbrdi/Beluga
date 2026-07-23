@@ -23,6 +23,7 @@ BENCHMARK_SAWADA_EM_PARAMETERS = EMClusteringParameters(
     energy_threshold_db_above_floor=6.0,
     energy_floor_percentile=20.0,
     min_active_frames_per_frequency=2,
+    merge_centroid_distance_scale=1.0,
 )
 
 
@@ -115,6 +116,7 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
         "sawada_model": {
             "masks": model.get_final_masks().astype(np.uint8),
             "posteriors": model.get_final_posteriors(),
+            "active_clusters": model.get_final_active_clusters().astype(np.uint8),
             "bin_vectors": model.nspectro_preprocessed.Sxx,
             "bin_vectors_unwhitened": (
                 np.empty((0, 0, 0))
@@ -183,6 +185,9 @@ def run_sawada(
                 ),
                 "min_active_frames_per_frequency": (
                     BENCHMARK_SAWADA_EM_PARAMETERS.min_active_frames_per_frequency
+                ),
+                "merge_centroid_distance_scale": (
+                    BENCHMARK_SAWADA_EM_PARAMETERS.merge_centroid_distance_scale
                 ),
             },
             "reference_microphone": reference_microphone,

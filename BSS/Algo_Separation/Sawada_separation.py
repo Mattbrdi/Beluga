@@ -229,6 +229,7 @@ class SawadaBSS:
     bin_models: Dict[int, 'EMClustering'] = field(default_factory=dict)
     bin_masks: Dict[int, np.ndarray] = field(default_factory=dict)
     bin_posteriors: Dict[int, np.ndarray] = field(default_factory=dict)
+    bin_active_clusters: Dict[int, np.ndarray] = field(default_factory=dict)
     tf_energy: Optional[np.ndarray] = None
     active_tf_mask: Optional[np.ndarray] = None
     energy_threshold_db: Optional[float] = None
@@ -281,6 +282,98 @@ class SawadaBSS:
         self.eigenvalues_matrix, self.eigenvector_matrix = spectro.decompose_spatial_correlation() 
         whitening_matrix = spectro.compute_whitening_matrix(self.eigenvalues_matrix, self.eigenvector_matrix)
         return spectro.apply_transformation(W = whitening_matrix)
+
+    def _merge_close_clusters(self, model: EMClustering, X: np.ndarray) -> np.ndarray:
+        """
+        Fusionne les clusters dont les directions sont indiscernables localement.
+
+        Deux clusters sont fusionnes si leur distance directionnelle
+        1 - |a_i^H a_j|^2 est plus petite que la dispersion moyenne des clusters,
+        multipliee par merge_centroid_distance_scale.
+        """
+        merge_scale = self.em_clustering_parameters.merge_centroid_distance_scale
+        active_clusters = np.ones(self.n_sources, dtype=bool)
+        if merge_scale is None or self.n_sources < 2 or model.posteriors is None:
+            return active_clusters
+
+        centroids = model.centroids / (
+            np.linalg.norm(model.centroids, axis=0, keepdims=True) + model.eps
+        )
+        directional_distances = 1.0 - np.abs(centroids.conj().T @ centroids) ** 2
+
+        parent = np.arange(self.n_sources)
+
+        def find(index: int) -> int:
+            while parent[index] != index:
+                parent[index] = parent[parent[index]]
+                index = parent[index]
+            return int(index)
+
+        def union(left: int, right: int) -> None:
+            left_root = find(left)
+            right_root = find(right)
+            if left_root != right_root:
+                parent[right_root] = left_root
+
+        for left in range(self.n_sources):
+            for right in range(left + 1, self.n_sources):
+                dispersion = 0.5 * (model.variances[left] + model.variances[right])
+                threshold = float(merge_scale) * max(float(dispersion), model.eps)
+                distance = float(np.real(directional_distances[left, right]))
+                if np.isfinite(distance) and distance <= threshold:
+                    union(left, right)
+
+        groups: dict[int, list[int]] = {}
+        for source_index in range(self.n_sources):
+            groups.setdefault(find(source_index), []).append(source_index)
+
+        posteriors = model.posteriors.copy()
+        for group in groups.values():
+            if len(group) <= 1:
+                continue
+
+            group_array = np.asarray(group, dtype=int)
+            posterior_mass = np.sum(posteriors[group_array], axis=1)
+            if np.sum(posterior_mass) <= model.eps:
+                keeper = int(group_array[np.argmax(model.weights[group_array])])
+            else:
+                keeper = int(group_array[np.argmax(posterior_mass)])
+
+            merged_gamma = np.sum(posteriors[group_array], axis=0)
+            merged_weight = float(np.sum(model.weights[group_array]))
+
+            for member in group_array:
+                if member == keeper:
+                    continue
+                posteriors[member] = 0.0
+                model.weights[member] = 0.0
+                model.variances[member] = np.inf
+                model.centroids[:, member] = model.centroids[:, keeper]
+                active_clusters[member] = False
+
+            posteriors[keeper] = merged_gamma
+            model.weights[keeper] = merged_weight
+
+            sum_gamma = float(np.sum(merged_gamma))
+            if sum_gamma <= model.eps:
+                continue
+
+            weighted_X = X * np.sqrt(merged_gamma)
+            R_i = weighted_X @ weighted_X.conj().T
+            _, eigenvectors = np.linalg.eigh(R_i)
+            model.centroids[:, keeper] = eigenvectors[:, -1]
+            model.centroids[:, keeper] /= (
+                np.linalg.norm(model.centroids[:, keeper]) + model.eps
+            )
+
+            new_proj_sq = np.abs(model.centroids[:, keeper:keeper + 1].conj().T @ X)[0] ** 2
+            new_dist_sq = np.maximum(0, 1 - new_proj_sq)
+            model.variances[keeper] = np.sum(merged_gamma * new_dist_sq) / (
+                sum_gamma * (X.shape[0] - 1) + model.eps
+            )
+
+        model.posteriors = posteriors / (np.sum(posteriors, axis=0, keepdims=True) + model.eps)
+        return active_clusters
     
     
     def fit_bins(
@@ -327,21 +420,30 @@ class SawadaBSS:
             # 3. Entraînement (M-Step et E-Step alternés)
             # Cette étape estime a_i(f) et sigma_i(f)
             model.fit(X_fit)
+            active_clusters = np.ones(self.n_sources, dtype=bool)
+            if has_enough_active_frames:
+                active_clusters = self._merge_close_clusters(model, X_fit)
             
             # 4. Génération du masque binaire (Hard labeling) pour ce bin
             # mask_f shape: (n_sources, n_times)
             mask_f = np.zeros((self.n_sources, n_times), dtype=int)
             posterior_f = np.zeros((self.n_sources, n_times), dtype=float)
             if has_enough_active_frames:
-                mask_f[:, active_frames] = model.predict(X_fit)
                 posterior_active = model.posteriors
                 if posterior_active is None:
                     posterior_active = model.e_step(X_fit)
                 posterior_f[:, active_frames] = posterior_active
+                best_source = np.argmax(posterior_active, axis=0)
+                for source_index in range(self.n_sources):
+                    if active_clusters[source_index]:
+                        mask_f[source_index, active_frames] = (
+                            best_source == source_index
+                        )
             
             self.bin_models[f_idx] = model
             self.bin_masks[f_idx] = mask_f
             self.bin_posteriors[f_idx] = posterior_f
+            self.bin_active_clusters[f_idx] = active_clusters
             print(f"\r frequence numéro {f_idx} terminée", end="", flush=True )
         print(" ")
         print("Clustering par bin terminé.")
@@ -416,6 +518,8 @@ class SawadaBSS:
             self.bin_masks[f] = current_masks[list(best_perm), :]
             if f in self.bin_posteriors:
                 self.bin_posteriors[f] = self.bin_posteriors[f][list(best_perm), :]
+            if f in self.bin_active_clusters:
+                self.bin_active_clusters[f] = self.bin_active_clusters[f][list(best_perm)]
             if f in self.bin_models:
                 self.bin_models[f].centroids = self.bin_models[f].centroids[:, list(best_perm)]
                 self.bin_models[f].variances = self.bin_models[f].variances[list(best_perm)]
@@ -475,6 +579,15 @@ class SawadaBSS:
         for f in range(n_freqs):
             final_posteriors[:, f, :] = self.bin_posteriors[f]
         return final_posteriors
+
+    def get_final_active_clusters(self) -> np.ndarray:
+        """Retourne les clusters Sawada conserves apres fusion locale."""
+        n_freqs = len(self.bin_models)
+        active_clusters = np.ones((n_freqs, self.n_sources), dtype=bool)
+        for f in range(n_freqs):
+            if f in self.bin_active_clusters:
+                active_clusters[f] = self.bin_active_clusters[f]
+        return active_clusters
         
     def process_signal(self, multi_signal: MultiSignal) :
         """
