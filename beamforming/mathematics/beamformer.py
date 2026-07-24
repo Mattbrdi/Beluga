@@ -82,7 +82,7 @@ def delay_and_sum(
         returns power and corresponding angles
     """
     max_power = 0
-    n_per_chunk = 1024
+    n_per_chunk = 1500
 
     s, Theta, Phi = _get_steering_vector(fc, tetrahedra)
     T, P = Theta.shape
@@ -90,19 +90,20 @@ def delay_and_sum(
 
     power_flat = np.ones(shape=(T * P), dtype=np.float32)
 
-    N = int(np.ceil(signal.shape[1] / n_per_chunk))
-
+    N = int(np.ceil(s_flat.shape[1] / n_per_chunk))
+    print(N)
     for i in range(N):
         print(f"{i} / {N}")
         idx_min = i * n_per_chunk
-        idx_max = min(signal.shape[1], (i + 1) * n_per_chunk)
+        idx_max = min(s_flat.shape[1], (i + 1) * n_per_chunk)
 
         s_flat_chunk = s_flat[:, idx_min:idx_max].astype(np.complex64)
 
-        X_weighted_flat_chunk = s_flat_chunk.conj().T @ signal.astype(np.float32)
-
-        power_flat_chunk = np.var(X_weighted_flat_chunk)
-        power_flat[idx_min:idx_max] = power_flat_chunk
+        X_weighted_flat_chunk = s_flat_chunk.conj().T @  hilbert(signal, axis=1)
+        power_flat[idx_min:idx_max] = np.mean(
+            np.abs(X_weighted_flat_chunk) ** 2,
+            axis=1,
+        )
 
     power = power_flat.reshape(T, P)
 
