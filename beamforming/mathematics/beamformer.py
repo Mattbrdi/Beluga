@@ -16,7 +16,7 @@ from scipy.signal import hilbert
 #    return w
 
 
-def _get_steering_vector(fc, tetrahedra, n_theta=300, n_phi=300):
+def _get_steering_vector(fc, tetrahedra, n_theta=500, n_phi=500):
     p12 = tetrahedra.p2 - tetrahedra.p1
     p13 = tetrahedra.p3 - tetrahedra.p1
     p14 = tetrahedra.p4 - tetrahedra.p1

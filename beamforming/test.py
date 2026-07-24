@@ -45,9 +45,9 @@ print("Beamforming Doa processing")
 
 # plot_results(power_DB, Theta, Phi)
 
-# u = mvdr_doa(5000, tetrahedra, audio_array)
-# u = delay_and_sum_doa(300, tetrahedra, audio_array)
-u = music_doa(2000, tetrahedra, audio_array)
+# u = mvdr_doa(2000, tetrahedra, audio_array)
+# u = delay_and_sum_doa(2000, tetrahedra, audio_array)
+u = music_doa(2000, tetrahedra, audio_array, num_expected_signals=1)
 print(u)
 print("Visualize result")
 
