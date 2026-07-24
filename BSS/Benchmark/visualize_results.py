@@ -590,12 +590,23 @@ def _sawada_mask_figure(
     masks = np.asarray(sawada_model.get("masks", []), dtype=float)
     posteriors = np.asarray(sawada_model.get("posteriors", []), dtype=float)
     active_tf_mask = np.asarray(sawada_model.get("active_tf_mask", []), dtype=float)
+    tf_energy = np.asarray(sawada_model.get("tf_energy", []), dtype=float)
     frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
     times = np.asarray(sawada_model.get("times", []), dtype=float)
     fig = go.Figure()
 
     if map_kind == "posterior":
         values_tensor = posteriors
+    elif map_kind == "masked_energy":
+        if masks.ndim == 3 and tf_energy.ndim == 2:
+            n_freqs = min(masks.shape[1], tf_energy.shape[0])
+            n_times = min(masks.shape[2], tf_energy.shape[1])
+            values_tensor = np.zeros_like(masks, dtype=float)
+            values_tensor[:, :n_freqs, :n_times] = (
+                masks[:, :n_freqs, :n_times] * tf_energy[np.newaxis, :n_freqs, :n_times]
+            )
+        else:
+            values_tensor = np.empty((0, 0, 0))
     elif map_kind == "active":
         values_tensor = active_tf_mask[np.newaxis, :, :] if active_tf_mask.ndim == 2 else active_tf_mask
     elif map_kind == "gt_error":
@@ -646,13 +657,33 @@ def _sawada_mask_figure(
         is_posterior = map_kind == "posterior"
         is_active = map_kind == "active"
         is_gt_error = map_kind == "gt_error"
+        is_masked_energy = map_kind == "masked_energy"
+        display_values = (
+            10 * np.log10(values + 1e-20)
+            if is_masked_energy
+            else values
+        )
+        if is_masked_energy and display_values.size:
+            finite_display = display_values[np.isfinite(display_values)]
+            zmax = float(np.nanpercentile(finite_display, 99)) if finite_display.size else 0.0
+            zmin = max(
+                float(np.nanpercentile(finite_display, 5)) if finite_display.size else zmax - 100.0,
+                zmax - 100.0,
+            )
+            if zmax <= zmin:
+                zmax = zmin + 1.0
+        else:
+            zmin = -1 if is_gt_error else 0
+            zmax = 1
         fig.add_trace(
             go.Heatmap(
-                z=values,
+                z=display_values,
                 x=times,
                 y=frequencies,
                 colorscale="Viridis"
                 if is_posterior
+                else "Magma"
+                if is_masked_energy
                 else [
                     [0.0, "#dc2626"],
                     [0.49, "#dc2626"],
@@ -667,12 +698,14 @@ def _sawada_mask_figure(
                     [0.5, "#0f766e"],
                     [1.0, "#0f766e"],
                 ],
-                zmin=-1 if is_gt_error else 0,
-                zmax=1,
+                zmin=zmin,
+                zmax=zmax,
                 colorbar={
                     "title": (
                         "P(source)"
                         if is_posterior
+                        else "E dB"
+                        if is_masked_energy
                         else "GT"
                         if is_gt_error
                         else "active"
@@ -688,6 +721,8 @@ def _sawada_mask_figure(
                 hovertemplate=(
                     "t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>P=%{z:.3f}<extra></extra>"
                     if is_posterior
+                    else "t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>E masque=%{z:.1f}dB<extra></extra>"
+                    if is_masked_energy
                     else "t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>GT=%{z}<extra></extra>"
                     if is_gt_error
                     else "t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>active=%{z}<extra></extra>"
@@ -700,6 +735,8 @@ def _sawada_mask_figure(
             title=(
                 f"Probabilite EM - Source {source_index + 1}"
                 if is_posterior
+                else f"Energie masquee - Source {source_index + 1}"
+                if is_masked_energy
                 else "Correct vs GT"
                 if is_gt_error
                 else "Bins actifs EM"
@@ -1564,6 +1601,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                             options=[
                                                                 {"label": "Masque", "value": "mask"},
                                                                 {"label": "Probabilite EM", "value": "posterior"},
+                                                                {"label": "Energie masquee", "value": "masked_energy"},
                                                                 {"label": "Bins actifs EM", "value": "active"},
                                                                 {"label": "Correct vs GT", "value": "gt_error"},
                                                             ],
@@ -2042,6 +2080,24 @@ def build_app(config: AppConfig) -> dash.Dash:
             caption = (
                 f"Bins actifs EM: {float(np.mean(active_tf_mask)):.1%} des bins gardes, "
                 f"seuil {threshold_text}."
+            )
+        elif map_kind == "masked_energy":
+            tf_energy = np.asarray(model.get("tf_energy", []), dtype=float)
+            if tf_energy.ndim != 2 or tf_energy.size == 0:
+                return (
+                    _sawada_mask_figure(model, source_index, frequency_scale, map_kind),
+                    "Energie TF absente. Relance le benchmark Sawada avec cette version.",
+                )
+            n_freqs = min(masks.shape[1], tf_energy.shape[0])
+            n_times = min(masks.shape[2], tf_energy.shape[1])
+            masked_energy = masks[source_index, :n_freqs, :n_times] * tf_energy[:n_freqs, :n_times]
+            total_energy = float(np.sum(tf_energy[:n_freqs, :n_times]))
+            source_energy = float(np.sum(masked_energy))
+            ratio_text = "-" if total_energy <= 0 else f"{source_energy / total_energy:.1%}"
+            caption = (
+                f"Energie masquee source {source_index + 1}: "
+                f"{n_freqs} bins frequences x {n_times} trames, "
+                f"{ratio_text} de l'energie TF totale du melange."
             )
         elif map_kind == "gt_error":
             gt_correctness = _sawada_gt_correctness(bundle, model, gt_permutation)
