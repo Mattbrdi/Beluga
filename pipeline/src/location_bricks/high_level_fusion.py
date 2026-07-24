@@ -2,6 +2,22 @@ from typing import Optional, List
 import numpy as np
 from itertools import combinations
 
+
+#TODO : refactor pour ne pas copier coller deux fois le code de fusion_bf et high_fusion
+def fusion_bf(wave_vectors_list: List[np.ndarray], wave_vector_error_variance: List[np.ndarray], environment, projection_plan: Optional[float]):
+    tetrahedras_origins_enu = [np.array(tetra.origin_enu) for tetra in environment.tetrahedras.values() if tetra.is_active]
+    
+    if len(wave_vectors_list) <= 1:
+        print(f'WARNING : Only one active tetrahedra, returning NaNs')
+        return np.full((3, 1), np.nan), np.full((3, 1), np.nan)
+    positions = []
+    for wave_pair, origins in zip(combinations(wave_vectors_list, 2), combinations(tetrahedras_origins_enu, 2)):
+        positions.append(two_tetra_intersection(wave_pair, origins, projection_plan))
+    positions = np.array(positions)
+    position = np.mean(positions, axis=0)
+    estimated_error = np.zeros(3) # TODO ajouter module d'erreur ici si on garde
+    return position.reshape(-1, 1), estimated_error
+
 def wave_vectors(tdoas_measured: List[np.ndarray], environment):
     """
     Calculate wave vectors from measured TDOAs and environment tetrahedra.

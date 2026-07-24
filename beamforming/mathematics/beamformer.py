@@ -6,8 +6,17 @@ from beamforming.configuration import *
 from beamforming.classes import *
 from scipy.signal import hilbert
 
+# def steering_vector(fc, theta, phi, tetrahedra : TetrahedralArray) -> NDArray[np.float64]:
 
-def _get_steering_vector(fc, tetrahedra, n_theta=100, n_phi=100):
+
+#     return s
+
+# def w_mvdr(fc, phi, theta, tetrahedra, Rinv):
+
+#    return w
+
+
+def _get_steering_vector(fc, tetrahedra, n_theta=500, n_phi=500):
     p12 = tetrahedra.p2 - tetrahedra.p1
     p13 = tetrahedra.p3 - tetrahedra.p1
     p14 = tetrahedra.p4 - tetrahedra.p1
@@ -54,7 +63,7 @@ def _doa_from_power(power_dB, Theta, Phi):
 
 
 def delay_and_sum(
-    fc: int, tetrahedra: Tetrahedra, signal: NDArray[np.float64]
+    fc: int, tetrahedra: TetrahedralArray, signal: NDArray[np.float64]
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """Delay and Sum Beamformer power computation for narrowband signals
 
@@ -62,7 +71,7 @@ def delay_and_sum(
     ----------
     fc : int
         central frequency of narrowband signal
-    tetrahedra : Tetrahedra
+    tetrahedra : TetrahedralArray
         Tetrahedra used for beamforming
     signal : NDArray
         4 x N signal containing received signal by the four hydrophones
@@ -73,7 +82,7 @@ def delay_and_sum(
         returns power and corresponding angles
     """
     max_power = 0
-    n_per_chunk = 1024
+    n_per_chunk = 1500
 
     s, Theta, Phi = _get_steering_vector(fc, tetrahedra)
     T, P = Theta.shape
@@ -81,19 +90,20 @@ def delay_and_sum(
 
     power_flat = np.ones(shape=(T * P), dtype=np.float32)
 
-    N = int(np.ceil(signal.shape[1] / n_per_chunk))
-
+    N = int(np.ceil(s_flat.shape[1] / n_per_chunk))
+    print(N)
     for i in range(N):
         print(f"{i} / {N}")
         idx_min = i * n_per_chunk
-        idx_max = min(signal.shape[1], (i + 1) * n_per_chunk)
+        idx_max = min(s_flat.shape[1], (i + 1) * n_per_chunk)
 
         s_flat_chunk = s_flat[:, idx_min:idx_max].astype(np.complex64)
 
-        X_weighted_flat_chunk = s_flat_chunk.conj().T @ signal.astype(np.float32)
-
-        power_flat_chunk = np.var(X_weighted_flat_chunk)
-        power_flat[idx_min:idx_max] = power_flat_chunk
+        X_weighted_flat_chunk = s_flat_chunk.conj().T @  hilbert(signal, axis=1)
+        power_flat[idx_min:idx_max] = np.mean(
+            np.abs(X_weighted_flat_chunk) ** 2,
+            axis=1,
+        )
 
     power = power_flat.reshape(T, P)
 
@@ -105,7 +115,7 @@ def delay_and_sum(
 
 
 def delay_and_sum_doa(
-    fc: int, tetrahedra: Tetrahedra, signal: NDArray[np.float64]
+    fc: int, tetrahedra: TetrahedralArray, signal: NDArray[np.float64]
 ) -> NDArray[np.float64]:
     """Delay and Sum Beamformer for DOA finding of narrowband signals
 
@@ -113,7 +123,7 @@ def delay_and_sum_doa(
     ----------
     fc : int
         central frequency of narrowband signal
-    tetrahedra : Tetrahedra
+    tetrahedra : TetrahedralArray
         Tetrahedra used for beamforming
     signal : NDArray
         4 x N signal containing received signal by the four hydrophones
@@ -133,7 +143,7 @@ def mvdr(fc, tetrahedra, signal):
     ----------
     fc : int
         central frequency of narrowband signal
-    tetrahedra : Tetrahedra
+    tetrahedra : TetrahedralArray
         Tetrahedra used for beamforming
     signal : NDArray
         4 x N signal containing received signal by the four hydrophones
@@ -189,7 +199,7 @@ def mvdr_doa(fc, tetrahedra, signal) -> NDArray[np.float64]:
     ----------
     fc : int
         central frequency of narrowband signal
-    tetrahedra : Tetrahedra
+    tetrahedra : TetrahedralArray
         Tetrahedra used for beamforming
     signal : NDArray
         4 x N signal containing received signal by the four hydrophones
@@ -209,7 +219,7 @@ def music(fc, tetrahedra, signal, num_expected_signals=3) -> NDArray[np.float64]
     ----------
     fc : int
         central frequency of narrowband signal
-    tetrahedra : Tetrahedra
+    tetrahedra : TetrahedralArray
         Tetrahedra used for beamforming
     signal : NDArray
         4 x N signal containing received signal by the four hydrophones
@@ -223,8 +233,11 @@ def music(fc, tetrahedra, signal, num_expected_signals=3) -> NDArray[np.float64]
     T, P = Theta.shape
     s_flat = s.reshape(4, T * P)  # (4, T*P)
 
+    x = hilbert(signal, axis=1)
+    R = x @ x.conj().T / x.shape[1]
+
     # part that doesn't change with theta_i
-    R = np.cov(signal)  # Calc covariance matrix. gives a Nr x Nr covariance matrix
+    # R = np.cov(signal)  # Calc covariance matrix. gives a Nr x Nr covariance matrix
     w, v = np.linalg.eig(
         R
     )  # eigenvalue decomposition, v[:,i] is the eigenvector corresponding to the eigenvalue w[i]
@@ -251,14 +264,14 @@ def music(fc, tetrahedra, signal, num_expected_signals=3) -> NDArray[np.float64]
     return metric, Theta, Phi
 
 
-def music_doa(fc, tetrahedra, signal) -> NDArray[np.float64]:
+def music_doa(fc, tetrahedra, signal, num_expected_signals=1) -> NDArray[np.float64]:
     """MUSIC Beamformer for DOA finding of narrowband signals
 
     Parameters
     ----------
     fc : int
         central frequency of narrowband signal
-    tetrahedra : Tetrahedra
+    tetrahedra : TetrahedralArray
         Tetrahedra used for beamforming
     signal : NDArray
         4 x N signal containing received signal by the four hydrophones
@@ -268,4 +281,4 @@ def music_doa(fc, tetrahedra, signal) -> NDArray[np.float64]:
     Tuple[NDArray, NDArray, NDArray]
         returns DOA
     """
-    return _doa_from_power(*music(fc, tetrahedra, signal))
+    return _doa_from_power(*music(fc, tetrahedra, signal, num_expected_signals=1))

@@ -16,7 +16,7 @@ def as_vector3(value) -> Vector3:
 
 
 @dataclass
-class Tetrahedra:
+class TetrahedralArray:
     positions: NDArray[np.float64]
 
     def __post_init__(self) -> None:
@@ -44,7 +44,7 @@ class Tetrahedra:
             raise ValueError("Tetrahedra is not reguliar got incorrect positions")
 
     # @classmethod
-    # def from_length_base_centroid(cls, radius : float, height) -> Tetrahedra:
+    # def from_length_base_centroid(cls, radius : float, height) -> TetrahedralArray:
     #     p1 = np.asarray([])
     #     p2 = np.asarray([])
     #     p3 = np.asarray([])

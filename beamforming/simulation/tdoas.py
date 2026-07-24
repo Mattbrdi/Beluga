@@ -4,7 +4,7 @@ from itertools import combinations
 
 
 def get_tdoas_from_source(
-    tetrahedra: Tetrahedra, source: Source
+    tetrahedra: TetrahedralArray, source: Source
 ) -> NDArray[np.float64]:
     """Compute pairwise TDOA for tetrahedra hydrophones from provided source
 
@@ -13,7 +13,7 @@ def get_tdoas_from_source(
 
     Parameters
     ----------
-    tetrahedra : Tetrahedra
+    tetrahedra : TetrahedralArray
        Geometry of the four-hydrophone array. Positions are expected
        in metres.
     source : Source
