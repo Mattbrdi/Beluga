@@ -472,13 +472,21 @@ def _downsample_for_plot(data: np.ndarray, max_points: int = 7000) -> tuple[np.n
     return data[..., ::step], step
 
 
-def _time_figure(group: SignalGroup) -> go.Figure:
+def _time_figure(group: SignalGroup, trace_index: int | None = None) -> go.Figure:
     data = np.asarray(group.data, dtype=float)
+    title = "Signaux temporels"
+    if trace_index is not None and data.ndim == 2 and data.size:
+        trace_index = min(max(int(trace_index), 0), data.shape[0] - 1)
+        data = data[trace_index:trace_index + 1]
+        labels = (group.traces[trace_index],)
+        title = f"Signal temporel - {group.traces[trace_index]}"
+    else:
+        labels = group.traces
     plot_data, step = _downsample_for_plot(data)
     times = np.arange(plot_data.shape[1]) * step / group.fs
 
     fig = go.Figure()
-    for index, label in enumerate(group.traces):
+    for index, label in enumerate(labels):
         normalized = _peak_normalize(plot_data[index])
         fig.add_trace(
             go.Scattergl(
@@ -491,7 +499,7 @@ def _time_figure(group: SignalGroup) -> go.Figure:
         )
     fig.update_layout(
         margin={"l": 52, "r": 18, "t": 34, "b": 42},
-        title="Signaux temporels",
+        title=title,
         xaxis_title="Temps (s)",
         yaxis_title="Amplitude normalisee",
         paper_bgcolor="#f7f7f3",
@@ -1174,7 +1182,7 @@ def _style() -> str:
             top: 0;
             z-index: 20;
             display: grid;
-            grid-template-columns: minmax(220px, 1fr) repeat(5, minmax(140px, 190px));
+            grid-template-columns: minmax(220px, 1fr) repeat(7, minmax(120px, 170px));
             gap: 12px;
             align-items: end;
             padding: 14px 18px;
@@ -1211,6 +1219,11 @@ def _style() -> str:
         .panel-title { margin: 0; font-size: 14px; font-weight: 800; }
         .panel-body { padding: 12px; }
         .stack { display: grid; gap: 14px; }
+        .comparison-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 14px;
+        }
         .metrics-grid {
             display: grid;
             grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1243,6 +1256,7 @@ def _style() -> str:
             .topbar { grid-template-columns: 1fr 1fr; }
             .brand { grid-column: 1 / -1; }
             .content { grid-template-columns: 1fr; }
+            .comparison-grid { grid-template-columns: 1fr; }
         }
         @media (max-width: 680px) {
             .topbar { grid-template-columns: 1fr; }
@@ -1334,14 +1348,26 @@ def build_app(config: AppConfig) -> dash.Dash:
                     ),
                     html.Div(
                         [
-                            html.Label("Famille"),
+                            html.Label("Famille A"),
                             dcc.Dropdown(id="group-dropdown", clearable=False),
                         ]
                     ),
                     html.Div(
                         [
-                            html.Label("Ecoute/Spectro"),
+                            html.Label("Trace A"),
                             dcc.Dropdown(id="trace-dropdown", clearable=False),
+                        ]
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Famille B"),
+                            dcc.Dropdown(id="compare-group-dropdown", clearable=False),
+                        ]
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Trace B"),
+                            dcc.Dropdown(id="compare-trace-dropdown", clearable=False),
                         ]
                     ),
                 ],
@@ -1366,7 +1392,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                                             html.Div(
                                                 [
                                                     html.H2(
-                                                        "Signaux",
+                                                        "Signal A",
                                                         className="panel-title",
                                                     )
                                                 ],
@@ -1385,7 +1411,31 @@ def build_app(config: AppConfig) -> dash.Dash:
                                             html.Div(
                                                 [
                                                     html.H2(
-                                                        "Spectrogramme",
+                                                        "Signal B",
+                                                        className="panel-title",
+                                                    )
+                                                ],
+                                                className="panel-header",
+                                            ),
+                                            dcc.Graph(
+                                                id="compare-time-graph",
+                                                config={"displayModeBar": True},
+                                                style={"height": "360px"},
+                                            ),
+                                        ],
+                                        className="panel",
+                                    ),
+                                ],
+                                className="comparison-grid",
+                            ),
+                            html.Div(
+                                [
+                                    html.Div(
+                                        [
+                                            html.Div(
+                                                [
+                                                    html.H2(
+                                                        "Spectrogramme A",
                                                         className="panel-title",
                                                     ),
                                                     html.Div(
@@ -1458,8 +1508,27 @@ def build_app(config: AppConfig) -> dash.Dash:
                                         ],
                                         className="panel",
                                     ),
+                                    html.Div(
+                                        [
+                                            html.Div(
+                                                [
+                                                    html.H2(
+                                                        "Spectrogramme B",
+                                                        className="panel-title",
+                                                    )
+                                                ],
+                                                className="panel-header",
+                                            ),
+                                            dcc.Graph(
+                                                id="compare-spectrogram-graph",
+                                                config={"displayModeBar": True},
+                                                style={"height": "390px"},
+                                            ),
+                                        ],
+                                        className="panel",
+                                    ),
                                 ],
-                                className="stack",
+                                className="comparison-grid",
                             ),
                         ],
                         className="stack",
@@ -1770,6 +1839,31 @@ def build_app(config: AppConfig) -> dash.Dash:
         return [{"label": group.label, "value": key} for key, group in groups.items()], value
 
     @app.callback(
+        Output("compare-group-dropdown", "options"),
+        Output("compare-group-dropdown", "value"),
+        Input("split-dropdown", "value"),
+        Input("scene-dropdown", "value"),
+        Input("algorithm-dropdown", "value"),
+        State("compare-group-dropdown", "value"),
+    )
+    def update_compare_groups(
+        split: str, scene_id: str, algorithm: str, current_group: str | None
+    ) -> tuple[list[dict[str, str]], str]:
+        if not split or not scene_id or not algorithm:
+            return [], ""
+        groups = _signal_groups(_bundle(config, split, scene_id, algorithm))
+        keys = list(groups)
+        if current_group in groups:
+            value = current_group
+        elif "estimated" in groups:
+            value = "estimated"
+        elif len(keys) > 1:
+            value = keys[1]
+        else:
+            value = keys[0] if keys else ""
+        return [{"label": group.label, "value": key} for key, group in groups.items()], value
+
+    @app.callback(
         Output("trace-dropdown", "options"),
         Output("trace-dropdown", "value"),
         Input("split-dropdown", "value"),
@@ -1779,6 +1873,37 @@ def build_app(config: AppConfig) -> dash.Dash:
         State("trace-dropdown", "value"),
     )
     def update_traces(
+        split: str,
+        scene_id: str,
+        algorithm: str,
+        group_key: str,
+        current_trace: int | None,
+    ) -> tuple[list[dict[str, int]], int]:
+        if not split or not scene_id or not algorithm or not group_key:
+            return [], 0
+        groups = _signal_groups(_bundle(config, split, scene_id, algorithm))
+        if group_key not in groups:
+            group_key = next(iter(groups), "")
+        if not group_key:
+            return [], 0
+        group = groups[group_key]
+        indexes = list(range(len(group.traces)))
+        value = current_trace if current_trace in indexes else 0
+        return [
+            {"label": label, "value": index}
+            for index, label in enumerate(group.traces)
+        ], value
+
+    @app.callback(
+        Output("compare-trace-dropdown", "options"),
+        Output("compare-trace-dropdown", "value"),
+        Input("split-dropdown", "value"),
+        Input("scene-dropdown", "value"),
+        Input("algorithm-dropdown", "value"),
+        Input("compare-group-dropdown", "value"),
+        State("compare-trace-dropdown", "value"),
+    )
+    def update_compare_traces(
         split: str,
         scene_id: str,
         algorithm: str,
@@ -2142,6 +2267,8 @@ def build_app(config: AppConfig) -> dash.Dash:
         Output("warning-slot", "children"),
         Output("time-graph", "figure"),
         Output("spectrogram-graph", "figure"),
+        Output("compare-time-graph", "figure"),
+        Output("compare-spectrogram-graph", "figure"),
         Output("audio-player", "src"),
         Output("audio-caption", "children"),
         Output("tdoa-graph", "figure"),
@@ -2151,6 +2278,8 @@ def build_app(config: AppConfig) -> dash.Dash:
         Input("algorithm-dropdown", "value"),
         Input("group-dropdown", "value"),
         Input("trace-dropdown", "value"),
+        Input("compare-group-dropdown", "value"),
+        Input("compare-trace-dropdown", "value"),
         Input("nperseg-dropdown", "value"),
         Input("max-frequency-input", "value"),
         Input("frequency-scale-dropdown", "value"),
@@ -2162,14 +2291,27 @@ def build_app(config: AppConfig) -> dash.Dash:
         algorithm: str,
         group_key: str,
         trace_index: int,
+        compare_group_key: str,
+        compare_trace_index: int,
         nperseg: int,
         max_frequency: float | None,
         frequency_scale: str,
         spectrogram_scale: str,
-    ) -> tuple[Any, Any, go.Figure, go.Figure, str, str, go.Figure, list[dict[str, Any]]]:
+    ) -> tuple[
+        Any,
+        Any,
+        go.Figure,
+        go.Figure,
+        go.Figure,
+        go.Figure,
+        str,
+        str,
+        go.Figure,
+        list[dict[str, Any]],
+    ]:
         if not split or not scene_id or not algorithm or not group_key:
             empty = go.Figure()
-            return [], "", empty, empty, "", "", empty, []
+            return [], "", empty, empty, empty, empty, "", "", empty, []
 
         bundle = _bundle(config, split, scene_id, algorithm)
         groups = _signal_groups(bundle)
@@ -2177,12 +2319,21 @@ def build_app(config: AppConfig) -> dash.Dash:
             group_key = next(iter(groups), "")
         if not group_key:
             empty = go.Figure()
-            return _overview_children(bundle), "", empty, empty, "", "", empty, []
+            return _overview_children(bundle), "", empty, empty, empty, empty, "", "", empty, []
         group = groups[group_key]
         trace_index = int(trace_index or 0)
         trace_index = min(max(trace_index, 0), len(group.traces) - 1)
         signal = group.data[trace_index]
         duration = len(signal) / group.fs if group.fs else 0.0
+
+        if compare_group_key not in groups:
+            compare_group_key = "estimated" if "estimated" in groups else group_key
+        compare_group = groups[compare_group_key]
+        compare_trace_index = int(compare_trace_index or 0)
+        compare_trace_index = min(
+            max(compare_trace_index, 0),
+            len(compare_group.traces) - 1,
+        )
 
         warning = ""
         if not bundle["scene_arrays"]:
@@ -2198,10 +2349,19 @@ def build_app(config: AppConfig) -> dash.Dash:
         return (
             _overview_children(bundle),
             warning,
-            _time_figure(group),
+            _time_figure(group, trace_index),
             _spectrogram_figure(
                 group,
                 trace_index,
+                nperseg,
+                max_frequency,
+                frequency_scale,
+                spectrogram_scale,
+            ),
+            _time_figure(compare_group, compare_trace_index),
+            _spectrogram_figure(
+                compare_group,
+                compare_trace_index,
                 nperseg,
                 max_frequency,
                 frequency_scale,
