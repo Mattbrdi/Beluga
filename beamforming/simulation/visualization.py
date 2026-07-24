@@ -12,7 +12,7 @@ from beamforming.configuration import *
 from beamforming.classes import *
 
 
-def _draw_tetrahedra_3D(ax: Axes3D, tetrahedra: Tetrahedra):
+def _draw_tetrahedra_3D(ax: Axes3D, tetrahedra: TetrahedralArray):
     p1 = tetrahedra.p1
     p2 = tetrahedra.p2
     p3 = tetrahedra.p3
@@ -56,14 +56,14 @@ def _draw_direction_3D(ax, tetrahedra, source):
     )
 
 
-def visualize_scene_3D(tetrahedra: Tetrahedra, source: Source):
+def visualize_scene_3D(tetrahedra: TetrahedralArray, source: Source):
     """Visualize tetrahedra and source in 3D scene
 
     Plot the 3D coordinate of the tetrahedra and source to visualize the scene
 
     Parameters
     ----------
-    tetrahedra : Tetrahedra
+    tetrahedra : TetrahedralArray
        Geometry of the four-hydrophone array. Positions are expected
        in metres.
     source : Source
@@ -81,7 +81,7 @@ def visualize_scene_3D(tetrahedra: Tetrahedra, source: Source):
     plt.close(fig)
 
 
-def visualize_scene_2D(tetrahedra: Tetrahedra, source: Source):
+def visualize_scene_2D(tetrahedra: TetrahedralArray, source: Source):
     """Visualize tetrahedra and source in 2D scene
 
     Plot the 3D coordinate of the tetrahedra and source to visualize the scene
@@ -89,7 +89,7 @@ def visualize_scene_2D(tetrahedra: Tetrahedra, source: Source):
 
     Parameters
     ----------
-    tetrahedra : Tetrahedra
+    tetrahedra : TetrahedralArray
        Geometry of the four-hydrophone array. Positions are expected
        in metres.
     source : Source
@@ -211,7 +211,7 @@ def plot_results(
 
 
 def main():
-    regular_tetrahedra = Tetrahedra(
+    regular_tetrahedra = TetrahedralArray(
         [
             [0, 0, 0],
             [1, 0, 0],

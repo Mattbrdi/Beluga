@@ -13,7 +13,7 @@ from beamforming.simulation.visualization import visualize_scene_3D, plot_result
 
 source_pos = 100*np.array([1, 0, np.sqrt(2 / 3)])
 
-regular_tetrahedra = Tetrahedra([
+regular_tetrahedra = TetrahedralArray([
         [0, 0, 0],
         [1, 0, 0],
         [1 / 2, np.sqrt(3) / 2, 0],
@@ -26,7 +26,7 @@ s1 = Signal.generate_multi_freq_signal(
         frequencies=[2000], window_type='hann'
     )
 
-tetrahedra = Tetrahedra.from_length_tetrahedra_centroid(0.3)
+tetrahedra = TetrahedralArray.from_length_tetrahedra_centroid(0.3)
 
 center = tetrahedra.center
 u_true = (source_pos - center) / np.linalg.norm(source_pos - center)

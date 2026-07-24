@@ -12,7 +12,7 @@ def _apply_delay(delay_matrix: NDArray[np.int32], msignal: MultiSignal) -> Multi
 
 
 def generate_audio_from_source_and_tetrahedra(
-    tetrahedra: Tetrahedra,
+    tetrahedra: TetrahedralArray,
     source: Source,
 ) -> MultiSignal:
     """Simulate the signals recorded by a four-hydrophone array.
@@ -23,7 +23,7 @@ def generate_audio_from_source_and_tetrahedra(
 
     Parameters
     ----------
-    tetrahedra : Tetrahedra
+    tetrahedra : TetrahedralArray
         Geometry of the four-hydrophone array. Positions are expected
         in metres.
     source : Source

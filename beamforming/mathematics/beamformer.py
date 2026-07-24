@@ -6,8 +6,17 @@ from beamforming.configuration import *
 from beamforming.classes import *
 from scipy.signal import hilbert
 
+# def steering_vector(fc, theta, phi, tetrahedra : TetrahedralArray) -> NDArray[np.float64]:
 
-def _get_steering_vector(fc, tetrahedra, n_theta=100, n_phi=100):
+
+#     return s
+
+# def w_mvdr(fc, phi, theta, tetrahedra, Rinv):
+
+#    return w
+
+
+def _get_steering_vector(fc, tetrahedra, n_theta=300, n_phi=300):
     p12 = tetrahedra.p2 - tetrahedra.p1
     p13 = tetrahedra.p3 - tetrahedra.p1
     p14 = tetrahedra.p4 - tetrahedra.p1
@@ -54,7 +63,7 @@ def _doa_from_power(power_dB, Theta, Phi):
 
 
 def delay_and_sum(
-    fc: int, tetrahedra: Tetrahedra, signal: NDArray[np.float64]
+    fc: int, tetrahedra: TetrahedralArray, signal: NDArray[np.float64]
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """Delay and Sum Beamformer power computation for narrowband signals
 
@@ -62,7 +71,7 @@ def delay_and_sum(
     ----------
     fc : int
         central frequency of narrowband signal
-    tetrahedra : Tetrahedra
+    tetrahedra : TetrahedralArray
         Tetrahedra used for beamforming
     signal : NDArray
         4 x N signal containing received signal by the four hydrophones
@@ -105,7 +114,7 @@ def delay_and_sum(
 
 
 def delay_and_sum_doa(
-    fc: int, tetrahedra: Tetrahedra, signal: NDArray[np.float64]
+    fc: int, tetrahedra: TetrahedralArray, signal: NDArray[np.float64]
 ) -> NDArray[np.float64]:
     """Delay and Sum Beamformer for DOA finding of narrowband signals
 
@@ -113,7 +122,7 @@ def delay_and_sum_doa(
     ----------
     fc : int
         central frequency of narrowband signal
-    tetrahedra : Tetrahedra
+    tetrahedra : TetrahedralArray
         Tetrahedra used for beamforming
     signal : NDArray
         4 x N signal containing received signal by the four hydrophones
@@ -133,7 +142,7 @@ def mvdr(fc, tetrahedra, signal):
     ----------
     fc : int
         central frequency of narrowband signal
-    tetrahedra : Tetrahedra
+    tetrahedra : TetrahedralArray
         Tetrahedra used for beamforming
     signal : NDArray
         4 x N signal containing received signal by the four hydrophones
@@ -189,7 +198,7 @@ def mvdr_doa(fc, tetrahedra, signal) -> NDArray[np.float64]:
     ----------
     fc : int
         central frequency of narrowband signal
-    tetrahedra : Tetrahedra
+    tetrahedra : TetrahedralArray
         Tetrahedra used for beamforming
     signal : NDArray
         4 x N signal containing received signal by the four hydrophones
@@ -209,7 +218,7 @@ def music(fc, tetrahedra, signal, num_expected_signals=3) -> NDArray[np.float64]
     ----------
     fc : int
         central frequency of narrowband signal
-    tetrahedra : Tetrahedra
+    tetrahedra : TetrahedralArray
         Tetrahedra used for beamforming
     signal : NDArray
         4 x N signal containing received signal by the four hydrophones
@@ -258,7 +267,7 @@ def music_doa(fc, tetrahedra, signal) -> NDArray[np.float64]:
     ----------
     fc : int
         central frequency of narrowband signal
-    tetrahedra : Tetrahedra
+    tetrahedra : TetrahedralArray
         Tetrahedra used for beamforming
     signal : NDArray
         4 x N signal containing received signal by the four hydrophones
