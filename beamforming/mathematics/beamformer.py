@@ -233,8 +233,11 @@ def music(fc, tetrahedra, signal, num_expected_signals=3) -> NDArray[np.float64]
     T, P = Theta.shape
     s_flat = s.reshape(4, T * P)  # (4, T*P)
 
+    x = hilbert(signal, axis=1)
+    R = x @ x.conj().T / x.shape[1]
+
     # part that doesn't change with theta_i
-    R = np.cov(signal)  # Calc covariance matrix. gives a Nr x Nr covariance matrix
+    # R = np.cov(signal)  # Calc covariance matrix. gives a Nr x Nr covariance matrix
     w, v = np.linalg.eig(
         R
     )  # eigenvalue decomposition, v[:,i] is the eigenvector corresponding to the eigenvalue w[i]
