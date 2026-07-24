@@ -3,10 +3,10 @@
   "print_level": 0,
   "max_position_frames": null,
   "use_gcc": false,
-  "use_mask_based_tdoa": true,
+  "use_mask_based_tdoa": false,
   "location_parameters": {
     "use_h4": false,
-    "fusion_type": "low",
+    "fusion_type": "high",
     "projection_plan": 0.0,
     "project_directions_to_xy": false
   },
@@ -44,6 +44,12 @@
         "recon_mode": "smooth",
         "method": "stein",
         "energy_perc": 0.90
+  },
+  "beamforming_parameters": {
+    "use_beamforming": true,
+    "beamformer": "music",
+    "bandwidth": "narrowband",
+    "use_tf_mask": false
   },
   "pre_filter_parameters": {
     "order": 4,

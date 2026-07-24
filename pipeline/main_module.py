@@ -14,7 +14,8 @@ from src.location_bricks.frequencies_filtering import filter_audio_array, filter
 from src.denoising_bricks.vmd_denoising import vmd_denoise
 from src.location_bricks.tdoa_brick import tdoas
 from src.location_bricks.low_level_fusion import low_fusion
-from src.location_bricks.high_level_fusion import high_fusion
+from src.location_bricks.high_level_fusion import high_fusion, fusion_bf
+from src.location_bricks.beamforming import get_tetrahedra, beamforming_doa
 from src.utils.plots import plot_spectro
 from src.denoising_bricks.wt_denoising import wt_denoise
 
@@ -245,6 +246,68 @@ def tdoas_mask_check(tdoas_mask : list[np.ndarray]):
         return False
     return True
     
+def tdoa_and_error(
+    parameters : Parameters,
+    audio_arrays : list[AudioArray],
+):
+    tdoas_measured = []
+    tdoas_error_variance = []
+    tdoas_mask = []
+    for audio_array in audio_arrays:
+        new_tdoa, new_crb, new_mask, _ = tdoas(audio_array, use_gcc=False, compute_scores=False, use_mask_based_tdoa=parameters.use_mask_based_tdoa)
+        tdoas_measured.append(new_tdoa)
+        tdoas_error_variance.append(new_crb)
+        tdoas_mask.append(new_mask)
+
+    return tdoas_measured, tdoas_error_variance, tdoas_mask
+
+def fusion(
+    parameters : Parameters,
+    environment : Environment,
+    tdoas_measured,
+    tdoas_error_variance,
+    tdoas_mask,
+    end_tdoa
+):
+    # Fusion
+    if parameters.location_parameters.fusion_type == 'low':
+        position_enu, position_error_variance = low_fusion(
+            tdoas_measured, tdoas_error_variance, tdoas_mask, environment,
+            parameters.location_parameters.projection_plan
+        )
+    else:
+        position_enu, position_error_variance = high_fusion(
+            tdoas_measured, tdoas_error_variance, environment,
+            projection_plan=parameters.location_parameters.projection_plan,
+            project_directions_to_xy=parameters.location_parameters.project_directions_to_xy,
+        )
+
+    end_fusion = time()
+    if parameters.print_level > 0:
+        print(f"▒▒▒▒▒▒▒▒▒▒▒▒ Fusion finished in: {end_fusion - end_tdoa:.2f}s")
+    
+    return position_enu, position_error_variance
+
+def wave_vector_and_error(
+    parameters : Parameters,
+    environment : Environment,
+    audio_arrays : list[AudioArray],
+    fc : float
+):
+    wave_vectors = []
+    wave_vectors_error_variance = []
+    tetrahedras = [tetra for tetra in environment.tetrahedras.values() if tetra.is_active]
+    for tetrahedra, audio_array in zip(tetrahedras, audio_arrays):
+        tetrahedral_array = get_tetrahedra(tetrahedra)
+
+        u = beamforming_doa(parameters, fc, tetrahedral_array, audio_array.data_array)
+
+        wave_vectors.append(u.reshape(-1, 1))
+        #TODO: implement wave_vectors_error_variance
+        wave_vectors_error_variance.append(0)
+
+    return wave_vectors, wave_vectors_error_variance
+
 
 ###############################
 ########## Full loop ##########
@@ -328,15 +391,20 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
     for i in range(len(audio_arrays)):
         audio_arrays[i] = filter_audio_array(audio_arrays[i], parameters.pre_filter_parameters)
 
-    # TDOAs and CRBs
-    tdoas_measured = []
-    tdoas_error_variance = []
-    tdoas_mask = []
-    for audio_array in audio_arrays:
-        new_tdoa, new_crb, new_mask, _ = tdoas(audio_array, use_gcc=False, compute_scores=False, use_mask_based_tdoa=parameters.use_mask_based_tdoa)
-        tdoas_measured.append(new_tdoa)
-        tdoas_error_variance.append(new_crb)
-        tdoas_mask.append(new_mask)
+
+    use_bf = parameters.beamforming_parameters.use_bf
+    if use_bf:
+        wave_vectors, wave_vectors_error_variance = wave_vector_and_error(parameters, environment, audio_arrays, central_frequency)
+        associated_time = event_start_dt
+        
+        end_bf = time()
+        if parameters.print_level > 0:
+            print(f"▒▒▒▒▒▒▒▒▒▒▒▒ wave vectors computed in: {end_bf - end_denoising:.2f}s")
+
+        position_enu, position_error_variance = fusion_bf(wave_vectors, wave_vectors_error_variance, environment, parameters.location_parameters.projection_plan)
+
+    else:
+        tdoas_measured, tdoas_error_variance, tdoas_mask = tdoa_and_error(parameters, audio_arrays)
 
     associated_time = event_start_dt
     tdoa_measurements = []
@@ -359,30 +427,15 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
                 }
             )
 
-    if not tdoas_mask_check(tdoas_mask):
-        print("Warning : Tdoas are not usable")
-        return None, None, associated_time, duration, "reject_tdoa", tdoa_measurements
+        if not tdoas_mask_check(tdoas_mask):
+            print("Warning : Tdoas are not usable")
+            return None, None, associated_time, duration, "reject_tdoa", tdoa_measurements
 
-    end_tdoa = time()
-    if parameters.print_level > 0:
-        print(f"▒▒▒▒▒▒▒▒▒▒▒▒ TDOAs computed in: {end_tdoa - end_denoising:.2f}s")
+        end_tdoa = time()
+        if parameters.print_level > 0:
+            print(f"▒▒▒▒▒▒▒▒▒▒▒▒ TDOAs computed in: {end_tdoa - end_denoising:.2f}s")
 
-    # Fusion
-    if parameters.location_parameters.fusion_type == 'low':
-        position_enu, position_error_variance = low_fusion(
-            tdoas_measured, tdoas_error_variance, tdoas_mask, environment,
-            parameters.location_parameters.projection_plan
-        )
-    else:
-        position_enu, position_error_variance = high_fusion(
-            tdoas_measured, tdoas_error_variance, environment,
-            projection_plan=parameters.location_parameters.projection_plan,
-            project_directions_to_xy=parameters.location_parameters.project_directions_to_xy,
-        )
-
-    end_fusion = time()
-    if parameters.print_level > 0:
-        print(f"▒▒▒▒▒▒▒▒▒▒▒▒ Fusion finished in: {end_fusion - end_tdoa:.2f}s")
+        position_enu, position_error_variance = fusion(parameters, environment, tdoas_measured, tdoas_error_variance, tdoas_mask, end_tdoa)
 
     if position_enu is None:
         return None, None, associated_time, duration, "reject_fusion", tdoa_measurements
