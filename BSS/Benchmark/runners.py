@@ -99,15 +99,33 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
         and model.eigenvalues_matrix is not None
         and model.eigenvector_matrix is not None
     ):
-        whitening_matrix = model.nspectro_normalized_unwhitened.compute_whitening_matrix(
-            model.eigenvalues_matrix,
-            model.eigenvector_matrix,
-        )
-        centroids_unwhitened = np.einsum(
-            "ij,fjs->fis",
-            np.linalg.pinv(whitening_matrix),
-            centroids,
-        )
+        eigenvalues = np.asarray(model.eigenvalues_matrix)
+        eigenvectors = np.asarray(model.eigenvector_matrix)
+        if eigenvalues.ndim == 2 and eigenvectors.ndim == 3:
+            centroids_unwhitened = np.zeros_like(centroids)
+            for frequency_index in range(centroids.shape[0]):
+                inv_sqrt = 1.0 / np.sqrt(
+                    np.maximum(
+                        eigenvalues[frequency_index],
+                        model.em_clustering_parameters.eps,
+                    )
+                )
+                whitening_matrix = (
+                    np.diag(inv_sqrt) @ eigenvectors[frequency_index].conj().T
+                )
+                centroids_unwhitened[frequency_index] = (
+                    np.linalg.pinv(whitening_matrix) @ centroids[frequency_index]
+                )
+        else:
+            whitening_matrix = model.nspectro_normalized_unwhitened.compute_whitening_matrix(
+                eigenvalues,
+                eigenvectors,
+            )
+            centroids_unwhitened = np.einsum(
+                "ij,fjs->fis",
+                np.linalg.pinv(whitening_matrix),
+                centroids,
+            )
         centroids_unwhitened /= (
             np.linalg.norm(centroids_unwhitened, axis=1, keepdims=True) + 1e-12
         )

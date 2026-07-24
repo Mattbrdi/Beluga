@@ -279,9 +279,37 @@ class SawadaBSS:
         return input.stft(**asdict(self.stft_parameters))
     
     def apply_whitening(self, spectro: NSpectrogram) -> NSpectrogram:
-        self.eigenvalues_matrix, self.eigenvector_matrix = spectro.decompose_spatial_correlation() 
-        whitening_matrix = spectro.compute_whitening_matrix(self.eigenvalues_matrix, self.eigenvector_matrix)
-        return spectro.apply_transformation(W = whitening_matrix)
+        n_micros, n_freqs, n_times = spectro.Sxx.shape
+        whitened_sxx = np.zeros_like(spectro.Sxx)
+        self.eigenvalues_matrix = np.zeros((n_freqs, n_micros), dtype=float)
+        self.eigenvector_matrix = np.zeros((n_freqs, n_micros, n_micros), dtype=complex)
+
+        for frequency_index in range(n_freqs):
+            X_f = spectro.Sxx[:, frequency_index, :]
+            spatial_correlation = (X_f @ X_f.conj().T) / max(n_times, 1)
+            eigenvalues, eigenvectors = np.linalg.eigh(spatial_correlation)
+            self.eigenvalues_matrix[frequency_index] = eigenvalues
+            self.eigenvector_matrix[frequency_index] = eigenvectors
+
+            inv_sqrt = 1.0 / np.sqrt(
+                np.maximum(eigenvalues, self.em_clustering_parameters.eps)
+            )
+            whitening_matrix = np.diag(inv_sqrt) @ eigenvectors.conj().T
+            whitened_sxx[:, frequency_index, :] = whitening_matrix @ X_f
+
+        return NSpectrogram(
+            f=spectro.f,
+            t=spectro.t,
+            Sxx=whitened_sxx,
+            fs=spectro.fs,
+            window=spectro.window,
+            nperseg=spectro.nperseg,
+            noverlap=spectro.noverlap,
+            nfft=spectro.nfft,
+            boundary=spectro.boundary,
+            padded=spectro.padded,
+            signal_lengths=spectro.signal_lengths,
+        ).normalize_each_bin()
 
     def _merge_close_clusters(self, model: EMClustering, X: np.ndarray) -> np.ndarray:
         """
