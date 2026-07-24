@@ -145,7 +145,7 @@ def get_mask_from_array(audio_array : list[NDArray[np.float64]], checkpoint_path
 
     masks_np = masks_np[:, start_Y:end_Y, start_X: end_X]
     if debug:
-        plot_spectrogram_4D(audio_array, SAMPLING_RATE, is_db=False, mask=AudioMask(masks_np[0], SAMPLING_RATE).data)
+        plot_spectrogram_4D(audio_array, SAMPLING_RATE, is_db=False, mask=AudioMask(masks_np[0], SAMPLING_RATE).data, log_scale=True)
     return masks_np[0]
 
 def main():

@@ -510,10 +510,11 @@ def tdoas(audio_array: AudioArray, use_gcc : bool = False, compute_scores : bool
             duration = audio_array.data_array.shape[1] / audio_array.metadata.sample_rate
             crb, use_crb = crb_from_pair(audio_array.metadata, duration, hydrophone_pair)
         
+        # print(int(tdoa *384000), use_tdoa, use_crb)
         ##### Agregating #####
         tdoa_vector.append(tdoa)
         crb_vector.append(crb)
-        tdoas_mask.append(use_tdoa & use_crb) #mb55 on enlève pas meme si bruit trop grand
+        tdoas_mask.append(use_tdoa & True) #mb55 on enlève pas meme si bruit trop grand
         
         ###################################################################
         #tdoas_mask.append(True)

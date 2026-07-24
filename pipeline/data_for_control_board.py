@@ -28,11 +28,11 @@ from math import radians, sin, cos, sqrt, atan2
 # audio_path = [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8295.260511133808.wav", 
 #               r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8296.260511133808.wav"]
 
-point_number = 18
+point_number = 24
 
 
 audio_path = TEST_DATA2026_ALL_AUDIO_PATHS[point_number]
-ground_truth_path = r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\ground_truth\trace_gps_calibration.csv"
+ground_truth_path = r"C:\Users\amine\Desktop\Canada\Beluga\pipeline\ground_truth\trace_gps_calibration.csv"
 #ces fichier n'ont pas exactrement la bonne date 
 model_path = 'jsons/models/mobile_net_8_layers_qat.pt'
 param_path = 'jsons/parameters/default_parameters.json'

@@ -35,7 +35,7 @@ def filter_audio_array_from_calltype(audio_array : AudioArray, parameters : PreF
     if parameters.filtering_method is None:
         return audio_array
     if audio_array.metadata.beluga_call_type == 'Whistle':
-        frequency_range = (500, 20000)
+        frequency_range = (1000, 20000)
     else: 
         frequency_range = (25000, 190000)
     for i in range(audio_array.data_array.shape[0]):

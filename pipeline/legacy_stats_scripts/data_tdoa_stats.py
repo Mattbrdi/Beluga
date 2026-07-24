@@ -5,6 +5,7 @@ toutes les mesures, y compris celles masquees par la pipeline. Les moyennes et
 ecarts types sont calcules avec toutes les mesures dont ``usable`` est vrai,
 sans exclusion statistique supplementaire.
 """
+import numpy as np
 
 import csv
 from collections import defaultdict
@@ -19,7 +20,9 @@ from typing import Any, Iterable
 PIPELINE_DIR = Path(__file__).resolve().parents[1]
 if str(PIPELINE_DIR) not in sys.path:
     sys.path.insert(0, str(PIPELINE_DIR))
-
+from src.utils.sub_classes import Environment
+from src.utils.rotation_bricks import lla2enu
+from data_for_control_board import lat_long, ground_truth_path
 DETAIL_FIELDS = [
     "point_number",
     "frame_index",
@@ -30,6 +33,8 @@ DETAIL_FIELDS = [
     "tetra_id",
     "pair_id",
     "tdoa_s",
+    "tdoa_idx",
+    "tdoa_idx_expected",
     "tdoa_us",
     "error_variance_s2",
     "usable",
@@ -101,7 +106,40 @@ def format_timestamp(value: Any) -> str:
         return value.isoformat(sep=" ")
     return str(value)
 
+env = Environment(r"C:\Users\amine\Desktop\Canada\Beluga\pipeline\jsons\environments\env_cacouna_may2026.json", True)
 
+def expected_tdoa(timestamp, tetra_id, pair_id):
+    timestamp = timestamp.replace('-', '/').split('.')[0]
+    tetrahedra = env.tetrahedras[tetra_id]
+    tetra_coord_enu = tetrahedra.rotated_hydro_pos_enu
+    # print("timestamp: ", timestamp)
+    # print("tetra_id: ", tetra_id)
+    # print("pair_id: ", pair_id)
+    # print("tetra_coord_enu: ", tetra_coord_enu)
+    source_coord_lla = lat_long(ground_truth_path, timestamp)
+    source_coord_lla = (source_coord_lla[0], source_coord_lla[1], 0)
+    # print("source_coord_lla: ", source_coord_lla)
+    # print("enu_ref: ", env.enu_ref)
+    pair_id = pair_id[-4:]
+    hydro_1 = int(pair_id[1]) - 1
+    hydro_2 = int(pair_id[3]) - 1
+    source_coord_enu = lla2enu(env.enu_ref, source_coord_lla)
+    # print("source_coord_enu: ", source_coord_enu)
+
+
+
+
+
+    u = (tetrahedra.origin_enu - source_coord_enu) / np.linalg.norm(tetrahedra.origin_enu - source_coord_enu)
+    # print("hydro_1: ", hydro_1)
+    # print("hydro_2: ", hydro_2)
+
+
+    # print("u: ", u)
+
+    tdoa = -int(384000*(np.dot(u, (tetra_coord_enu[hydro_2] - tetra_coord_enu[hydro_1]))) / 1450)
+    # print("tdoa: ", tdoa)
+    return tdoa
 def detail_rows(
     point_number: int,
     measurements: Iterable[dict[str, Any]],
@@ -120,6 +158,8 @@ def detail_rows(
                 "tetra_id": measurement["tetra_id"],
                 "pair_id": measurement["pair_id"],
                 "tdoa_s": tdoa_s,
+                "tdoa_idx": int(tdoa_s * 384000),
+                "tdoa_idx_expected": expected_tdoa(format_timestamp(measurement["timestamp"]), measurement["tetra_id"], measurement["pair_id"]),
                 "tdoa_us": tdoa_s * 1_000_000.0,
                 "error_variance_s2": measurement["error_variance_s2"],
                 "usable": bool(measurement["usable"]),

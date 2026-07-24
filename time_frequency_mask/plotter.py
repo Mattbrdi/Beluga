@@ -104,7 +104,8 @@ def plot_spectrogram_1D(waveform : NDArray[np.float64],
                          range_db=80,
                          n_fft=N_FFT,
                          hop_length=HOP_LENGTH,
-                         spectrogram_type = SPECTROGRAM_TYPE
+                         spectrogram_type = SPECTROGRAM_TYPE,
+                         log_scale = False
                         ):
 
     if is_db:
@@ -151,7 +152,8 @@ def plot_spectrogram_1D(waveform : NDArray[np.float64],
         vmin=vmin,
         vmax=vmax,
     )
-
+    if log_scale:
+        ax.set_yscale('log')
     ax.set_title('Spectrogramme SciPy du Canal')
     ax.set_ylim([fmin, fmax])
     ax.set_xlabel('Time (s)')
@@ -171,7 +173,8 @@ def plot_spectrogram_4D(audio_array: NDArray[np.float64],
                          n_fft=N_FFT,
                          hop_length=HOP_LENGTH,
                          mask=None,
-                         spectrogram_type = SPECTROGRAM_TYPE
+                         spectrogram_type = SPECTROGRAM_TYPE,
+                         log_scale = False
                         ):
     fig, axs = plt.subplots(4, 1, figsize=(30, 20), sharex=True, sharey=True)
     mappable = None
@@ -244,7 +247,8 @@ def plot_spectrogram_4D(audio_array: NDArray[np.float64],
                           extent=mappable.get_extent(),
                           aspect=axs[i].get_aspect()
                           )
-
+        if log_scale:
+            axs[i].set_yscale('log')
         axs[i].set_title(f'Spectrogramme SciPy du Canal {i+1}')
         axs[i].set_ylim([fmin, fmax])
         axs[i].set_ylabel('Frequency (Hz)')

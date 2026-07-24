@@ -218,3 +218,36 @@ def high_fusion(
     position = np.mean(positions, axis=0)
     estimated_error = np.zeros(3) # TODO ajouter module d'erreur ici si on garde
     return position, estimated_error
+
+def main():
+    # tdoas_measured =  [
+    #     [-0.0001796875, -2.604166666666667e-05, -0.00011458333333333333, 0.00015364583333333333, 0.00019010416666666665, -9.635416666666667e-05]
+    # ]
+
+    # tdoas_measured =  [
+    #     [0.0001796875, 2.604166666666667e-05, 0.00011458333333333333, -0.00015364583333333333, -0.00019010416666666665, 9.635416666666667e-05]
+    # ]
+
+    tdoas_measured = [
+
+    ]
+    from pathlib import Path
+    import sys
+    PROJECT_ROOT = Path(__file__).resolve().parents[2]
+    if str(PROJECT_ROOT) not in sys.path:
+        sys.path.insert(0, str(PROJECT_ROOT))
+
+    from src.utils.sub_classes import Parameters, Environment
+    from data_position_stats import enu_to_lla
+    param_path = 'jsons/parameters/default_parameters.json'
+
+    env_path = 'jsons/environments/env_cacouna_may2026.json'
+
+    parameters = Parameters(param_path)
+    environment = Environment(env_path, parameters.location_parameters.use_h4)
+    
+    wave_vectors_list = wave_vectors(tdoas_measured, environment)
+    wave_vectors_list = np.array(wave_vectors_list)
+    print(wave_vectors_list, enu_to_lla(*(10*wave_vectors_list[0]), *[47.93961, -69.52256, 0]))
+if __name__ == "__main__":
+    main()
