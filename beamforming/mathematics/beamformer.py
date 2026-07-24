@@ -261,7 +261,7 @@ def music(fc, tetrahedra, signal, num_expected_signals=3) -> NDArray[np.float64]
     return metric, Theta, Phi
 
 
-def music_doa(fc, tetrahedra, signal) -> NDArray[np.float64]:
+def music_doa(fc, tetrahedra, signal, num_expected_signals=1) -> NDArray[np.float64]:
     """MUSIC Beamformer for DOA finding of narrowband signals
 
     Parameters
@@ -278,4 +278,4 @@ def music_doa(fc, tetrahedra, signal) -> NDArray[np.float64]:
     Tuple[NDArray, NDArray, NDArray]
         returns DOA
     """
-    return _doa_from_power(*music(fc, tetrahedra, signal))
+    return _doa_from_power(*music(fc, tetrahedra, signal, num_expected_signals=1))
