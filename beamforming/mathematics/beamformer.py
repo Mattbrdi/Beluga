@@ -16,15 +16,15 @@ from scipy.signal import hilbert
 #    return w
 
 
-def _get_steering_vector(fc, tetrahedra, n_theta=500, n_phi=500):
-    p12 = tetrahedra.p2 - tetrahedra.p1
-    p13 = tetrahedra.p3 - tetrahedra.p1
-    p14 = tetrahedra.p4 - tetrahedra.p1
-
+def _get_theta_phi(n_theta=500, n_phi=500):
     theta_scan = np.linspace(0, np.pi, n_theta)
     phi_scan = np.linspace(0, 2 * np.pi, n_phi, endpoint=False)
+    return np.meshgrid(theta_scan, phi_scan, indexing="ij")  # T x P
 
-    Theta, Phi = np.meshgrid(theta_scan, phi_scan, indexing="ij")  # T x P
+def _get_steering_vector(fc, tetrahedra, Theta, Phi):
+    p12 = tetrahedra.p2 - tetrahedra.p1
+    p13 = tetrahedra.p3 - tetrahedra.p1
+    p14 = tetrahedra.p4 - tetrahedra.p1    
 
     k = np.array(
         [
@@ -48,7 +48,7 @@ def _get_steering_vector(fc, tetrahedra, n_theta=500, n_phi=500):
         ],
         axis=0,
     )
-    return s, Theta, Phi
+    return s
 
 def _doa_from_power(power_dB, Theta, Phi):
     theta_idx, phi_idx = np.unravel_index(
@@ -84,7 +84,8 @@ def delay_and_sum(
     max_power = 0
     n_per_chunk = 1500
 
-    s, Theta, Phi = _get_steering_vector(fc, tetrahedra)
+    Theta, Phi = _get_theta_phi()
+    s = _get_steering_vector(fc, tetrahedra, Theta, Phi)
     T, P = Theta.shape
     s_flat = s.reshape(4, T * P)  # (4, T*P)
 
@@ -153,7 +154,8 @@ def mvdr(fc, tetrahedra, signal):
     Tuple[NDArray, NDArray, NDArray]
         returns power and corresponding angles
     """
-    s, Theta, Phi = _get_steering_vector(fc, tetrahedra)
+    Theta, Phi = _get_theta_phi()
+    s = _get_steering_vector(fc, tetrahedra, Theta, Phi)
     T, P = Theta.shape
     s_flat = s.reshape(4, T * P)  # (4, T*P)
 
@@ -229,7 +231,8 @@ def music(fc, tetrahedra, signal, num_expected_signals=3) -> NDArray[np.float64]
     Tuple[NDArray, NDArray, NDArray]
         returns power and corresponding angles
     """
-    s, Theta, Phi = _get_steering_vector(fc, tetrahedra)
+    Theta, Phi = _get_theta_phi()
+    s = _get_steering_vector(fc, tetrahedra, Theta, Phi)
     T, P = Theta.shape
     s_flat = s.reshape(4, T * P)  # (4, T*P)
 
