@@ -214,7 +214,7 @@ def mvdr_doa(fc, tetrahedra, signal) -> NDArray[np.float64]:
     return _doa_from_power(*mvdr(fc, tetrahedra, signal))
 
 
-def music(fc, tetrahedra, signal, num_expected_signals=3) -> NDArray[np.float64]:
+def music(fc, tetrahedra, signal, num_expected_signals=1) -> NDArray[np.float64]:
     """MUSIC Beamformer for power computation of narrowband signals
 
     Parameters
