@@ -284,4 +284,4 @@ def music_doa(fc, tetrahedra, signal, num_expected_signals=1) -> NDArray[np.floa
     Tuple[NDArray, NDArray, NDArray]
         returns DOA
     """
-    return _doa_from_power(*music(fc, tetrahedra, signal, num_expected_signals=1))
+    return _doa_from_power(*music(fc, tetrahedra, signal, num_expected_signals=num_expected_signals))
