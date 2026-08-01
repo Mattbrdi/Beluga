@@ -1,6 +1,7 @@
 import numpy as np
 from numpy.linalg import norm
 from numpy.typing import NDArray
+from scipy.signal import hilbert
 
 from beamforming.configuration import *
 from beamforming.classes import *
@@ -137,7 +138,9 @@ def delay_and_sum_doa(
     return _doa_from_power(*delay_and_sum(fc, tetrahedra, signal))
 
 
-def mvdr(fc, tetrahedra, signal):
+def mvdr(
+    fc: float, tetrahedra: TetrahedralArray, signal: NDArray[np.float64]
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """MVDR beamformer for power computation of narrowband signals
 
     Parameters
@@ -194,7 +197,9 @@ def mvdr(fc, tetrahedra, signal):
     return power_dB, Theta, Phi
 
 
-def mvdr_doa(fc, tetrahedra, signal) -> NDArray[np.float64]:
+def mvdr_doa(
+    fc: float, tetrahedra: TetrahedralArray, signal: NDArray[np.float64]
+) -> NDArray[np.float64]:
     """MVDR Beamformer for DOA finding of narrowband signals
 
     Parameters
@@ -214,7 +219,12 @@ def mvdr_doa(fc, tetrahedra, signal) -> NDArray[np.float64]:
     return _doa_from_power(*mvdr(fc, tetrahedra, signal))
 
 
-def music(fc, tetrahedra, signal, num_expected_signals=1) -> NDArray[np.float64]:
+def music(
+    fc: float,
+    tetrahedra: TetrahedralArray,
+    signal: NDArray[np.float64],
+    num_expected_signals=1,
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """MUSIC Beamformer for power computation of narrowband signals
 
     Parameters
@@ -267,7 +277,12 @@ def music(fc, tetrahedra, signal, num_expected_signals=1) -> NDArray[np.float64]
     return metric, Theta, Phi
 
 
-def music_doa(fc, tetrahedra, signal, num_expected_signals=1) -> NDArray[np.float64]:
+def music_doa(
+    fc: float,
+    tetrahedra: TetrahedralArray,
+    signal: NDArray[np.float64],
+    num_expected_signals=1,
+) -> NDArray[np.float64]:
     """MUSIC Beamformer for DOA finding of narrowband signals
 
     Parameters
@@ -284,4 +299,6 @@ def music_doa(fc, tetrahedra, signal, num_expected_signals=1) -> NDArray[np.floa
     Tuple[NDArray, NDArray, NDArray]
         returns DOA
     """
-    return _doa_from_power(*music(fc, tetrahedra, signal, num_expected_signals=num_expected_signals))
+    return _doa_from_power(
+        *music(fc, tetrahedra, signal, num_expected_signals=num_expected_signals)
+    )
