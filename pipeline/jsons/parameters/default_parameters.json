@@ -46,7 +46,7 @@
   },
   "beamforming_parameters": {
     "use_beamforming": true,
-    "beamformer": "music",
+    "beamformer": "cssm_mvdr",
     "bandwidth": "narrowband",
     "use_tf_mask": false
   },
