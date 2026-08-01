@@ -5,19 +5,23 @@ from scipy.signal import hilbert
 
 from beamforming.configuration import *
 from beamforming.classes import *
-from scipy.signal import hilbert
-
-# def steering_vector(fc, theta, phi, tetrahedra : TetrahedralArray) -> NDArray[np.float64]:
 
 
-#     return s
+def _get_theta_phi_coarse(n_theta=50, n_phi=50):
+    """Get the angles search grid spanning the whole sphere
 
-# def w_mvdr(fc, phi, theta, tetrahedra, Rinv):
+    Parameters
+    ----------
+    n_theta : int, optional
+        Number of points in the polar grid, by default 500
+    n_phi : int, optional
+        Number of points in the azimuthal grid, by default 500
 
-#    return w
-
-
-def _get_theta_phi(n_theta=500, n_phi=500):
+    Returns
+    -------
+    NDArray
+        Returns the coarse angles grid
+    """
     theta_scan = np.linspace(0, np.pi, n_theta)
     phi_scan = np.linspace(0, 2 * np.pi, n_phi, endpoint=False)
     return np.meshgrid(theta_scan, phi_scan, indexing="ij")  # T x P
@@ -85,7 +89,7 @@ def delay_and_sum(
     max_power = 0
     n_per_chunk = 1500
 
-    Theta, Phi = _get_theta_phi()
+    Theta, Phi = _get_theta_phi_coarse()
     s = _get_steering_vector(fc, tetrahedra, Theta, Phi)
     T, P = Theta.shape
     s_flat = s.reshape(4, T * P)  # (4, T*P)
@@ -157,7 +161,7 @@ def mvdr(
     Tuple[NDArray, NDArray, NDArray]
         returns power and corresponding angles
     """
-    Theta, Phi = _get_theta_phi()
+    Theta, Phi = _get_theta_phi_coarse()
     s = _get_steering_vector(fc, tetrahedra, Theta, Phi)
     T, P = Theta.shape
     s_flat = s.reshape(4, T * P)  # (4, T*P)
@@ -241,7 +245,7 @@ def music(
     Tuple[NDArray, NDArray, NDArray]
         returns power and corresponding angles
     """
-    Theta, Phi = _get_theta_phi()
+    Theta, Phi = _get_theta_phi_coarse()
     s = _get_steering_vector(fc, tetrahedra, Theta, Phi)
     T, P = Theta.shape
     s_flat = s.reshape(4, T * P)  # (4, T*P)
