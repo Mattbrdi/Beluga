@@ -66,6 +66,24 @@ def _doa_from_power(power_dB, Theta, Phi):
     ).astype(np.float64)
 
 
+def estimate_num_sources(
+    tetrahedra: TetrahedralArray, signal: NDArray[np.float64]
+) -> int:
+    """Number of sources in signal estimation heuristic
+
+    Warning
+    ----------
+    This function has not been implemented yet
+
+    Parameters
+    ----------
+    tetrahedra : TetrahedralArray
+        Tetrahedra used for beamforming
+    signal : NDArray
+        4 x N signal containing received signal by the four hydrophones
+    """
+    pass
+
 
 def delay_and_sum(
     fc: int, tetrahedra: TetrahedralArray, signal: NDArray[np.float64]
