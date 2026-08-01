@@ -7,6 +7,7 @@ from numpy.typing import NDArray
 from src.utils.sub_classes import Tetrahedra, Parameters
 from beamforming.classes import TetrahedralArray
 from beamforming.mathematics.beamformer import delay_and_sum_doa, mvdr_doa, music_doa
+from beamforming.mathematics.wideband_beamforming import wideband_issm_mvdr_doa, wideband_issm_music_doa, wideband_cssm_mvdr_optimized_doa, wideband_cssm_music_optimized_doa
 #TODO: Fix this by removing the need for sys and pathlib
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 if str(PROJECT_ROOT) not in sys.path:
@@ -41,6 +42,18 @@ def beamforming_doa(parameters : Parameters, central_frequency : float, tetrahed
 
     elif beamformer_method == 'delay-and-sum':
         return delay_and_sum_doa(central_frequency, tetrahedra, audio_array)
+
+    elif beamformer_method == "issm_mvdr":
+        return wideband_issm_mvdr_doa(tetrahedra, audio_array)
+
+    elif beamformer_method == "issm_music":
+        return wideband_issm_music_doa(tetrahedra, audio_array)
+
+    elif beamformer_method == "cssm_mvdr":
+        return wideband_cssm_mvdr_optimized_doa(tetrahedra, audio_array, central_frequency)
+
+    elif beamformer_method == "cssm_music":
+        return wideband_cssm_music_optimized_doa(tetrahedra, audio_array, central_frequency)
 
     else:
         raise ValueError(f"Provided beamforming method doesn't exist or isn't implemented yet, got {beamformer_method}")
