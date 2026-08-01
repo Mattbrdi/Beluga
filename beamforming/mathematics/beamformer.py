@@ -105,7 +105,7 @@ def delay_and_sum(
 
         s_flat_chunk = s_flat[:, idx_min:idx_max].astype(np.complex64)
 
-        X_weighted_flat_chunk = s_flat_chunk.conj().T @  hilbert(signal, axis=1)
+        X_weighted_flat_chunk = s_flat_chunk.conj().T @ hilbert(signal, axis=1)
         power_flat[idx_min:idx_max] = np.mean(
             np.abs(X_weighted_flat_chunk) ** 2,
             axis=1,
