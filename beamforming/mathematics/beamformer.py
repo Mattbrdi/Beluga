@@ -1,30 +1,100 @@
 import numpy as np
 from numpy.linalg import norm
 from numpy.typing import NDArray
+from scipy.signal import hilbert
 
 from beamforming.configuration import *
 from beamforming.classes import *
-from scipy.signal import hilbert
-
-# def steering_vector(fc, theta, phi, tetrahedra : TetrahedralArray) -> NDArray[np.float64]:
 
 
-#     return s
+def _get_theta_phi_coarse(n_theta=50, n_phi=50):
+    """Get the angles search grid spanning the whole sphere
 
-# def w_mvdr(fc, phi, theta, tetrahedra, Rinv):
+    Parameters
+    ----------
+    n_theta : int, optional
+        Number of points in the polar grid, by default 500
+    n_phi : int, optional
+        Number of points in the azimuthal grid, by default 500
 
-#    return w
+    Returns
+    -------
+    NDArray
+        Returns the coarse angles grid
+    """
+    theta_scan = np.linspace(0, np.pi, n_theta)
+    phi_scan = np.linspace(0, 2 * np.pi, n_phi, endpoint=False)
+    return np.meshgrid(theta_scan, phi_scan, indexing="ij")  # T x P
 
 
-def _get_steering_vector(fc, tetrahedra, n_theta=500, n_phi=500):
+def _get_theta_phi_fine(initial_doa, n_theta=500, n_phi=500, range=np.pi / 12):
+    """Get the angles search grid focalized on one initial direction
+
+    Parameters
+    ----------
+    initial_doa : NDArray
+        Coarse doa estimation
+    n_theta : int, optional
+        Number of points in the polar grid, by default 500
+    n_phi : int, optional
+        Number of points in the azimuthal grid, by default 500
+    range : float, optional
+        size of the fine grid search in angle, by default np.pi/12
+
+    Returns
+    -------
+    NDArray
+        Returns the fine angles grid
+    """
+
+    initial_doa = initial_doa / np.linalg.norm(initial_doa)
+    initial_theta = np.arccos(np.clip(initial_doa[2], -1.0, 1.0))
+    initial_phi = np.mod(
+        np.arctan2(initial_doa[1], initial_doa[0]),
+        2 * np.pi,
+    )
+
+    theta_range = (
+        np.clip(initial_theta - range, 0, np.pi),
+        np.clip(initial_theta + range, 0, np.pi),
+    )
+    phi_range = (
+        np.clip(initial_phi - range, 0, 2 * np.pi),
+        np.clip(initial_phi + range, 0, 2 * np.pi),
+    )
+
+    theta_scan = np.linspace(*theta_range, n_theta)
+    phi_scan = np.linspace(*phi_range, n_phi, endpoint=False)
+    return np.meshgrid(theta_scan, phi_scan, indexing="ij")  # T x P
+
+
+def _get_steering_vector(
+    fc: float,
+    tetrahedra: TetrahedralArray,
+    Theta: NDArray[np.float64],
+    Phi: NDArray[np.float64],
+) -> NDArray[np.complex128]:
+    """Compute steering vector for provided angles and frequency
+
+    Parameters
+    ----------
+    fc : f
+        frequency of the steering vector
+    tetrahedra : TetrahedralArray
+        geometry of the array points
+    Theta : NDArray[np.float64]
+        range of polar angles
+    Phi : NDArray[np.float64]
+        range of azimutal angles
+
+    Returns
+    -------
+    NDArray[np.complex128]
+        Steering vector array of size 4, T, P, steering at each angle of the grid
+    """
     p12 = tetrahedra.p2 - tetrahedra.p1
     p13 = tetrahedra.p3 - tetrahedra.p1
     p14 = tetrahedra.p4 - tetrahedra.p1
-
-    theta_scan = np.linspace(0, np.pi, n_theta)
-    phi_scan = np.linspace(0, 2 * np.pi, n_phi, endpoint=False)
-
-    Theta, Phi = np.meshgrid(theta_scan, phi_scan, indexing="ij")  # T x P
 
     k = np.array(
         [
@@ -48,9 +118,105 @@ def _get_steering_vector(fc, tetrahedra, n_theta=500, n_phi=500):
         ],
         axis=0,
     )
-    return s, Theta, Phi
+    return s
 
-def _doa_from_power(power_dB, Theta, Phi):
+
+"""Compute steering vector for provided angles and frequency
+
+    Parameters
+    ----------
+    fc : f
+        Frequency of the steering vector
+    tetrahedra : TetrahedralArray
+        Geometry of the array points
+    Theta : NDArray[np.float64]
+        Range of polar angles
+    Phi : NDArray[np.float64]
+        Range of azimutal angles
+
+    Returns
+    -------
+    NDArray[np.complex128]
+        Steering vector array of size 4, T, P, steering at each angle of the grid
+    """
+
+
+def _get_steering_vector_per_freq(
+    freqs: NDArray[np.float64],
+    tetrahedra: TetrahedralArray,
+    Theta: float | NDArray[np.float64],
+    Phi: float | NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """Utility function. Compute steering vector for an array of frequencies and provided angles
+
+    Parameters
+    ----------
+    freqs : NDArray[np.float64]
+        Array of frequencies used for the steering vector
+    tetrahedra : TetrahedralArray
+        Geometry of the array points
+    Theta : float | NDArray[np.float64]
+        Range of polar angles or unique angle
+    Phi : float | NDArray[np.float64]
+        Range of azimutal angles or unique angle
+
+    Returns
+    -------
+        NDArray[np.complex128]
+        Steering vector array of size F, 4, T, P, steering at each angle of the grid for each provided frequency
+    """
+    freqs = np.asarray(freqs)
+
+    p12 = tetrahedra.p2 - tetrahedra.p1
+    p13 = tetrahedra.p3 - tetrahedra.p1
+    p14 = tetrahedra.p4 - tetrahedra.p1
+
+    k = np.array(
+        [
+            np.sin(Theta) * np.cos(Phi),
+            np.sin(Theta) * np.sin(Phi),
+            np.cos(Theta),
+        ],
+        dtype=np.float64,
+    )  # (3, T, P)
+
+    kdotp12 = np.tensordot(k, p12, axes=(0, 0))  # (T, P) or 1
+    kdotp13 = np.tensordot(k, p13, axes=(0, 0))  # (T, P) or 1
+    kdotp14 = np.tensordot(k, p14, axes=(0, 0))  # (T, P) or 1
+
+    freq_view = freqs.reshape((freqs.size,) + (1,) * kdotp12.ndim)
+
+    s = np.stack(
+        [
+            np.ones((freqs.shape[0], *kdotp12.shape), dtype=np.complex128),
+            np.exp(2j * np.pi * freq_view * kdotp12 / C),
+            np.exp(2j * np.pi * freq_view * kdotp13 / C),
+            np.exp(2j * np.pi * freq_view * kdotp14 / C),
+        ],
+        axis=1,
+    )
+    return s  # (F, 4) for scalar angles; (F, 4, T, P) for angle grids
+
+
+def _doa_from_power(
+    power_dB: NDArray[np.float64], Theta: NDArray[np.float64], Phi: NDArray[np.float64]
+):
+    """Compute DOA of max power for provided angles
+
+    Parameters
+    ----------
+    power_dB : NDArray[np.float64]
+        Power array
+    Theta : float | NDArray[np.float64]
+        Range of polar angles or unique angle
+    Phi : float | NDArray[np.float64]
+        Range of azimutal angles or unique angle
+
+    Returns
+    -------
+    NDArray[np.float64]
+        DOA vector
+    """
     theta_idx, phi_idx = np.unravel_index(
         np.argmax(power_dB),
         power_dB.shape,
@@ -60,6 +226,24 @@ def _doa_from_power(power_dB, Theta, Phi):
         [np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi), np.cos(theta)]
     ).astype(np.float64)
 
+
+def estimate_num_sources(
+    tetrahedra: TetrahedralArray, signal: NDArray[np.float64]
+) -> int:
+    """Number of sources in signal estimation heuristic
+
+    Warning
+    ----------
+    This function has not been implemented yet
+
+    Parameters
+    ----------
+    tetrahedra : TetrahedralArray
+        Tetrahedra used for beamforming
+    signal : NDArray
+        4 x N signal containing received signal by the four hydrophones
+    """
+    pass
 
 
 def delay_and_sum(
@@ -84,7 +268,8 @@ def delay_and_sum(
     max_power = 0
     n_per_chunk = 1500
 
-    s, Theta, Phi = _get_steering_vector(fc, tetrahedra)
+    Theta, Phi = _get_theta_phi_coarse()
+    s = _get_steering_vector(fc, tetrahedra, Theta, Phi)
     T, P = Theta.shape
     s_flat = s.reshape(4, T * P)  # (4, T*P)
 
@@ -99,7 +284,7 @@ def delay_and_sum(
 
         s_flat_chunk = s_flat[:, idx_min:idx_max].astype(np.complex64)
 
-        X_weighted_flat_chunk = s_flat_chunk.conj().T @  hilbert(signal, axis=1)
+        X_weighted_flat_chunk = s_flat_chunk.conj().T @ hilbert(signal, axis=1)
         power_flat[idx_min:idx_max] = np.mean(
             np.abs(X_weighted_flat_chunk) ** 2,
             axis=1,
@@ -136,7 +321,9 @@ def delay_and_sum_doa(
     return _doa_from_power(*delay_and_sum(fc, tetrahedra, signal))
 
 
-def mvdr(fc, tetrahedra, signal):
+def mvdr(
+    fc: float, tetrahedra: TetrahedralArray, signal: NDArray[np.float64]
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """MVDR beamformer for power computation of narrowband signals
 
     Parameters
@@ -153,7 +340,8 @@ def mvdr(fc, tetrahedra, signal):
     Tuple[NDArray, NDArray, NDArray]
         returns power and corresponding angles
     """
-    s, Theta, Phi = _get_steering_vector(fc, tetrahedra)
+    Theta, Phi = _get_theta_phi_coarse()
+    s = _get_steering_vector(fc, tetrahedra, Theta, Phi)
     T, P = Theta.shape
     s_flat = s.reshape(4, T * P)  # (4, T*P)
 
@@ -192,7 +380,9 @@ def mvdr(fc, tetrahedra, signal):
     return power_dB, Theta, Phi
 
 
-def mvdr_doa(fc, tetrahedra, signal) -> NDArray[np.float64]:
+def mvdr_doa(
+    fc: float, tetrahedra: TetrahedralArray, signal: NDArray[np.float64]
+) -> NDArray[np.float64]:
     """MVDR Beamformer for DOA finding of narrowband signals
 
     Parameters
@@ -212,7 +402,12 @@ def mvdr_doa(fc, tetrahedra, signal) -> NDArray[np.float64]:
     return _doa_from_power(*mvdr(fc, tetrahedra, signal))
 
 
-def music(fc, tetrahedra, signal, num_expected_signals=3) -> NDArray[np.float64]:
+def music(
+    fc: float,
+    tetrahedra: TetrahedralArray,
+    signal: NDArray[np.float64],
+    num_expected_signals=1,
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """MUSIC Beamformer for power computation of narrowband signals
 
     Parameters
@@ -229,7 +424,8 @@ def music(fc, tetrahedra, signal, num_expected_signals=3) -> NDArray[np.float64]
     Tuple[NDArray, NDArray, NDArray]
         returns power and corresponding angles
     """
-    s, Theta, Phi = _get_steering_vector(fc, tetrahedra)
+    Theta, Phi = _get_theta_phi_coarse()
+    s = _get_steering_vector(fc, tetrahedra, Theta, Phi)
     T, P = Theta.shape
     s_flat = s.reshape(4, T * P)  # (4, T*P)
 
@@ -264,7 +460,12 @@ def music(fc, tetrahedra, signal, num_expected_signals=3) -> NDArray[np.float64]
     return metric, Theta, Phi
 
 
-def music_doa(fc, tetrahedra, signal, num_expected_signals=1) -> NDArray[np.float64]:
+def music_doa(
+    fc: float,
+    tetrahedra: TetrahedralArray,
+    signal: NDArray[np.float64],
+    num_expected_signals=1,
+) -> NDArray[np.float64]:
     """MUSIC Beamformer for DOA finding of narrowband signals
 
     Parameters
@@ -281,4 +482,6 @@ def music_doa(fc, tetrahedra, signal, num_expected_signals=1) -> NDArray[np.floa
     Tuple[NDArray, NDArray, NDArray]
         returns DOA
     """
-    return _doa_from_power(*music(fc, tetrahedra, signal, num_expected_signals=1))
+    return _doa_from_power(
+        *music(fc, tetrahedra, signal, num_expected_signals=num_expected_signals)
+    )
