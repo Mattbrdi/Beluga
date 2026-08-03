@@ -517,28 +517,49 @@ def _spectrogram_figure(
     max_frequency: float | None,
     frequency_scale: str = "linear",
     spectrogram_scale: str = "db",
+    stft_kwargs: dict[str, Any] | None = None,
 ) -> go.Figure:
     signal = np.asarray(group.data[trace_index], dtype=float)
     if signal.size < 8:
         return go.Figure()
 
-    nperseg = nperseg or 2048
-    nperseg = max(64, min(int(nperseg), signal.size))
-    noverlap = min(nperseg // 2, nperseg - 1)
-    freqs, times, magnitude = sp_signal.spectrogram(
+    if stft_kwargs is None:
+        nperseg = nperseg or 2048
+        nperseg = max(64, min(int(nperseg), signal.size))
+        noverlap = min(nperseg // 2, nperseg - 1)
+        stft_kwargs = {
+            "fs": group.fs,
+            "window": "hann",
+            "nperseg": nperseg,
+            "noverlap": noverlap,
+            "nfft": None,
+            "boundary": "zeros",
+            "padded": True,
+            "axis": -1,
+        }
+        stft_label = f"STFT manuelle {nperseg}"
+    else:
+        stft_kwargs = dict(stft_kwargs)
+        stft_kwargs["fs"] = group.fs
+        nperseg = max(
+            8,
+            min(int(stft_kwargs.get("nperseg") or nperseg or 2048), signal.size),
+        )
+        stft_kwargs["nperseg"] = nperseg
+        if stft_kwargs.get("noverlap") is not None:
+            stft_kwargs["noverlap"] = min(int(stft_kwargs["noverlap"]), nperseg - 1)
+        stft_label = f"STFT benchmark {nperseg}"
+
+    freqs, times, stft_values = sp_signal.stft(
         signal,
-        fs=group.fs,
-        window="hann",
-        nperseg=nperseg,
-        noverlap=noverlap,
-        scaling="spectrum",
-        mode="magnitude",
+        **stft_kwargs,
     )
+    energy = np.abs(stft_values) ** 2
 
     values = (
-        20 * np.log10(magnitude + 1e-12)
+        10 * np.log10(energy + 1e-20)
         if spectrogram_scale == "db"
-        else magnitude
+        else energy
     )
     if max_frequency is not None and max_frequency > 0:
         mask = freqs <= max_frequency
@@ -551,9 +572,14 @@ def _spectrogram_figure(
         freqs = freqs[mask]
         values = values[mask, :]
 
-    lower_percentile = 5 if spectrogram_scale == "db" else 1
-    zmin = float(np.nanpercentile(values, lower_percentile)) if values.size else 0.0
     zmax = float(np.nanpercentile(values, 99)) if values.size else 1.0
+    if spectrogram_scale == "db":
+        zmin = max(
+            float(np.nanpercentile(values, 5)) if values.size else zmax - 100.0,
+            zmax - 100.0,
+        )
+    else:
+        zmin = float(np.nanpercentile(values, 1)) if values.size else 0.0
     if zmax <= zmin:
         zmax = zmin + 1.0
 
@@ -562,15 +588,15 @@ def _spectrogram_figure(
             z=values,
             x=times,
             y=freqs,
-            colorscale="Turbo",
+            colorscale="Magma",
             zmin=zmin,
             zmax=zmax,
-            colorbar={"title": "dB" if spectrogram_scale == "db" else "mag."},
+            colorbar={"title": "dB" if spectrogram_scale == "db" else "energie"},
         )
     )
     fig.update_layout(
         margin={"l": 58, "r": 18, "t": 34, "b": 42},
-        title=f"Spectrogramme - {group.traces[trace_index]}",
+        title=f"Spectrogramme energie - {group.traces[trace_index]} ({stft_label})",
         xaxis_title="Temps (s)",
         yaxis_title="Frequence (Hz)",
         yaxis_type=yaxis_type,
@@ -1477,7 +1503,22 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                     ),
                                                     html.Div(
                                                         [
-                                                            html.Label("NFFT"),
+                                                            html.Label("STFT"),
+                                                            dcc.Dropdown(
+                                                                id="spectrogram-stft-mode-dropdown",
+                                                                options=[
+                                                                    {"label": "Benchmark", "value": "benchmark"},
+                                                                    {"label": "Manuelle", "value": "manual"},
+                                                                ],
+                                                                value="benchmark",
+                                                                clearable=False,
+                                                            ),
+                                                        ],
+                                                        style={"width": "130px"},
+                                                    ),
+                                                    html.Div(
+                                                        [
+                                                            html.Label("Fenetre"),
                                                             dcc.Dropdown(
                                                                 id="nperseg-dropdown",
                                                                 options=[
@@ -1541,6 +1582,10 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                 id="spectrogram-graph",
                                                 config={"displayModeBar": True},
                                                 style={"height": "390px"},
+                                            ),
+                                            html.Div(
+                                                id="spectrogram-stft-caption",
+                                                className="muted panel-body",
                                             ),
                                         ],
                                         className="panel",
@@ -2319,6 +2364,48 @@ def build_app(config: AppConfig) -> dash.Dash:
         )
 
     @app.callback(
+        Output("spectrogram-stft-caption", "children"),
+        Input("split-dropdown", "value"),
+        Input("scene-dropdown", "value"),
+        Input("algorithm-dropdown", "value"),
+        Input("spectrogram-stft-mode-dropdown", "value"),
+        Input("nperseg-dropdown", "value"),
+    )
+    def update_spectrogram_stft_caption(
+        split: str,
+        scene_id: str,
+        algorithm: str,
+        stft_mode: str,
+        manual_nperseg: int,
+    ) -> str:
+        if not split or not scene_id or not algorithm:
+            return ""
+
+        if (stft_mode or "benchmark") != "benchmark":
+            nperseg = int(manual_nperseg or 2048)
+            noverlap = nperseg // 2
+            return (
+                "Spectrogrammes A/B: STFT manuelle, "
+                f"fenetre {nperseg}, overlap {noverlap}, nfft auto, window hann."
+            )
+
+        bundle = _bundle(config, split, scene_id, algorithm)
+        stft_kwargs = _stft_kwargs_from_metrics(
+            bundle["metrics"],
+            bundle["sawada_model"],
+            int(bundle["fs"] or 0),
+        )
+        nperseg = stft_kwargs.get("nperseg")
+        noverlap = stft_kwargs.get("noverlap")
+        nfft = stft_kwargs.get("nfft")
+        window = stft_kwargs.get("window")
+        return (
+            "Spectrogrammes A/B: STFT benchmark utilisee, "
+            f"fenetre {nperseg}, overlap {noverlap}, "
+            f"nfft {'auto' if nfft is None else nfft}, window {window}."
+        )
+
+    @app.callback(
         Output("overview", "children"),
         Output("warning-slot", "children"),
         Output("time-graph", "figure"),
@@ -2336,6 +2423,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         Input("trace-dropdown", "value"),
         Input("compare-group-dropdown", "value"),
         Input("compare-trace-dropdown", "value"),
+        Input("spectrogram-stft-mode-dropdown", "value"),
         Input("nperseg-dropdown", "value"),
         Input("max-frequency-input", "value"),
         Input("frequency-scale-dropdown", "value"),
@@ -2349,6 +2437,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         trace_index: int,
         compare_group_key: str,
         compare_trace_index: int,
+        spectrogram_stft_mode: str,
         nperseg: int,
         max_frequency: float | None,
         frequency_scale: str,
@@ -2402,6 +2491,11 @@ def build_app(config: AppConfig) -> dash.Dash:
             f"{group.label} / {group.traces[trace_index]} - "
             f"{duration:.3f} s, {group.fs} Hz"
         )
+        stft_kwargs = (
+            _stft_kwargs_from_metrics(bundle["metrics"], bundle["sawada_model"], group.fs)
+            if (spectrogram_stft_mode or "benchmark") == "benchmark"
+            else None
+        )
         return (
             _overview_children(bundle),
             warning,
@@ -2413,6 +2507,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                 max_frequency,
                 frequency_scale,
                 spectrogram_scale,
+                stft_kwargs,
             ),
             _time_figure(compare_group, compare_trace_index),
             _spectrogram_figure(
@@ -2422,6 +2517,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                 max_frequency,
                 frequency_scale,
                 spectrogram_scale,
+                stft_kwargs,
             ),
             _wav_data_uri(signal, group.fs),
             audio_caption,
