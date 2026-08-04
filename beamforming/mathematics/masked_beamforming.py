@@ -24,7 +24,7 @@ from beamforming.mathematics.beamformer import (
 
 
 def masked_mvdr(
-    tetrahedra: TetrahedralArray, signal: NDArray[np.float64]
+    tetrahedra: TetrahedralArray, signal: NDArray[np.float64], mask : AudioMask
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """MVDR beamformer for power computation of narrowband signals
 
@@ -44,7 +44,6 @@ def masked_mvdr(
     """
     power_dB, Theta, Phi = None, None, None
 
-    mask = AudioMask(get_mask_from_array(signal))
     blobs = output_blobs_from_mask(mask)
     blobs = blob_filtering_heuristic(blobs)
 
@@ -72,7 +71,7 @@ def masked_mvdr(
 
 
 def masked_mvdr_doa(
-    tetrahedra: TetrahedralArray, signal: NDArray[np.float64]
+    tetrahedra: TetrahedralArray, signal: NDArray[np.float64], mask : AudioMask
 ) -> NDArray[np.float64]:
     """MVDR Beamformer for DOA finding of narrowband signals
 
@@ -90,11 +89,11 @@ def masked_mvdr_doa(
     Tuple[NDArray, NDArray, NDArray]
         returns DOA
     """
-    return _doa_from_power(*masked_mvdr(tetrahedra, signal))
+    return _doa_from_power(*masked_mvdr(tetrahedra, signal, mask))
 
 
 def masked_music(
-    tetrahedra: TetrahedralArray, signal: NDArray[np.float64]
+    tetrahedra: TetrahedralArray, signal: NDArray[np.float64], mask : AudioMask
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """MVDR beamformer for power computation of narrowband signals
 
@@ -114,7 +113,6 @@ def masked_music(
     """
     power_dB, Theta, Phi = None, None, None
 
-    mask = AudioMask(get_mask_from_array(signal))
     blobs = output_blobs_from_mask(mask)
     blobs = blob_filtering_heuristic(blobs)
 
@@ -142,7 +140,7 @@ def masked_music(
 
 
 def masked_music_doa(
-    tetrahedra: TetrahedralArray, signal: NDArray[np.float64]
+    tetrahedra: TetrahedralArray, signal: NDArray[np.float64], mask : AudioMask
 ) -> NDArray[np.float64]:
     """MVDR Beamformer for DOA finding of narrowband signals
 
@@ -160,4 +158,4 @@ def masked_music_doa(
     Tuple[NDArray, NDArray, NDArray]
         returns DOA
     """
-    return _doa_from_power(*masked_music(tetrahedra, signal))
+    return _doa_from_power(*masked_music(tetrahedra, signal, mask))
