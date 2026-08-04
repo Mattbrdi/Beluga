@@ -851,12 +851,14 @@ def _sawada_complex_plane_figure(
     vector_space: str = "whitened",
     coordinate_mode: str = "relative",
     color_mode: str = "source",
+    show_rejected_bins: bool = False,
     gt_correctness: np.ndarray | None = None,
 ) -> go.Figure:
     vector_key = "bin_vectors_unwhitened" if vector_space == "unwhitened" else "bin_vectors"
     centroid_key = "centroids_unwhitened" if vector_space == "unwhitened" else "centroids"
     bin_vectors = np.asarray(sawada_model.get(vector_key, []))
     masks = np.asarray(sawada_model.get("masks", []), dtype=float)
+    active_tf_mask = np.asarray(sawada_model.get("active_tf_mask", []), dtype=bool)
     active_clusters = np.asarray(sawada_model.get("active_clusters", []), dtype=bool)
     centroids = np.asarray(sawada_model.get(centroid_key, []))
     frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
@@ -909,6 +911,12 @@ def _sawada_complex_plane_figure(
     )
     source_colors = ["#dc2626", "#2563eb", "#16a34a", "#7c3aed", "#0891b2", "#db2777"]
     source_masks = masks[:, frequency_index, :]
+    used_by_em = (
+        active_tf_mask[frequency_index]
+        if active_tf_mask.ndim == 2 and active_tf_mask.shape[0] > frequency_index
+        else np.max(source_masks, axis=0) > 0.5
+    )
+    rejected_by_energy = ~used_by_em
     source_active = (
         active_clusters[frequency_index]
         if active_clusters.ndim == 2 and active_clusters.shape[0] > frequency_index
@@ -944,7 +952,10 @@ def _sawada_complex_plane_figure(
         common_times = min(n_times, gt_values.shape[1])
         correctness[:common_times] = gt_values[frequency_index, :common_times]
 
-    finite_bin_values = bin_values[:, ~invalid_reference].reshape(-1)
+    scale_selector = ~invalid_reference
+    if not show_rejected_bins:
+        scale_selector = scale_selector & used_by_em
+    finite_bin_values = bin_values[:, scale_selector].reshape(-1)
     finite_values = np.concatenate(
         [
             finite_bin_values[np.isfinite(finite_bin_values)],
@@ -977,40 +988,16 @@ def _sawada_complex_plane_figure(
             else f"Micro {mic_index + 1}"
         )
 
-        inactive = (
-            (~has_assignment if color_mode != "gt" else correctness == 0)
-            | invalid_reference
-        )
-        if np.any(inactive):
-            fig.add_trace(
-                go.Scattergl(
-                    x=np.real(values[inactive]),
-                    y=np.imag(values[inactive]),
-                    mode="markers",
-                    name="Inactif",
-                    legendgroup="inactive",
-                    showlegend=mic_index == 0,
-                    marker={"size": 5, "color": "#9ca3af", "opacity": 0.24},
-                    customdata=time_values[inactive],
-                    hovertemplate=(
-                        "t=%{customdata:.4f}s<br>Re=%{x:.4f}<br>Im=%{y:.4f}"
-                        "<br>ignore/GT absente<extra></extra>"
-                    ),
-                ),
-                row=row,
-                col=col,
-            )
-
         if color_mode == "gt":
             classes = [
-                ("Correct", correctness > 0, "#16a34a"),
-                ("Faux", correctness < 0, "#dc2626"),
+                ("Correct", used_by_em & (correctness > 0), "#16a34a"),
+                ("Faux", used_by_em & (correctness < 0), "#dc2626"),
             ]
         else:
             classes = [
                 (
                     f"Source {source_index + 1}",
-                    has_assignment & (assigned == source_index),
+                    used_by_em & has_assignment & (assigned == source_index),
                     source_colors[source_index % len(source_colors)],
                 )
                 for source_index in range(n_sources)
@@ -1033,6 +1020,33 @@ def _sawada_complex_plane_figure(
                         f"{label}<br>"
                         "t=%{customdata:.4f}s<br>Re=%{x:.4f}<br>Im=%{y:.4f}"
                         "<extra></extra>"
+                    ),
+                ),
+                row=row,
+                col=col,
+            )
+
+        rejected_selector = rejected_by_energy | invalid_reference
+        if show_rejected_bins and np.any(rejected_selector):
+            fig.add_trace(
+                go.Scattergl(
+                    x=np.real(values[rejected_selector]),
+                    y=np.imag(values[rejected_selector]),
+                    mode="markers",
+                    name="Hors EM",
+                    legendgroup="rejected",
+                    showlegend=mic_index == 0,
+                    marker={
+                        "size": 5,
+                        "color": "#facc15",
+                        "opacity": 0.62,
+                        "symbol": "circle-open",
+                        "line": {"width": 1.2, "color": "#a16207"},
+                    },
+                    customdata=time_values[rejected_selector],
+                    hovertemplate=(
+                        "Hors EM<br>t=%{customdata:.4f}s<br>Re=%{x:.4f}"
+                        "<br>Im=%{y:.4f}<extra></extra>"
                     ),
                 ),
                 row=row,
@@ -1782,6 +1796,21 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                 ],
                                                 style={"width": "160px"},
                                             ),
+                                            html.Div(
+                                                [
+                                                    html.Label("Hors EM"),
+                                                    dcc.Dropdown(
+                                                        id="complex-rejected-bins-dropdown",
+                                                        options=[
+                                                            {"label": "Masquer", "value": "hide"},
+                                                            {"label": "Afficher", "value": "show"},
+                                                        ],
+                                                        value="hide",
+                                                        clearable=False,
+                                                    ),
+                                                ],
+                                                style={"width": "130px"},
+                                            ),
                                         ],
                                         className="panel-header",
                                     ),
@@ -2248,6 +2277,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         Input("complex-vector-space-dropdown", "value"),
         Input("complex-coordinate-mode-dropdown", "value"),
         Input("complex-color-mode-dropdown", "value"),
+        Input("complex-rejected-bins-dropdown", "value"),
         Input("sawada-gt-permutation-dropdown", "value"),
     )
     def update_sawada_complex_plane(
@@ -2258,6 +2288,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         vector_space: str,
         coordinate_mode: str,
         color_mode: str,
+        rejected_bins_mode: str,
         gt_permutation: str,
     ) -> tuple[go.Figure, str]:
         if not split or not scene_id or algorithm != "sawada":
@@ -2266,12 +2297,14 @@ def build_app(config: AppConfig) -> dash.Dash:
         vector_space = vector_space or "whitened"
         coordinate_mode = coordinate_mode or "relative"
         color_mode = color_mode or "source"
+        show_rejected_bins = (rejected_bins_mode or "hide") == "show"
         bundle = _bundle(config, split, scene_id, algorithm)
         model = bundle["sawada_model"]
         vector_key = "bin_vectors_unwhitened" if vector_space == "unwhitened" else "bin_vectors"
         centroid_key = "centroids_unwhitened" if vector_space == "unwhitened" else "centroids"
         bin_vectors = np.asarray(model.get(vector_key, []))
         masks = np.asarray(model.get("masks", []), dtype=float)
+        active_tf_mask = np.asarray(model.get("active_tf_mask", []), dtype=bool)
         active_clusters = np.asarray(model.get("active_clusters", []), dtype=bool)
         centroids = np.asarray(model.get(centroid_key, []))
         if bin_vectors.ndim != 3 or bin_vectors.size == 0:
@@ -2282,6 +2315,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                     vector_space,
                     coordinate_mode,
                     color_mode,
+                    show_rejected_bins,
                 ),
                 "Vecteurs complexes absents. Relance le benchmark Sawada avec cette version.",
             )
@@ -2293,6 +2327,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                     vector_space,
                     coordinate_mode,
                     color_mode,
+                    show_rejected_bins,
                 ),
                 "Masques ou centroides absents dans sawada_model.npz.",
             )
@@ -2306,6 +2341,11 @@ def build_app(config: AppConfig) -> dash.Dash:
             else f"bin {frequency_index}"
         )
         source_masks = masks[:, frequency_index, :]
+        used_by_em = (
+            active_tf_mask[frequency_index]
+            if active_tf_mask.ndim == 2 and active_tf_mask.shape[0] > frequency_index
+            else np.max(source_masks, axis=0) > 0.5
+        )
         assigned = np.argmax(source_masks, axis=0)
         assigned_strength = np.max(source_masks, axis=0)
         has_assignment = assigned_strength > 0.5
@@ -2328,6 +2368,7 @@ def build_app(config: AppConfig) -> dash.Dash:
             for source_index in range(source_masks.shape[0])
         ]
         inactive_count = int(np.sum(~has_assignment))
+        rejected_count = int(np.sum(~used_by_em))
         gt_text = ""
         if color_mode == "gt":
             if gt_correctness.ndim == 2 and gt_correctness.shape[0] > frequency_index:
@@ -2346,6 +2387,8 @@ def build_app(config: AppConfig) -> dash.Dash:
             f"{n_mics} composantes complexes. Points assignes: {', '.join(counts)}. "
             f"Clusters actifs: {active_cluster_count}/{source_masks.shape[0]}. "
             f"Non utilises par l'EM: {inactive_count}. "
+            f"Hors seuil energie: {rejected_count}"
+            f"{' affiches' if show_rejected_bins else ' masques'}. "
             f"Repere: {'non blanchi' if vector_space == 'unwhitened' else 'blanchi'}, "
             f"{'rapports M/M1' if coordinate_mode == 'relative' else 'composantes directes'}."
             f"{f' Reference M1 trop faible: {invalid_reference_count}.' if invalid_reference_count else ''}"
@@ -2358,6 +2401,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                 vector_space,
                 coordinate_mode,
                 color_mode,
+                show_rejected_bins,
                 gt_correctness=gt_correctness,
             ),
             caption,
