@@ -219,7 +219,7 @@ class SawadaBSS:
     em_clustering_parameters : EMClusteringParameters = field(default_factory= EMClusteringParameters)
     
     # Paramètres avec valeurs par défaut
-    whitening: bool = True 
+    whitening: bool = False
     
     # État de l'algorithme (Champs calculés plus tard)
     # On utilise default_factory pour les dictionnaires vides

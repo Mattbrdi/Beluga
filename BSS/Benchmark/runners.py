@@ -169,6 +169,7 @@ def run_sawada(
         n_sources=scene.metadata.n_sources,
         stft_parameters=BENCHMARK_STFT_PARAMETERS,
         em_clustering_parameters=BENCHMARK_SAWADA_EM_PARAMETERS,
+        whitening=False,
     )
     model.process_signal(scene.mixed)
     sources = model.separate_source()
