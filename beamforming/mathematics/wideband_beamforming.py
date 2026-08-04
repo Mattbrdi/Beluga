@@ -159,7 +159,7 @@ def wideband_issm_music(
         X = Zxx[:, i]
         R = X @ X.conj().T / X.shape[1]
 
-        w, v = np.linalg.eig(R)
+        w, v = np.linalg.eigh(R)
         eig_val_order = np.argsort(np.abs(w))
         v = v[:, eig_val_order]
         V = np.zeros((4, 4 - num_expected_sources), dtype=np.complex128)
@@ -218,6 +218,7 @@ def _compute_cssm_correlation_matrix(
     signal: NDArray[np.float64],
     center_freq: float,
     initial_doa: NDArray[np.float64],
+    tf_mask: NDArray[np.float64],
     num_expected_sources: int,
 ) -> NDArray[np.complex128]:
     """Compute the correlation matrix for CSSM wideband beamformers
@@ -268,6 +269,10 @@ def _compute_cssm_correlation_matrix(
 
     freq_mask = (freqs >= MIN_FREQ) & (freqs <= MAX_FREQ)
     freqs, Zxx = freqs[freq_mask], Zxx[:, freq_mask, :]
+
+    if tf_mask is not None:
+        Zxx = Zxx * (tf_mask == 1)
+
     Zxx = np.swapaxes(Zxx, 0, 1)  # (F, 4, T)
 
     s_0 = _get_steering_vector(center_freq, tetrahedra, initial_theta, initial_phi)  # 4
@@ -335,6 +340,7 @@ def wideband_cssm_mvdr(
     Theta: NDArray[np.float64],
     Phi: NDArray[np.float64],
     initial_doa: NDArray[np.float64] = None,
+    tf_mask: NDArray[np.uint8] = None,
     num_expected_sources=1,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """CSSM MVDR wideband beamformer power computation
@@ -380,7 +386,7 @@ def wideband_cssm_mvdr(
         num_expected_sources = estimate_num_sources(tetrahedra, signal)
 
     R = _compute_cssm_correlation_matrix(
-        tetrahedra, signal, center_freq, initial_doa, num_expected_sources
+        tetrahedra, signal, center_freq, initial_doa, tf_mask, num_expected_sources
     )
 
     s = _get_steering_vector(center_freq, tetrahedra, Theta, Phi)
@@ -394,6 +400,7 @@ def wideband_cssm_mvdr_optimized(
     signal: NDArray[np.float64],
     center_freq: float,
     initial_doa: NDArray[np.float64] = None,
+    tf_mask: NDArray[np.uint8] = None,
     num_expected_sources=1,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """CSSM MVDR wideband beamformer power computation optimized with coarse and fine search
@@ -424,7 +431,7 @@ def wideband_cssm_mvdr_optimized(
         num_expected_sources = estimate_num_sources(tetrahedra, signal)
 
     R = _compute_cssm_correlation_matrix(
-        tetrahedra, signal, center_freq, initial_doa, num_expected_sources
+        tetrahedra, signal, center_freq, initial_doa, tf_mask, num_expected_sources
     )
 
     s = _get_steering_vector(center_freq, tetrahedra, Theta, Phi)
@@ -445,30 +452,38 @@ def wideband_cssm_mvdr_doa(
     Theta=None,
     Phi=None,
     initial_doa=None,
+    tf_mask=None,
     num_expected_sources=1,
 ) -> NDArray[np.float64]:
     return _doa_from_power(
         *wideband_cssm_mvdr(
-            tetrahedra,
-            signal,
-            center_freq,
-            Theta,
-            Phi,
+            tetrahedra=tetrahedra,
+            signal=signal,
+            center_freq=center_freq,
+            Theta=Theta,
+            Phi=Phi,
             initial_doa=initial_doa,
+            tf_mask=tf_mask,
             num_expected_sources=num_expected_sources,
         )
     )
 
 
 def wideband_cssm_mvdr_optimized_doa(
-    tetrahedra, signal, center_freq, initial_doa=None, num_expected_sources=1
+    tetrahedra,
+    signal,
+    center_freq,
+    initial_doa=None,
+    tf_mask=None,
+    num_expected_sources=1,
 ) -> NDArray[np.float64]:
     return _doa_from_power(
         *wideband_cssm_mvdr_optimized(
-            tetrahedra,
-            signal,
-            center_freq,
+            tetrahedra=tetrahedra,
+            signal=signal,
+            center_freq=center_freq,
             initial_doa=initial_doa,
+            tf_mask=tf_mask,
             num_expected_sources=num_expected_sources,
         )
     )
@@ -496,7 +511,7 @@ def get_power_music(
     _, T, P = np.shape(steering_vector)
     s_flat = steering_vector.reshape(4, T * P)  # (4, T*P)
 
-    w, v = np.linalg.eig(
+    w, v = np.linalg.eigh(
         correlation_matrix
     )  # eigenvalue decomposition, v[:,i] is the eigenvector corresponding to the eigenvalue w[i]
     eig_val_order = np.argsort(np.abs(w))  # find order of magnitude of eigenvalues
@@ -529,6 +544,7 @@ def wideband_cssm_music(
     Theta: NDArray[np.float64],
     Phi: NDArray[np.float64],
     initial_doa=None,
+    tf_mask=None,
     num_expected_sources=1,
 ) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
     """CSSM MUSIC wideband beamformer power computation
@@ -574,7 +590,7 @@ def wideband_cssm_music(
         num_expected_sources = estimate_num_sources(tetrahedra, signal)
 
     R = _compute_cssm_correlation_matrix(
-        tetrahedra, signal, center_freq, initial_doa, num_expected_sources
+        tetrahedra, signal, center_freq, initial_doa, tf_mask, num_expected_sources
     )
 
     s = _get_steering_vector(center_freq, tetrahedra, Theta, Phi)
@@ -584,7 +600,12 @@ def wideband_cssm_music(
 
 
 def wideband_cssm_music_optimized(
-    tetrahedra, signal, center_freq, initial_doa=None, num_expected_sources=1
+    tetrahedra,
+    signal,
+    center_freq,
+    initial_doa=None,
+    tf_mask=None,
+    num_expected_sources=1,
 ):
     """CSSM MUSIC wideband beamformer power computation optimized with coarse and fine search
 
@@ -613,7 +634,7 @@ def wideband_cssm_music_optimized(
         num_expected_sources = estimate_num_sources(tetrahedra, signal)
 
     R = _compute_cssm_correlation_matrix(
-        tetrahedra, signal, center_freq, initial_doa, num_expected_sources
+        tetrahedra, signal, center_freq, initial_doa, tf_mask, num_expected_sources
     )
 
     s = _get_steering_vector(center_freq, tetrahedra, Theta, Phi)
@@ -637,6 +658,7 @@ def wideband_cssm_music_doa(
     Theta=None,
     Phi=None,
     initial_doa=None,
+    tf_mask=None,
     num_expected_sources=1,
 ) -> NDArray[np.float64]:
     return _doa_from_power(
@@ -647,13 +669,19 @@ def wideband_cssm_music_doa(
             Theta,
             Phi,
             initial_doa=initial_doa,
+            tf_mask=tf_mask,
             num_expected_sources=num_expected_sources,
         )
     )
 
 
 def wideband_cssm_music_optimized_doa(
-    tetrahedra, signal, center_freq, initial_doa=None, num_expected_sources=1
+    tetrahedra,
+    signal,
+    center_freq,
+    initial_doa=None,
+    tf_mask=None,
+    num_expected_sources=1,
 ) -> NDArray[np.float64]:
     return _doa_from_power(
         *wideband_cssm_music_optimized(
@@ -661,6 +689,7 @@ def wideband_cssm_music_optimized_doa(
             signal,
             center_freq,
             initial_doa=initial_doa,
+            tf_mask=tf_mask,
             num_expected_sources=num_expected_sources,
         )
     )
