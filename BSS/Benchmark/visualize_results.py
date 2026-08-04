@@ -606,6 +606,18 @@ def _spectrogram_figure(
     return fig
 
 
+def _energy_db_limits(values: np.ndarray) -> tuple[float, float]:
+    finite_values = np.asarray(values)[np.isfinite(values)]
+    if finite_values.size == 0:
+        return -100.0, 0.0
+
+    zmax = float(np.nanpercentile(finite_values, 99))
+    zmin = max(float(np.nanpercentile(finite_values, 5)), zmax - 100.0)
+    if zmax <= zmin:
+        zmax = zmin + 1.0
+    return zmin, zmax
+
+
 def _sawada_mask_figure(
     sawada_model: dict[str, np.ndarray],
     source_index: int,
@@ -674,30 +686,29 @@ def _sawada_mask_figure(
             if times.size >= values.shape[1]
             else np.arange(values.shape[1])
         )
+        is_posterior = map_kind == "posterior"
+        is_active = map_kind == "active"
+        is_gt_error = map_kind == "gt_error"
+        is_masked_energy = map_kind == "masked_energy"
+        tf_energy_for_scale = (
+            tf_energy[: values.shape[0], : values.shape[1]]
+            if is_masked_energy and tf_energy.ndim == 2
+            else np.empty((0, 0))
+        )
         yaxis_type = "log" if frequency_scale == "log" else "linear"
         if yaxis_type == "log":
             mask = frequencies > 0
             frequencies = frequencies[mask]
             values = values[mask, :]
-
-        is_posterior = map_kind == "posterior"
-        is_active = map_kind == "active"
-        is_gt_error = map_kind == "gt_error"
-        is_masked_energy = map_kind == "masked_energy"
+            if tf_energy_for_scale.size:
+                tf_energy_for_scale = tf_energy_for_scale[mask, :]
         display_values = (
             10 * np.log10(values + 1e-20)
             if is_masked_energy
             else values
         )
         if is_masked_energy and display_values.size:
-            finite_display = display_values[np.isfinite(display_values)]
-            zmax = float(np.nanpercentile(finite_display, 99)) if finite_display.size else 0.0
-            zmin = max(
-                float(np.nanpercentile(finite_display, 5)) if finite_display.size else zmax - 100.0,
-                zmax - 100.0,
-            )
-            if zmax <= zmin:
-                zmax = zmin + 1.0
+            zmin, zmax = _energy_db_limits(10 * np.log10(tf_energy_for_scale + 1e-20))
         else:
             zmin = -1 if is_gt_error else 0
             zmax = 1
@@ -813,10 +824,7 @@ def _sawada_energy_figure(
             frequencies = frequencies[mask]
             values = values[mask, :]
 
-        zmax = float(np.nanpercentile(values, 99)) if values.size else 0.0
-        zmin = max(float(np.nanpercentile(values, 5)), zmax - 100.0)
-        if zmax <= zmin:
-            zmax = zmin + 1.0
+        zmin, zmax = _energy_db_limits(values)
 
         fig.add_trace(
             go.Heatmap(
@@ -2364,11 +2372,13 @@ def build_app(config: AppConfig) -> dash.Dash:
             else np.empty((0, 0), dtype=float)
         )
         counts = [
-            f"S{source_index + 1}: {int(np.sum(has_assignment & (assigned == source_index)))}"
+            f"S{source_index + 1}: "
+            f"{int(np.sum(used_by_em & has_assignment & (assigned == source_index)))}"
             for source_index in range(source_masks.shape[0])
         ]
         inactive_count = int(np.sum(~has_assignment))
         rejected_count = int(np.sum(~used_by_em))
+        point_counts = counts + [f"Hors EM: {rejected_count}"]
         gt_text = ""
         if color_mode == "gt":
             if gt_correctness.ndim == 2 and gt_correctness.shape[0] > frequency_index:
@@ -2384,7 +2394,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                 gt_text = " GT indisponible."
         caption = (
             f"Ligne frequencielle {frequency_index} ({frequency_text}): {n_times} trames x "
-            f"{n_mics} composantes complexes. Points assignes: {', '.join(counts)}. "
+            f"{n_mics} composantes complexes. Points: {', '.join(point_counts)}. "
             f"Clusters actifs: {active_cluster_count}/{source_masks.shape[0]}. "
             f"Non utilises par l'EM: {inactive_count}. "
             f"Hors seuil energie: {rejected_count}"
