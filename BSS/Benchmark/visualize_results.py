@@ -1123,6 +1123,8 @@ def _sawada_complex_plane_figure(
 def _sawada_centroid_phase_figure(
     sawada_model: dict[str, np.ndarray],
     color_mode: str = "frequency",
+    reference_mode: str = "relative",
+    angle_mode: str = "frequency_normalized",
 ) -> go.Figure:
     centroids = np.asarray(sawada_model.get("centroids_unwhitened", []))
     if centroids.ndim != 3 or centroids.size == 0:
@@ -1159,29 +1161,54 @@ def _sawada_centroid_phase_figure(
         frequencies = frequencies[:n_freqs]
 
     eps = 1e-12
-    reference = centroids[:, 0, :]
-    valid_reference = np.abs(reference) > eps
+    reference_mode = reference_mode or "relative"
+    angle_mode = angle_mode or "frequency_normalized"
+    normalize_by_m1 = reference_mode == "relative"
+    divide_by_frequency = angle_mode == "frequency_normalized"
+
+    if normalize_by_m1:
+        reference = centroids[:, 0, :]
+        valid_reference = np.abs(reference) > eps
+        safe_reference = np.where(valid_reference, reference, np.nan + 0j)
+        phase_input = centroids / safe_reference[:, np.newaxis, :]
+    else:
+        valid_reference = np.ones((n_freqs, n_sources), dtype=bool)
+        phase_input = centroids
+
     valid_frequency = frequencies > eps
-    safe_reference = np.where(valid_reference, reference, np.nan + 0j)
-    ratios = centroids / safe_reference[:, np.newaxis, :]
-    phase_over_frequency = np.angle(ratios) / np.where(
-        valid_frequency,
-        frequencies,
-        np.nan,
-    )[:, np.newaxis, np.newaxis]
-    finite_mask = np.isfinite(phase_over_frequency) & valid_reference[:, np.newaxis, :]
+    phase_values = np.angle(phase_input)
+    if divide_by_frequency:
+        theta_values_all = phase_values / np.where(
+            valid_frequency,
+            frequencies,
+            np.nan,
+        )[:, np.newaxis, np.newaxis]
+        valid_angle_frequency = valid_frequency
+        theta_unit = "rad/Hz"
+    else:
+        theta_values_all = phase_values
+        valid_angle_frequency = np.ones(n_freqs, dtype=bool)
+        theta_unit = "rad"
+    finite_mask = (
+        np.isfinite(theta_values_all)
+        & valid_reference[:, np.newaxis, :]
+        & valid_angle_frequency[:, np.newaxis, np.newaxis]
+    )
 
     rows = int(math.ceil(n_mics / 2))
     fig = make_subplots(
         rows=rows,
         cols=2,
-        subplot_titles=[f"M{mic_index + 1}/M1" for mic_index in range(n_mics)],
+        subplot_titles=[
+            f"M{mic_index + 1}/M1" if normalize_by_m1 else f"M{mic_index + 1}"
+            for mic_index in range(n_mics)
+        ],
     )
     source_colors = ["#dc2626", "#2563eb", "#16a34a", "#7c3aed", "#0891b2", "#db2777"]
     color_mode = color_mode or "frequency"
 
-    unit_x = np.cos(phase_over_frequency)
-    unit_y = np.sin(phase_over_frequency)
+    unit_x = np.cos(theta_values_all)
+    unit_y = np.sin(theta_values_all)
     circle_angles = np.linspace(0.0, 2.0 * np.pi, 241)
     circle_x = np.cos(circle_angles)
     circle_y = np.sin(circle_angles)
@@ -1190,8 +1217,8 @@ def _sawada_centroid_phase_figure(
     for mic_index in range(n_mics):
         row = mic_index // 2 + 1
         col = mic_index % 2 + 1
-        theta_values = phase_over_frequency[:, mic_index, :]
-        valid_values = finite_mask[:, mic_index, :] & valid_frequency[:, np.newaxis]
+        theta_values = theta_values_all[:, mic_index, :]
+        valid_values = finite_mask[:, mic_index, :]
 
         fig.add_trace(
             go.Scatter(
@@ -1236,7 +1263,7 @@ def _sawada_centroid_phase_figure(
                         hovertemplate=(
                             f"Source {source_index + 1}<br>"
                             "f=%{customdata[0]:.1f}Hz<br>"
-                            "theta=%{customdata[1]:.4e} rad/Hz<br>"
+                            f"theta=%{{customdata[1]:.4e}} {theta_unit}<br>"
                             "x=%{x:.4f}<br>y=%{y:.4f}"
                             "<extra></extra>"
                         ),
@@ -1278,7 +1305,7 @@ def _sawada_centroid_phase_figure(
                         hovertemplate=(
                             "Source %{customdata[0]:.0f}<br>"
                             "f=%{customdata[1]:.1f}Hz<br>"
-                            "theta=%{customdata[2]:.4e} rad/Hz<br>"
+                            f"theta=%{{customdata[2]:.4e}} {theta_unit}<br>"
                             "x=%{x:.4f}<br>y=%{y:.4f}"
                             "<extra></extra>"
                         ),
@@ -1309,7 +1336,11 @@ def _sawada_centroid_phase_figure(
         )
 
     fig.update_layout(
-        title="Centroides Sawada sur cercle unite",
+        title=(
+            "Centroides Sawada sur cercle unite - "
+            f"{'Cm/M1' if normalize_by_m1 else 'Cm'}, "
+            f"{'arg/f' if divide_by_frequency else 'arg'}"
+        ),
         margin={"l": 58, "r": 18, "t": 64, "b": 42},
         paper_bgcolor="#f7f7f3",
         plot_bgcolor="#ffffff",
@@ -2059,6 +2090,36 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                 ],
                                                 style={"width": "180px"},
                                             ),
+                                            html.Div(
+                                                [
+                                                    html.Label("Vecteurs"),
+                                                    dcc.Dropdown(
+                                                        id="centroid-phase-reference-dropdown",
+                                                        options=[
+                                                            {"label": "Cm/M1", "value": "relative"},
+                                                            {"label": "Cm", "value": "direct"},
+                                                        ],
+                                                        value="relative",
+                                                        clearable=False,
+                                                    ),
+                                                ],
+                                                style={"width": "140px"},
+                                            ),
+                                            html.Div(
+                                                [
+                                                    html.Label("Angle"),
+                                                    dcc.Dropdown(
+                                                        id="centroid-phase-angle-dropdown",
+                                                        options=[
+                                                            {"label": "arg/f", "value": "frequency_normalized"},
+                                                            {"label": "arg", "value": "raw"},
+                                                        ],
+                                                        value="frequency_normalized",
+                                                        clearable=False,
+                                                    ),
+                                                ],
+                                                style={"width": "130px"},
+                                            ),
                                         ],
                                         className="panel-header",
                                     ),
@@ -2664,15 +2725,22 @@ def build_app(config: AppConfig) -> dash.Dash:
         Input("scene-dropdown", "value"),
         Input("algorithm-dropdown", "value"),
         Input("centroid-phase-color-dropdown", "value"),
+        Input("centroid-phase-reference-dropdown", "value"),
+        Input("centroid-phase-angle-dropdown", "value"),
     )
     def update_sawada_centroid_phases(
         split: str,
         scene_id: str,
         algorithm: str,
         color_mode: str,
+        reference_mode: str,
+        angle_mode: str,
     ) -> tuple[go.Figure, str]:
         if not split or not scene_id or algorithm != "sawada":
-            return _sawada_centroid_phase_figure({}), "Disponible uniquement pour Sawada."
+            return (
+                _sawada_centroid_phase_figure({}, color_mode, reference_mode, angle_mode),
+                "Disponible uniquement pour Sawada.",
+            )
 
         bundle = _bundle(config, split, scene_id, algorithm)
         model = bundle["sawada_model"]
@@ -2683,7 +2751,7 @@ def build_app(config: AppConfig) -> dash.Dash:
             centroid_space = "blanchi"
         if centroids.ndim != 3 or centroids.size == 0:
             return (
-                _sawada_centroid_phase_figure(model, color_mode),
+                _sawada_centroid_phase_figure(model, color_mode, reference_mode, angle_mode),
                 "Centroides absents dans sawada_model.npz.",
             )
 
@@ -2696,20 +2764,36 @@ def build_app(config: AppConfig) -> dash.Dash:
             caption_frequencies = np.arange(n_freqs, dtype=float)
         else:
             caption_frequencies = frequencies[:n_freqs]
-        valid_frequency_count = int(np.sum(caption_frequencies > 1e-12))
-        reference = centroids[:, 0, :]
-        invalid_reference_count = int(np.sum(np.abs(reference) <= 1e-12))
+        divide_by_frequency = (angle_mode or "frequency_normalized") == "frequency_normalized"
+        normalize_by_m1 = (reference_mode or "relative") == "relative"
+        valid_frequency_count = (
+            int(np.sum(caption_frequencies > 1e-12))
+            if divide_by_frequency
+            else n_freqs
+        )
+        invalid_reference_count = 0
+        if normalize_by_m1:
+            reference = centroids[:, 0, :]
+            invalid_reference_count = int(np.sum(np.abs(reference) <= 1e-12))
         point_count = max(valid_frequency_count * n_sources, 0)
         color_text = "frequence" if (color_mode or "frequency") == "frequency" else "source attribuee"
+        vector_text = "Cm/M1" if normalize_by_m1 else "Cm"
+        theta_text = f"arg({vector_text})/f" if divide_by_frequency else f"arg({vector_text})"
         caption = (
             f"{n_freqs} lignes frequentielles x {n_sources} sources x {n_mics} composantes. "
-            f"{point_count} centroides traces par composante apres exclusion de f=0. "
-            f"Repere: {centroid_space}, rapports Cm/M1, theta = arg(Cm/M1)/f. "
+            f"{point_count} centroides traces par composante"
+            f"{' apres exclusion de f=0' if divide_by_frequency else ''}. "
+            f"Repere: {centroid_space}, theta = {theta_text}. "
             "Chaque point est projete sur le cercle unite avec (cos(theta), sin(theta)). "
             f"Couleur: {color_text}."
             f"{f' References M1 trop faibles ignorees: {invalid_reference_count}.' if invalid_reference_count else ''}"
         )
-        return _sawada_centroid_phase_figure(model, color_mode), caption
+        return _sawada_centroid_phase_figure(
+            model,
+            color_mode,
+            reference_mode,
+            angle_mode,
+        ), caption
 
     @app.callback(
         Output("spectrogram-stft-caption", "children"),
