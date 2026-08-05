@@ -972,17 +972,11 @@ def _sawada_complex_plane_figure(
     )
     if finite_values.size:
         axis_values = np.concatenate([np.real(finite_values), np.imag(finite_values)])
-        axis_min = float(np.nanmin(axis_values))
-        axis_max = float(np.nanmax(axis_values))
-        axis_center = 0.5 * (axis_min + axis_max)
-        axis_half_width = 0.5 * (axis_max - axis_min)
+        axis_half_width = float(np.nanmax(np.abs(axis_values)))
         if axis_half_width <= 1e-9:
             axis_half_width = 1.0
         axis_half_width *= 1.08
-        common_axis_range = [
-            axis_center - axis_half_width,
-            axis_center + axis_half_width,
-        ]
+        common_axis_range = [-axis_half_width, axis_half_width]
     else:
         common_axis_range = [-1.0, 1.0]
 
@@ -1094,6 +1088,8 @@ def _sawada_complex_plane_figure(
             title_text="Re",
             range=common_axis_range,
             zeroline=True,
+            zerolinecolor="#111827",
+            zerolinewidth=1.4,
             row=row,
             col=col,
         )
@@ -1101,6 +1097,10 @@ def _sawada_complex_plane_figure(
             title_text="Im",
             range=common_axis_range,
             zeroline=True,
+            zerolinecolor="#111827",
+            zerolinewidth=1.4,
+            scaleanchor=f"x{mic_index + 1}" if mic_index > 0 else "x",
+            scaleratio=1,
             row=row,
             col=col,
         )
@@ -1182,15 +1182,19 @@ def _sawada_centroid_phase_figure(
 
     finite_values = phase_over_frequency[finite_mask]
     if finite_values.size:
-        y_min = float(np.nanmin(finite_values))
-        y_max = float(np.nanmax(finite_values))
-        y_center = 0.5 * (y_min + y_max)
-        y_half_width = 0.5 * (y_max - y_min)
+        y_half_width = float(np.nanmax(np.abs(finite_values)))
         if y_half_width <= 1e-12:
-            y_half_width = max(abs(y_center) * 0.08, 1e-6)
-        y_range = [y_center - 1.08 * y_half_width, y_center + 1.08 * y_half_width]
+            y_half_width = 1e-6
+        y_range = [-1.08 * y_half_width, 1.08 * y_half_width]
     else:
         y_range = [-1e-6, 1e-6]
+    valid_frequencies = frequencies[valid_frequency & np.isfinite(frequencies)]
+    if valid_frequencies.size:
+        x_max = float(np.nanmax(valid_frequencies))
+        x_padding = max(0.04 * x_max, 1.0)
+        x_range = [-x_padding, x_max + x_padding]
+    else:
+        x_range = [-1.0, 1.0]
 
     for mic_index in range(n_mics):
         row = mic_index // 2 + 1
@@ -1258,8 +1262,24 @@ def _sawada_centroid_phase_figure(
                     col=col,
                 )
 
-        fig.update_xaxes(title_text="Frequence (Hz)", row=row, col=col)
-        fig.update_yaxes(title_text="arg/f (rad/Hz)", range=y_range, row=row, col=col)
+        fig.update_xaxes(
+            title_text="Frequence (Hz)",
+            range=x_range,
+            zeroline=True,
+            zerolinecolor="#111827",
+            zerolinewidth=1.4,
+            row=row,
+            col=col,
+        )
+        fig.update_yaxes(
+            title_text="arg/f (rad/Hz)",
+            range=y_range,
+            zeroline=True,
+            zerolinecolor="#111827",
+            zerolinewidth=1.4,
+            row=row,
+            col=col,
+        )
 
     fig.update_layout(
         title="Phases relatives des centroides Sawada",
