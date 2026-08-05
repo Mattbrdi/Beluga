@@ -1125,6 +1125,7 @@ def _sawada_centroid_phase_figure(
     color_mode: str = "frequency",
     reference_mode: str = "relative",
     angle_mode: str = "frequency_normalized",
+    frequency_power: float = 0.0,
 ) -> go.Figure:
     centroids = np.asarray(sawada_model.get("centroids_unwhitened", []))
     if centroids.ndim != 3 or centroids.size == 0:
@@ -1163,6 +1164,7 @@ def _sawada_centroid_phase_figure(
     eps = 1e-12
     reference_mode = reference_mode or "relative"
     angle_mode = angle_mode or "frequency_normalized"
+    frequency_power = float(frequency_power or 0.0)
     normalize_by_m1 = reference_mode == "relative"
     divide_by_frequency = angle_mode == "frequency_normalized"
 
@@ -1178,13 +1180,14 @@ def _sawada_centroid_phase_figure(
     valid_frequency = frequencies > eps
     phase_values = np.angle(phase_input)
     if divide_by_frequency:
+        frequency_scale = 10.0 ** frequency_power
         theta_values_all = phase_values / np.where(
             valid_frequency,
-            frequencies,
+            frequencies / frequency_scale,
             np.nan,
         )[:, np.newaxis, np.newaxis]
         valid_angle_frequency = valid_frequency
-        theta_unit = "rad/Hz"
+        theta_unit = f"rad/(Hz/1e{frequency_power:g})"
     else:
         theta_values_all = phase_values
         valid_angle_frequency = np.ones(n_freqs, dtype=bool)
@@ -1339,7 +1342,7 @@ def _sawada_centroid_phase_figure(
         title=(
             "Centroides Sawada sur cercle unite - "
             f"{'Cm/M1' if normalize_by_m1 else 'Cm'}, "
-            f"{'arg/f' if divide_by_frequency else 'arg'}"
+            f"{'arg/(f/10^n)' if divide_by_frequency else 'arg'}"
         ),
         margin={"l": 58, "r": 18, "t": 64, "b": 42},
         paper_bgcolor="#f7f7f3",
@@ -2111,7 +2114,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                     dcc.Dropdown(
                                                         id="centroid-phase-angle-dropdown",
                                                         options=[
-                                                            {"label": "arg/f", "value": "frequency_normalized"},
+                                                            {"label": "arg/(f/10^n)", "value": "frequency_normalized"},
                                                             {"label": "arg", "value": "raw"},
                                                         ],
                                                         value="frequency_normalized",
@@ -2119,6 +2122,20 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                     ),
                                                 ],
                                                 style={"width": "130px"},
+                                            ),
+                                            html.Div(
+                                                [
+                                                    html.Label("n"),
+                                                    dcc.Input(
+                                                        id="centroid-phase-frequency-power-input",
+                                                        type="number",
+                                                        value=0,
+                                                        step=1,
+                                                        debounce=True,
+                                                        style={"width": "100%"},
+                                                    ),
+                                                ],
+                                                style={"width": "90px"},
                                             ),
                                         ],
                                         className="panel-header",
@@ -2727,6 +2744,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         Input("centroid-phase-color-dropdown", "value"),
         Input("centroid-phase-reference-dropdown", "value"),
         Input("centroid-phase-angle-dropdown", "value"),
+        Input("centroid-phase-frequency-power-input", "value"),
     )
     def update_sawada_centroid_phases(
         split: str,
@@ -2735,10 +2753,17 @@ def build_app(config: AppConfig) -> dash.Dash:
         color_mode: str,
         reference_mode: str,
         angle_mode: str,
+        frequency_power: float | None,
     ) -> tuple[go.Figure, str]:
         if not split or not scene_id or algorithm != "sawada":
             return (
-                _sawada_centroid_phase_figure({}, color_mode, reference_mode, angle_mode),
+                _sawada_centroid_phase_figure(
+                    {},
+                    color_mode,
+                    reference_mode,
+                    angle_mode,
+                    frequency_power or 0.0,
+                ),
                 "Disponible uniquement pour Sawada.",
             )
 
@@ -2751,7 +2776,13 @@ def build_app(config: AppConfig) -> dash.Dash:
             centroid_space = "blanchi"
         if centroids.ndim != 3 or centroids.size == 0:
             return (
-                _sawada_centroid_phase_figure(model, color_mode, reference_mode, angle_mode),
+                _sawada_centroid_phase_figure(
+                    model,
+                    color_mode,
+                    reference_mode,
+                    angle_mode,
+                    frequency_power or 0.0,
+                ),
                 "Centroides absents dans sawada_model.npz.",
             )
 
@@ -2766,6 +2797,7 @@ def build_app(config: AppConfig) -> dash.Dash:
             caption_frequencies = frequencies[:n_freqs]
         divide_by_frequency = (angle_mode or "frequency_normalized") == "frequency_normalized"
         normalize_by_m1 = (reference_mode or "relative") == "relative"
+        frequency_power = float(frequency_power or 0.0)
         valid_frequency_count = (
             int(np.sum(caption_frequencies > 1e-12))
             if divide_by_frequency
@@ -2778,7 +2810,11 @@ def build_app(config: AppConfig) -> dash.Dash:
         point_count = max(valid_frequency_count * n_sources, 0)
         color_text = "frequence" if (color_mode or "frequency") == "frequency" else "source attribuee"
         vector_text = "Cm/M1" if normalize_by_m1 else "Cm"
-        theta_text = f"arg({vector_text})/f" if divide_by_frequency else f"arg({vector_text})"
+        theta_text = (
+            f"arg({vector_text})/(f/10^{frequency_power:g})"
+            if divide_by_frequency
+            else f"arg({vector_text})"
+        )
         caption = (
             f"{n_freqs} lignes frequentielles x {n_sources} sources x {n_mics} composantes. "
             f"{point_count} centroides traces par composante"
@@ -2793,6 +2829,7 @@ def build_app(config: AppConfig) -> dash.Dash:
             color_mode,
             reference_mode,
             angle_mode,
+            frequency_power,
         ), caption
 
     @app.callback(
