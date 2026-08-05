@@ -1120,6 +1120,164 @@ def _sawada_complex_plane_figure(
     return fig
 
 
+def _sawada_centroid_phase_figure(
+    sawada_model: dict[str, np.ndarray],
+    color_mode: str = "frequency",
+) -> go.Figure:
+    centroids = np.asarray(sawada_model.get("centroids_unwhitened", []))
+    if centroids.ndim != 3 or centroids.size == 0:
+        centroids = np.asarray(sawada_model.get("centroids", []))
+    frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
+
+    if centroids.ndim != 3 or centroids.size == 0:
+        fig = go.Figure()
+        fig.update_layout(
+            title="Phases des centroides indisponibles",
+            annotations=[
+                {
+                    "text": "Relance le benchmark Sawada pour sauvegarder les centroides.",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x": 0.5,
+                    "y": 0.5,
+                    "showarrow": False,
+                }
+            ],
+            margin={"l": 58, "r": 18, "t": 42, "b": 42},
+            paper_bgcolor="#f7f7f3",
+            plot_bgcolor="#ffffff",
+        )
+        return fig
+
+    if frequencies.size == centroids.shape[1] and frequencies.size != centroids.shape[0]:
+        centroids = np.moveaxis(centroids, 1, 0)
+
+    n_freqs, n_mics, n_sources = centroids.shape
+    if frequencies.size < n_freqs:
+        frequencies = np.arange(n_freqs, dtype=float)
+    else:
+        frequencies = frequencies[:n_freqs]
+
+    eps = 1e-12
+    reference = centroids[:, 0, :]
+    valid_reference = np.abs(reference) > eps
+    valid_frequency = frequencies > eps
+    safe_reference = np.where(valid_reference, reference, np.nan + 0j)
+    ratios = centroids / safe_reference[:, np.newaxis, :]
+    phase_over_frequency = np.angle(ratios) / np.where(
+        valid_frequency,
+        frequencies,
+        np.nan,
+    )[:, np.newaxis, np.newaxis]
+    finite_mask = np.isfinite(phase_over_frequency) & valid_reference[:, np.newaxis, :]
+
+    rows = int(math.ceil(n_mics / 2))
+    fig = make_subplots(
+        rows=rows,
+        cols=2,
+        subplot_titles=[f"M{mic_index + 1}/M1" for mic_index in range(n_mics)],
+    )
+    source_colors = ["#dc2626", "#2563eb", "#16a34a", "#7c3aed", "#0891b2", "#db2777"]
+    color_mode = color_mode or "frequency"
+
+    finite_values = phase_over_frequency[finite_mask]
+    if finite_values.size:
+        y_min = float(np.nanmin(finite_values))
+        y_max = float(np.nanmax(finite_values))
+        y_center = 0.5 * (y_min + y_max)
+        y_half_width = 0.5 * (y_max - y_min)
+        if y_half_width <= 1e-12:
+            y_half_width = max(abs(y_center) * 0.08, 1e-6)
+        y_range = [y_center - 1.08 * y_half_width, y_center + 1.08 * y_half_width]
+    else:
+        y_range = [-1e-6, 1e-6]
+
+    for mic_index in range(n_mics):
+        row = mic_index // 2 + 1
+        col = mic_index % 2 + 1
+        values = phase_over_frequency[:, mic_index, :]
+        valid_values = finite_mask[:, mic_index, :] & valid_frequency[:, np.newaxis]
+
+        if color_mode == "source":
+            for source_index in range(n_sources):
+                selector = valid_values[:, source_index]
+                if not np.any(selector):
+                    continue
+                fig.add_trace(
+                    go.Scattergl(
+                        x=frequencies[selector],
+                        y=values[selector, source_index],
+                        mode="markers",
+                        name=f"Source {source_index + 1}",
+                        legendgroup=f"centroid-phase-source-{source_index}",
+                        showlegend=mic_index == 0,
+                        marker={
+                            "size": 7,
+                            "color": source_colors[source_index % len(source_colors)],
+                            "opacity": 0.78,
+                        },
+                        hovertemplate=(
+                            f"Source {source_index + 1}<br>"
+                            "f=%{x:.1f}Hz<br>arg/f=%{y:.4e} rad/Hz"
+                            "<extra></extra>"
+                        ),
+                    ),
+                    row=row,
+                    col=col,
+                )
+        else:
+            x_values = np.repeat(frequencies[:, np.newaxis], n_sources, axis=1)
+            source_indices = np.repeat(
+                np.arange(1, n_sources + 1)[np.newaxis, :],
+                n_freqs,
+                axis=0,
+            )
+            selector = valid_values
+            if np.any(selector):
+                fig.add_trace(
+                    go.Scattergl(
+                        x=x_values[selector],
+                        y=values[selector],
+                        mode="markers",
+                        name="Centroide",
+                        showlegend=False,
+                        marker={
+                            "size": 7,
+                            "color": x_values[selector],
+                            "coloraxis": "coloraxis",
+                            "opacity": 0.76,
+                        },
+                        customdata=source_indices[selector],
+                        hovertemplate=(
+                            "Source %{customdata}<br>"
+                            "f=%{x:.1f}Hz<br>arg/f=%{y:.4e} rad/Hz"
+                            "<extra></extra>"
+                        ),
+                    ),
+                    row=row,
+                    col=col,
+                )
+
+        fig.update_xaxes(title_text="Frequence (Hz)", row=row, col=col)
+        fig.update_yaxes(title_text="arg/f (rad/Hz)", range=y_range, row=row, col=col)
+
+    fig.update_layout(
+        title="Phases relatives des centroides Sawada",
+        margin={"l": 58, "r": 18, "t": 64, "b": 42},
+        paper_bgcolor="#f7f7f3",
+        plot_bgcolor="#ffffff",
+        legend={"orientation": "h", "y": -0.12},
+    )
+    if color_mode == "frequency":
+        fig.update_layout(
+            coloraxis={
+                "colorscale": "Turbo",
+                "colorbar": {"title": "Hz"},
+            }
+        )
+    return fig
+
+
 def _wav_data_uri(signal: np.ndarray, fs: int) -> str:
     signal = np.asarray(signal, dtype=float)
     signal = np.nan_to_num(signal)
@@ -1837,6 +1995,41 @@ def build_app(config: AppConfig) -> dash.Dash:
                             html.Div(
                                 [
                                     html.Div(
+                                        [
+                                            html.H2("Phases centroides", className="panel-title"),
+                                            html.Div(
+                                                [
+                                                    html.Label("Couleur"),
+                                                    dcc.Dropdown(
+                                                        id="centroid-phase-color-dropdown",
+                                                        options=[
+                                                            {"label": "Frequence", "value": "frequency"},
+                                                            {"label": "Source attribuee", "value": "source"},
+                                                        ],
+                                                        value="frequency",
+                                                        clearable=False,
+                                                    ),
+                                                ],
+                                                style={"width": "180px"},
+                                            ),
+                                        ],
+                                        className="panel-header",
+                                    ),
+                                    dcc.Graph(
+                                        id="sawada-centroid-phase-graph",
+                                        config={"displayModeBar": True},
+                                        style={"height": "520px"},
+                                    ),
+                                    html.Div(
+                                        id="sawada-centroid-phase-caption",
+                                        className="muted panel-body",
+                                    ),
+                                ],
+                                className="panel",
+                            ),
+                            html.Div(
+                                [
+                                    html.Div(
                                         [html.H2("TDOA", className="panel-title")],
                                         className="panel-header",
                                     ),
@@ -2416,6 +2609,59 @@ def build_app(config: AppConfig) -> dash.Dash:
             ),
             caption,
         )
+
+    @app.callback(
+        Output("sawada-centroid-phase-graph", "figure"),
+        Output("sawada-centroid-phase-caption", "children"),
+        Input("split-dropdown", "value"),
+        Input("scene-dropdown", "value"),
+        Input("algorithm-dropdown", "value"),
+        Input("centroid-phase-color-dropdown", "value"),
+    )
+    def update_sawada_centroid_phases(
+        split: str,
+        scene_id: str,
+        algorithm: str,
+        color_mode: str,
+    ) -> tuple[go.Figure, str]:
+        if not split or not scene_id or algorithm != "sawada":
+            return _sawada_centroid_phase_figure({}), "Disponible uniquement pour Sawada."
+
+        bundle = _bundle(config, split, scene_id, algorithm)
+        model = bundle["sawada_model"]
+        centroids = np.asarray(model.get("centroids_unwhitened", []))
+        centroid_space = "non blanchi"
+        if centroids.ndim != 3 or centroids.size == 0:
+            centroids = np.asarray(model.get("centroids", []))
+            centroid_space = "blanchi"
+        if centroids.ndim != 3 or centroids.size == 0:
+            return (
+                _sawada_centroid_phase_figure(model, color_mode),
+                "Centroides absents dans sawada_model.npz.",
+            )
+
+        frequencies = np.asarray(model.get("frequencies", []), dtype=float)
+        if frequencies.size == centroids.shape[1] and frequencies.size != centroids.shape[0]:
+            centroids = np.moveaxis(centroids, 1, 0)
+
+        n_freqs, n_mics, n_sources = centroids.shape
+        if frequencies.size < n_freqs:
+            caption_frequencies = np.arange(n_freqs, dtype=float)
+        else:
+            caption_frequencies = frequencies[:n_freqs]
+        valid_frequency_count = int(np.sum(caption_frequencies > 1e-12))
+        reference = centroids[:, 0, :]
+        invalid_reference_count = int(np.sum(np.abs(reference) <= 1e-12))
+        point_count = max(valid_frequency_count * n_sources, 0)
+        color_text = "frequence" if (color_mode or "frequency") == "frequency" else "source attribuee"
+        caption = (
+            f"{n_freqs} lignes frequentielles x {n_sources} sources x {n_mics} composantes. "
+            f"{point_count} centroides traces par composante apres exclusion de f=0. "
+            f"Repere: {centroid_space}, rapports Cm/M1, ordonnee arg(Cm/M1)/f en rad/Hz. "
+            f"Couleur: {color_text}."
+            f"{f' References M1 trop faibles ignorees: {invalid_reference_count}.' if invalid_reference_count else ''}"
+        )
+        return _sawada_centroid_phase_figure(model, color_mode), caption
 
     @app.callback(
         Output("spectrogram-stft-caption", "children"),
