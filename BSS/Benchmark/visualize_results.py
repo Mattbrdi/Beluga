@@ -1180,27 +1180,33 @@ def _sawada_centroid_phase_figure(
     source_colors = ["#dc2626", "#2563eb", "#16a34a", "#7c3aed", "#0891b2", "#db2777"]
     color_mode = color_mode or "frequency"
 
-    finite_values = phase_over_frequency[finite_mask]
-    if finite_values.size:
-        y_half_width = float(np.nanmax(np.abs(finite_values)))
-        if y_half_width <= 1e-12:
-            y_half_width = 1e-6
-        y_range = [-1.08 * y_half_width, 1.08 * y_half_width]
-    else:
-        y_range = [-1e-6, 1e-6]
-    valid_frequencies = frequencies[valid_frequency & np.isfinite(frequencies)]
-    if valid_frequencies.size:
-        x_max = float(np.nanmax(valid_frequencies))
-        x_padding = max(0.04 * x_max, 1.0)
-        x_range = [-x_padding, x_max + x_padding]
-    else:
-        x_range = [-1.0, 1.0]
+    unit_x = np.cos(phase_over_frequency)
+    unit_y = np.sin(phase_over_frequency)
+    circle_angles = np.linspace(0.0, 2.0 * np.pi, 241)
+    circle_x = np.cos(circle_angles)
+    circle_y = np.sin(circle_angles)
+    axis_range = [-1.08, 1.08]
 
     for mic_index in range(n_mics):
         row = mic_index // 2 + 1
         col = mic_index % 2 + 1
-        values = phase_over_frequency[:, mic_index, :]
+        theta_values = phase_over_frequency[:, mic_index, :]
         valid_values = finite_mask[:, mic_index, :] & valid_frequency[:, np.newaxis]
+
+        fig.add_trace(
+            go.Scatter(
+                x=circle_x,
+                y=circle_y,
+                mode="lines",
+                name="Cercle unite",
+                legendgroup="unit-circle",
+                showlegend=mic_index == 0,
+                line={"color": "#9ca3af", "width": 1.2},
+                hoverinfo="skip",
+            ),
+            row=row,
+            col=col,
+        )
 
         if color_mode == "source":
             for source_index in range(n_sources):
@@ -1209,8 +1215,8 @@ def _sawada_centroid_phase_figure(
                     continue
                 fig.add_trace(
                     go.Scattergl(
-                        x=frequencies[selector],
-                        y=values[selector, source_index],
+                        x=unit_x[selector, mic_index, source_index],
+                        y=unit_y[selector, mic_index, source_index],
                         mode="markers",
                         name=f"Source {source_index + 1}",
                         legendgroup=f"centroid-phase-source-{source_index}",
@@ -1220,9 +1226,18 @@ def _sawada_centroid_phase_figure(
                             "color": source_colors[source_index % len(source_colors)],
                             "opacity": 0.78,
                         },
+                        customdata=np.stack(
+                            [
+                                frequencies[selector],
+                                theta_values[selector, source_index],
+                            ],
+                            axis=1,
+                        ),
                         hovertemplate=(
                             f"Source {source_index + 1}<br>"
-                            "f=%{x:.1f}Hz<br>arg/f=%{y:.4e} rad/Hz"
+                            "f=%{customdata[0]:.1f}Hz<br>"
+                            "theta=%{customdata[1]:.4e} rad/Hz<br>"
+                            "x=%{x:.4f}<br>y=%{y:.4f}"
                             "<extra></extra>"
                         ),
                     ),
@@ -1238,10 +1253,18 @@ def _sawada_centroid_phase_figure(
             )
             selector = valid_values
             if np.any(selector):
+                customdata = np.stack(
+                    [
+                        source_indices[selector],
+                        x_values[selector],
+                        theta_values[selector],
+                    ],
+                    axis=1,
+                )
                 fig.add_trace(
                     go.Scattergl(
-                        x=x_values[selector],
-                        y=values[selector],
+                        x=unit_x[:, mic_index, :][selector],
+                        y=unit_y[:, mic_index, :][selector],
                         mode="markers",
                         name="Centroide",
                         showlegend=False,
@@ -1251,10 +1274,12 @@ def _sawada_centroid_phase_figure(
                             "coloraxis": "coloraxis",
                             "opacity": 0.76,
                         },
-                        customdata=source_indices[selector],
+                        customdata=customdata,
                         hovertemplate=(
-                            "Source %{customdata}<br>"
-                            "f=%{x:.1f}Hz<br>arg/f=%{y:.4e} rad/Hz"
+                            "Source %{customdata[0]:.0f}<br>"
+                            "f=%{customdata[1]:.1f}Hz<br>"
+                            "theta=%{customdata[2]:.4e} rad/Hz<br>"
+                            "x=%{x:.4f}<br>y=%{y:.4f}"
                             "<extra></extra>"
                         ),
                     ),
@@ -1263,8 +1288,8 @@ def _sawada_centroid_phase_figure(
                 )
 
         fig.update_xaxes(
-            title_text="Frequence (Hz)",
-            range=x_range,
+            title_text="cos(theta)",
+            range=axis_range,
             zeroline=True,
             zerolinecolor="#111827",
             zerolinewidth=1.4,
@@ -1272,17 +1297,19 @@ def _sawada_centroid_phase_figure(
             col=col,
         )
         fig.update_yaxes(
-            title_text="arg/f (rad/Hz)",
-            range=y_range,
+            title_text="sin(theta)",
+            range=axis_range,
             zeroline=True,
             zerolinecolor="#111827",
             zerolinewidth=1.4,
+            scaleanchor=f"x{mic_index + 1}" if mic_index > 0 else "x",
+            scaleratio=1,
             row=row,
             col=col,
         )
 
     fig.update_layout(
-        title="Phases relatives des centroides Sawada",
+        title="Centroides Sawada sur cercle unite",
         margin={"l": 58, "r": 18, "t": 64, "b": 42},
         paper_bgcolor="#f7f7f3",
         plot_bgcolor="#ffffff",
@@ -2677,7 +2704,8 @@ def build_app(config: AppConfig) -> dash.Dash:
         caption = (
             f"{n_freqs} lignes frequentielles x {n_sources} sources x {n_mics} composantes. "
             f"{point_count} centroides traces par composante apres exclusion de f=0. "
-            f"Repere: {centroid_space}, rapports Cm/M1, ordonnee arg(Cm/M1)/f en rad/Hz. "
+            f"Repere: {centroid_space}, rapports Cm/M1, theta = arg(Cm/M1)/f. "
+            "Chaque point est projete sur le cercle unite avec (cos(theta), sin(theta)). "
             f"Couleur: {color_text}."
             f"{f' References M1 trop faibles ignorees: {invalid_reference_count}.' if invalid_reference_count else ''}"
         )
