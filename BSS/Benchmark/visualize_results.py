@@ -618,6 +618,149 @@ def _energy_db_limits(values: np.ndarray) -> tuple[float, float]:
     return zmin, zmax
 
 
+def _energy_linear_limits(values: np.ndarray) -> tuple[float, float]:
+    finite_values = np.asarray(values)[np.isfinite(values)]
+    if finite_values.size == 0:
+        return 0.0, 1.0
+
+    zmin = float(np.nanpercentile(finite_values, 1))
+    zmax = float(np.nanpercentile(finite_values, 99))
+    if zmax <= zmin:
+        zmax = zmin + 1.0
+    return zmin, zmax
+
+
+def _source_index_for_masked_spectrogram(
+    bundle: dict[str, Any],
+    group_key: str,
+    trace_index: int,
+) -> int | None:
+    if group_key == "estimated":
+        estimated = bundle.get("estimated_sources")
+        if estimated is None:
+            return None
+        estimated = np.asarray(estimated)
+        if estimated.ndim == 3 and estimated.shape[1] > 0:
+            source_index = trace_index // estimated.shape[1]
+            return source_index if 0 <= source_index < estimated.shape[0] else None
+        if estimated.ndim == 2:
+            return trace_index if 0 <= trace_index < estimated.shape[0] else None
+
+    return None
+
+
+def _masked_mixture_spectrogram_figure(
+    sawada_model: dict[str, np.ndarray],
+    source_index: int,
+    max_frequency: float | None,
+    frequency_scale: str = "linear",
+    spectrogram_scale: str = "db",
+    title_suffix: str = "",
+) -> go.Figure | None:
+    masks = np.asarray(sawada_model.get("masks", []), dtype=float)
+    tf_energy = np.asarray(sawada_model.get("tf_energy", []), dtype=float)
+    frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
+    times = np.asarray(sawada_model.get("times", []), dtype=float)
+    if masks.ndim != 3 or tf_energy.ndim != 2 or masks.size == 0 or tf_energy.size == 0:
+        return None
+
+    source_index = min(max(int(source_index), 0), masks.shape[0] - 1)
+    n_freqs = min(masks.shape[1], tf_energy.shape[0])
+    n_times = min(masks.shape[2], tf_energy.shape[1])
+    energy = masks[source_index, :n_freqs, :n_times] * tf_energy[:n_freqs, :n_times]
+    scale_energy = tf_energy[:n_freqs, :n_times]
+    frequencies = (
+        frequencies[:n_freqs]
+        if frequencies.size >= n_freqs
+        else np.arange(n_freqs)
+    )
+    times = times[:n_times] if times.size >= n_times else np.arange(n_times)
+
+    if max_frequency is not None and max_frequency > 0:
+        mask = frequencies <= max_frequency
+        frequencies = frequencies[mask]
+        energy = energy[mask, :]
+        scale_energy = scale_energy[mask, :]
+
+    yaxis_type = "log" if frequency_scale == "log" else "linear"
+    if yaxis_type == "log":
+        mask = frequencies > 0
+        frequencies = frequencies[mask]
+        energy = energy[mask, :]
+        scale_energy = scale_energy[mask, :]
+
+    if spectrogram_scale == "db":
+        values = 10 * np.log10(energy + 1e-20)
+        zmin, zmax = _energy_db_limits(10 * np.log10(scale_energy + 1e-20))
+        colorbar_title = "dB"
+    else:
+        values = energy
+        zmin, zmax = _energy_linear_limits(scale_energy)
+        colorbar_title = "energie"
+
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=values,
+            x=times,
+            y=frequencies,
+            colorscale="Magma",
+            zmin=zmin,
+            zmax=zmax,
+            colorbar={"title": colorbar_title},
+            hovertemplate=(
+                "t=%{x:.4f}s<br>f=%{y:.1f}Hz<br>E masquee=%{z:.3g}"
+                "<extra></extra>"
+            ),
+        )
+    )
+    suffix = f" - {title_suffix}" if title_suffix else ""
+    fig.update_layout(
+        margin={"l": 58, "r": 18, "t": 34, "b": 42},
+        title=f"STFT(melange) x masque S{source_index + 1}{suffix}",
+        xaxis_title="Temps (s)",
+        yaxis_title="Frequence (Hz)",
+        yaxis_type=yaxis_type,
+        paper_bgcolor="#f7f7f3",
+        plot_bgcolor="#ffffff",
+    )
+    return fig
+
+
+def _comparison_spectrogram_figure(
+    bundle: dict[str, Any],
+    group_key: str,
+    group: SignalGroup,
+    trace_index: int,
+    nperseg: int,
+    max_frequency: float | None,
+    frequency_scale: str,
+    spectrogram_scale: str,
+    stft_kwargs: dict[str, Any] | None,
+) -> go.Figure:
+    source_index = _source_index_for_masked_spectrogram(bundle, group_key, trace_index)
+    if source_index is not None:
+        figure = _masked_mixture_spectrogram_figure(
+            bundle["sawada_model"],
+            source_index,
+            max_frequency,
+            frequency_scale,
+            spectrogram_scale,
+            group.traces[trace_index],
+        )
+        if figure is not None:
+            return figure
+
+    return _spectrogram_figure(
+        group,
+        trace_index,
+        nperseg,
+        max_frequency,
+        frequency_scale,
+        spectrogram_scale,
+        stft_kwargs,
+    )
+
+
 def _sawada_mask_figure(
     sawada_model: dict[str, np.ndarray],
     source_index: int,
@@ -2928,7 +3071,8 @@ def build_app(config: AppConfig) -> dash.Dash:
             nperseg = int(manual_nperseg or 2048)
             noverlap = nperseg // 2
             return (
-                "Spectrogrammes A/B: STFT manuelle, "
+                "Spectrogrammes A/B: les traces Sources estimees Sawada affichent "
+                "STFT(melange) x masque. Les autres traces utilisent une STFT manuelle: "
                 f"fenetre {nperseg}, overlap {noverlap}, nfft auto, window hann."
             )
 
@@ -2943,7 +3087,8 @@ def build_app(config: AppConfig) -> dash.Dash:
         nfft = stft_kwargs.get("nfft")
         window = stft_kwargs.get("window")
         return (
-            "Spectrogrammes A/B: STFT benchmark utilisee, "
+            "Spectrogrammes A/B: les traces Sources estimees Sawada affichent "
+            "STFT(melange) x masque. Les autres traces utilisent la STFT benchmark: "
             f"fenetre {nperseg}, overlap {noverlap}, "
             f"nfft {'auto' if nfft is None else nfft}, window {window}."
         )
@@ -3043,7 +3188,9 @@ def build_app(config: AppConfig) -> dash.Dash:
             _overview_children(bundle),
             warning,
             _time_figure(group, trace_index),
-            _spectrogram_figure(
+            _comparison_spectrogram_figure(
+                bundle,
+                group_key,
                 group,
                 trace_index,
                 nperseg,
@@ -3053,7 +3200,9 @@ def build_app(config: AppConfig) -> dash.Dash:
                 stft_kwargs,
             ),
             _time_figure(compare_group, compare_trace_index),
-            _spectrogram_figure(
+            _comparison_spectrogram_figure(
+                bundle,
+                compare_group_key,
                 compare_group,
                 compare_trace_index,
                 nperseg,
