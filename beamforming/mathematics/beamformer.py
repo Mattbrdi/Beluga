@@ -146,7 +146,7 @@ def _get_steering_vector_per_freq(
     tetrahedra: TetrahedralArray,
     Theta: float | NDArray[np.float64],
     Phi: float | NDArray[np.float64],
-) -> NDArray[np.float64]:
+) -> NDArray[np.complex128]:
     """Utility function. Compute steering vector for an array of frequencies and provided angles
 
     Parameters
