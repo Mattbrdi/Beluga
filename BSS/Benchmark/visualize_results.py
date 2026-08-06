@@ -1268,7 +1268,7 @@ def _sawada_centroid_phase_figure(
     color_mode: str = "frequency",
     reference_mode: str = "relative",
     angle_mode: str = "frequency_normalized",
-    frequency_power: float = 0.0,
+    frequency_divisor: float = 1.0,
     frequency_min: float | None = None,
     frequency_max: float | None = None,
 ) -> go.Figure:
@@ -1309,7 +1309,9 @@ def _sawada_centroid_phase_figure(
     eps = 1e-12
     reference_mode = reference_mode or "relative"
     angle_mode = angle_mode or "frequency_normalized"
-    frequency_power = float(frequency_power or 0.0)
+    frequency_divisor = float(frequency_divisor or 1.0)
+    if abs(frequency_divisor) <= eps:
+        frequency_divisor = 1.0
     frequency_min = None if frequency_min is None else float(frequency_min)
     frequency_max = None if frequency_max is None else float(frequency_max)
     if (
@@ -1338,14 +1340,13 @@ def _sawada_centroid_phase_figure(
     valid_frequency = frequencies > eps
     phase_values = np.angle(phase_input)
     if divide_by_frequency:
-        frequency_scale = 10.0 ** frequency_power
         theta_values_all = phase_values / np.where(
             valid_frequency,
-            frequencies / frequency_scale,
+            frequencies / frequency_divisor,
             np.nan,
         )[:, np.newaxis, np.newaxis]
         valid_angle_frequency = valid_frequency
-        theta_unit = f"rad/(Hz/1e{frequency_power:g})"
+        theta_unit = f"rad/(Hz/{frequency_divisor:g})"
     else:
         theta_values_all = phase_values
         valid_angle_frequency = np.ones(n_freqs, dtype=bool)
@@ -1501,7 +1502,7 @@ def _sawada_centroid_phase_figure(
         title=(
             "Centroides Sawada sur cercle unite - "
             f"{'Cm/M1' if normalize_by_m1 else 'Cm'}, "
-            f"{'arg/(f/10^n)' if divide_by_frequency else 'arg'}"
+            f"{'arg/(f/k)' if divide_by_frequency else 'arg'}"
         ),
         margin={"l": 58, "r": 18, "t": 64, "b": 42},
         paper_bgcolor="#f7f7f3",
@@ -2273,7 +2274,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                     dcc.Dropdown(
                                                         id="centroid-phase-angle-dropdown",
                                                         options=[
-                                                            {"label": "arg/(f/10^n)", "value": "frequency_normalized"},
+                                                            {"label": "arg/(f/k)", "value": "frequency_normalized"},
                                                             {"label": "arg", "value": "raw"},
                                                         ],
                                                         value="frequency_normalized",
@@ -2284,11 +2285,11 @@ def build_app(config: AppConfig) -> dash.Dash:
                                             ),
                                             html.Div(
                                                 [
-                                                    html.Label("n"),
+                                                    html.Label("k"),
                                                     dcc.Input(
-                                                        id="centroid-phase-frequency-power-input",
+                                                        id="centroid-phase-frequency-divisor-input",
                                                         type="number",
-                                                        value=0,
+                                                        value=1,
                                                         step=1,
                                                         debounce=True,
                                                         style={"width": "100%"},
@@ -2929,7 +2930,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         Input("centroid-phase-color-dropdown", "value"),
         Input("centroid-phase-reference-dropdown", "value"),
         Input("centroid-phase-angle-dropdown", "value"),
-        Input("centroid-phase-frequency-power-input", "value"),
+        Input("centroid-phase-frequency-divisor-input", "value"),
         Input("centroid-phase-frequency-min-input", "value"),
         Input("centroid-phase-frequency-max-input", "value"),
     )
@@ -2940,7 +2941,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         color_mode: str,
         reference_mode: str,
         angle_mode: str,
-        frequency_power: float | None,
+        frequency_divisor: float | None,
         frequency_min: float | None,
         frequency_max: float | None,
     ) -> tuple[go.Figure, str]:
@@ -2951,7 +2952,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                     color_mode,
                     reference_mode,
                     angle_mode,
-                    frequency_power or 0.0,
+                    frequency_divisor or 1.0,
                     frequency_min,
                     frequency_max,
                 ),
@@ -2972,7 +2973,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                     color_mode,
                     reference_mode,
                     angle_mode,
-                    frequency_power or 0.0,
+                    frequency_divisor or 1.0,
                     frequency_min,
                     frequency_max,
                 ),
@@ -2990,7 +2991,9 @@ def build_app(config: AppConfig) -> dash.Dash:
             caption_frequencies = frequencies[:n_freqs]
         divide_by_frequency = (angle_mode or "frequency_normalized") == "frequency_normalized"
         normalize_by_m1 = (reference_mode or "relative") == "relative"
-        frequency_power = float(frequency_power or 0.0)
+        frequency_divisor = float(frequency_divisor or 1.0)
+        if abs(frequency_divisor) <= 1e-12:
+            frequency_divisor = 1.0
         frequency_min = None if frequency_min is None else float(frequency_min)
         frequency_max = None if frequency_max is None else float(frequency_max)
         if (
@@ -3017,7 +3020,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         color_text = "frequence" if (color_mode or "frequency") == "frequency" else "source attribuee"
         vector_text = "Cm/M1" if normalize_by_m1 else "Cm"
         theta_text = (
-            f"arg({vector_text})/(f/10^{frequency_power:g})"
+            f"arg({vector_text})/(f/{frequency_divisor:g})"
             if divide_by_frequency
             else f"arg({vector_text})"
         )
@@ -3044,7 +3047,7 @@ def build_app(config: AppConfig) -> dash.Dash:
             color_mode,
             reference_mode,
             angle_mode,
-            frequency_power,
+            frequency_divisor,
             frequency_min,
             frequency_max,
         ), caption
