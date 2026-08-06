@@ -271,7 +271,7 @@ def _compute_cssm_correlation_matrix(
     freqs, Zxx = freqs[freq_mask], Zxx[:, freq_mask, :]
 
     if tf_mask is not None:
-        Zxx = Zxx * (tf_mask == 1)
+        Zxx = Zxx * (tf_mask != 0)
 
     Zxx = np.swapaxes(Zxx, 0, 1)  # (F, 4, T)
 

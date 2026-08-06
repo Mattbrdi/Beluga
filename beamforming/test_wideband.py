@@ -15,10 +15,11 @@ from beamforming.classes import *
 from beamforming.mathematics.wideband_beamforming import wideband_cssm_music_optimized_doa, wideband_cssm_mvdr_optimized_doa
 from beamforming.simulation.visualization import visualize_scene_3D, plot_results
 from beamforming.mathematics.masked_beamforming import masked_music_doa, masked_mvdr_doa
+from beamforming.mathematics.srp_tops import srp_phat_doa, tops_doa
 is_tf_mask = True
 
 mask = None
-std_noise = 5
+std_noise = 0
 rng = np.random.default_rng(seed=42)  
 
 
@@ -31,7 +32,8 @@ regular_tetrahedra = TetrahedralArray([
         [1 / 2, np.sqrt(3) / 6, np.sqrt(2 / 3)],
     ])
 
-freqs = [16000, 15000, 12000, 8000]
+freqs = [16000, 15000, 12000, 8000, 18000]
+# freqs = [1000, 1200, 1400, 1600]
 center_freq = min(np.mean(freqs), 2000)
 
 print("Generating Data")
@@ -59,23 +61,33 @@ if is_tf_mask:
     plot_spectrogram_4D(audio_array, SAMPLING_RATE, is_db=False, mask = mask)
 # visualize_scene_3D(tetrahedra, source)
 print("Beamforming Doa processing")
-start = time()
-u_narrow_masked_mvdr = masked_mvdr_doa(tetrahedra, audio_array)
-t1 = time()
-u_cssm_music = wideband_cssm_music_optimized_doa(tetrahedra, audio_array, center_freq, tf_mask=mask)
+if is_tf_mask:
+    start = time()
+    u_narrow_masked_mvdr = masked_mvdr_doa(tetrahedra, audio_array, mask=AudioMask(mask))
+    t1 = time()
+    u_narrow_masked_music = masked_music_doa(tetrahedra, audio_array, mask=AudioMask(mask))
 t2 = time()
-u_narrow_masked_music = masked_music_doa(tetrahedra, audio_array)
+u_cssm_music = wideband_cssm_music_optimized_doa(tetrahedra, audio_array, center_freq, tf_mask=mask)
+
 t3 = time()
 u_cssm_mvdr = wideband_cssm_mvdr_optimized_doa(tetrahedra, audio_array, center_freq, tf_mask=mask)
-
+t4 = time()
+u_tops = tops_doa(tetrahedra, audio_array, 12000, tf_mask=mask)
+t5 = time()
+u_srp_phat = srp_phat_doa(tetrahedra, audio_array, tf_mask=mask)
 end = time()
 # u = cssm_mvdr_optim_doa(tetrahedra, audio_array, center_freq)
-
+if not is_tf_mask:
+    inference_duration = 0
 print("========================================")
-print(f"MASKED MVDR Error: {100*np.linalg.norm((u_narrow_masked_mvdr - u_true) / np.linalg.norm(u_cssm_mvdr))} and took {t1 - start + inference_duration}s")
-print(f"CSSM MUSIC Error: {100*np.linalg.norm((u_cssm_music - u_true) / np.linalg.norm(u_cssm_music))} and took {t2 - t1 + inference_duration}s")
-print(f"MASKED MUSIC Error: {100*np.linalg.norm((u_narrow_masked_music - u_true) / np.linalg.norm(u_narrow_masked_music))} and took {t3 - t2}s")
-print(f"CSSM MVDR Error: {100*np.linalg.norm((u_cssm_mvdr - u_true) / np.linalg.norm(u_narrow_masked_mvdr))} and took {end - t3}s")
+if is_tf_mask:
+    print(f"MASKED MVDR Error: {100*np.linalg.norm((u_narrow_masked_mvdr - u_true) / np.linalg.norm(u_narrow_masked_mvdr))} and took {t1 - start + inference_duration}s")
+    print(f"MASKED MUSIC Error: {100*np.linalg.norm((u_narrow_masked_music - u_true) / np.linalg.norm(u_narrow_masked_music))} and took {t2 - t1 + inference_duration}s")
+print(f"CSSM MUSIC Error: {100*np.linalg.norm((u_cssm_music - u_true) / np.linalg.norm(u_cssm_music))} and took {t3 - t2 + inference_duration}s")
+print(f"CSSM MVDR Error: {100*np.linalg.norm((u_cssm_mvdr - u_true) / np.linalg.norm(u_cssm_mvdr))} and took {t4 - t3 + inference_duration}s")
+print(f"TOPS Error: {100*np.linalg.norm((u_tops - u_true) / np.linalg.norm(u_tops))} and took {t5 - t4 + inference_duration}s")
+print(f"SRP-PHAT Error: {100*np.linalg.norm((u_srp_phat - u_true) / np.linalg.norm(u_srp_phat))} and took {end - t5 + inference_duration}s")
+
 
 print("Visualize result")
 
