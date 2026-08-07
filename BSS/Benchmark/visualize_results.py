@@ -1258,8 +1258,7 @@ def _sawada_centroid_phase_figure(
     sawada_model: dict[str, np.ndarray],
     color_mode: str = "frequency",
     reference_mode: str = "relative",
-    angle_mode: str = "frequency_normalized",
-    frequency_divisor: float = 1.0,
+    angle_mode: str = "delta_previous",
     frequency_min: float | None = None,
     frequency_max: float | None = None,
 ) -> go.Figure:
@@ -1297,12 +1296,8 @@ def _sawada_centroid_phase_figure(
     else:
         frequencies = frequencies[:n_freqs]
 
-    eps = 1e-12
     reference_mode = reference_mode or "relative"
-    angle_mode = angle_mode or "frequency_normalized"
-    frequency_divisor = float(frequency_divisor or 1.0)
-    if abs(frequency_divisor) <= eps:
-        frequency_divisor = 1.0
+    angle_mode = angle_mode or "delta_previous"
     frequency_min = None if frequency_min is None else float(frequency_min)
     frequency_max = None if frequency_max is None else float(frequency_max)
     if (
@@ -1312,7 +1307,7 @@ def _sawada_centroid_phase_figure(
     ):
         frequency_min, frequency_max = frequency_max, frequency_min
     use_relative_phase = reference_mode == "relative"
-    divide_by_frequency = angle_mode == "frequency_normalized"
+    use_delta_previous = angle_mode == "delta_previous"
 
     if use_relative_phase:
         reference = centroids[:, 0, :]
@@ -1327,20 +1322,18 @@ def _sawada_centroid_phase_figure(
         frequency_band &= frequencies >= frequency_min
     if frequency_max is not None:
         frequency_band &= frequencies <= frequency_max
-    valid_frequency = frequencies > eps
     phase_values = np.angle(phase_input)
-    if divide_by_frequency:
-        theta_values_all = phase_values / np.where(
-            valid_frequency,
-            frequencies / frequency_divisor,
-            np.nan,
-        )[:, np.newaxis, np.newaxis]
-        valid_angle_frequency = valid_frequency
-        theta_unit = f"rad/(Hz/{frequency_divisor:g})"
+    if use_delta_previous:
+        theta_values_all = np.full_like(phase_values, np.nan, dtype=float)
+        if n_freqs > 1:
+            theta_values_all[1:] = np.angle(
+                np.exp(1j * (phase_values[1:] - phase_values[:-1]))
+            )
+        valid_angle_frequency = np.arange(n_freqs) > 0
     else:
         theta_values_all = phase_values
         valid_angle_frequency = np.ones(n_freqs, dtype=bool)
-        theta_unit = "rad"
+    theta_unit = "rad"
     finite_mask = (
         np.isfinite(theta_values_all)
         & valid_reference[:, np.newaxis, :]
@@ -1492,7 +1485,7 @@ def _sawada_centroid_phase_figure(
         title=(
             "Centroides Sawada sur cercle unite - "
             f"{'Cm*conj(M1)' if use_relative_phase else 'Cm'}, "
-            f"{'arg/(f/k)' if divide_by_frequency else 'arg'}"
+            f"{'delta arg precedent' if use_delta_previous else 'arg'}"
         ),
         margin={"l": 58, "r": 18, "t": 64, "b": 42},
         paper_bgcolor="#f7f7f3",
@@ -2264,28 +2257,14 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                     dcc.Dropdown(
                                                         id="centroid-phase-angle-dropdown",
                                                         options=[
-                                                            {"label": "arg/(f/k)", "value": "frequency_normalized"},
+                                                            {"label": "Delta precedent", "value": "delta_previous"},
                                                             {"label": "arg", "value": "raw"},
                                                         ],
-                                                        value="frequency_normalized",
+                                                        value="delta_previous",
                                                         clearable=False,
                                                     ),
                                                 ],
                                                 style={"width": "130px"},
-                                            ),
-                                            html.Div(
-                                                [
-                                                    html.Label("k"),
-                                                    dcc.Input(
-                                                        id="centroid-phase-frequency-divisor-input",
-                                                        type="number",
-                                                        value=1,
-                                                        step=1,
-                                                        debounce=True,
-                                                        style={"width": "100%"},
-                                                    ),
-                                                ],
-                                                style={"width": "90px"},
                                             ),
                                             html.Div(
                                                 [
@@ -2915,7 +2894,6 @@ def build_app(config: AppConfig) -> dash.Dash:
         Input("centroid-phase-color-dropdown", "value"),
         Input("centroid-phase-reference-dropdown", "value"),
         Input("centroid-phase-angle-dropdown", "value"),
-        Input("centroid-phase-frequency-divisor-input", "value"),
         Input("centroid-phase-frequency-min-input", "value"),
         Input("centroid-phase-frequency-max-input", "value"),
     )
@@ -2926,7 +2904,6 @@ def build_app(config: AppConfig) -> dash.Dash:
         color_mode: str,
         reference_mode: str,
         angle_mode: str,
-        frequency_divisor: float | None,
         frequency_min: float | None,
         frequency_max: float | None,
     ) -> tuple[go.Figure, str]:
@@ -2937,7 +2914,6 @@ def build_app(config: AppConfig) -> dash.Dash:
                     color_mode,
                     reference_mode,
                     angle_mode,
-                    frequency_divisor or 1.0,
                     frequency_min,
                     frequency_max,
                 ),
@@ -2958,7 +2934,6 @@ def build_app(config: AppConfig) -> dash.Dash:
                     color_mode,
                     reference_mode,
                     angle_mode,
-                    frequency_divisor or 1.0,
                     frequency_min,
                     frequency_max,
                 ),
@@ -2974,11 +2949,8 @@ def build_app(config: AppConfig) -> dash.Dash:
             caption_frequencies = np.arange(n_freqs, dtype=float)
         else:
             caption_frequencies = frequencies[:n_freqs]
-        divide_by_frequency = (angle_mode or "frequency_normalized") == "frequency_normalized"
+        use_delta_previous = (angle_mode or "delta_previous") == "delta_previous"
         use_relative_phase = (reference_mode or "relative") == "relative"
-        frequency_divisor = float(frequency_divisor or 1.0)
-        if abs(frequency_divisor) <= 1e-12:
-            frequency_divisor = 1.0
         frequency_min = None if frequency_min is None else float(frequency_min)
         frequency_max = None if frequency_max is None else float(frequency_max)
         if (
@@ -2992,15 +2964,15 @@ def build_app(config: AppConfig) -> dash.Dash:
             frequency_band &= caption_frequencies >= frequency_min
         if frequency_max is not None:
             frequency_band &= caption_frequencies <= frequency_max
-        if divide_by_frequency:
-            frequency_band &= caption_frequencies > 1e-12
+        if use_delta_previous:
+            frequency_band &= np.arange(n_freqs) > 0
         valid_reference = np.ones((n_freqs, n_sources), dtype=bool)
         point_count = int(np.sum(frequency_band[:, np.newaxis] & valid_reference))
         color_text = "frequence" if (color_mode or "frequency") == "frequency" else "source attribuee"
         vector_text = "Cm*conj(M1)" if use_relative_phase else "Cm"
         theta_text = (
-            f"arg({vector_text})/(f/{frequency_divisor:g})"
-            if divide_by_frequency
+            f"arg({vector_text}(f_i)) - arg({vector_text}(f_i-1))"
+            if use_delta_previous
             else f"arg({vector_text})"
         )
         if frequency_min is None and frequency_max is None:
@@ -3014,7 +2986,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         caption = (
             f"{n_freqs} lignes frequentielles x {n_sources} sources x {n_mics} composantes. "
             f"{point_count} centroides traces par composante"
-            f"{' apres exclusion de f=0' if divide_by_frequency else ''}. "
+            f"{' apres exclusion du premier bin frequentiel' if use_delta_previous else ''}. "
             f"Bande: {band_text}. "
             f"Repere: {centroid_space}, theta = {theta_text}. "
             "Chaque point est projete sur le cercle unite avec (cos(theta), sin(theta)). "
@@ -3025,7 +2997,6 @@ def build_app(config: AppConfig) -> dash.Dash:
             color_mode,
             reference_mode,
             angle_mode,
-            frequency_divisor,
             frequency_min,
             frequency_max,
         ), caption
