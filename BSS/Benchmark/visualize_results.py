@@ -1079,23 +1079,14 @@ def _sawada_complex_plane_figure(
     time_values = times if times.size == n_times else np.arange(n_times)
     bin_values = bin_vectors[:, frequency_index, :].copy()
     centroid_values = centroids[frequency_index].copy()
-    invalid_reference = np.zeros(n_times, dtype=bool)
     reference_text = "composantes directes"
     if coordinate_mode == "relative":
-        eps = 1e-12
         reference = bin_values[0]
-        invalid_reference = np.abs(reference) <= eps
-        safe_reference = np.where(invalid_reference, np.nan + 0j, reference)
-        bin_values = bin_values / safe_reference[np.newaxis, :]
+        bin_values = bin_values * np.conj(reference)[np.newaxis, :]
 
         centroid_reference = centroid_values[0]
-        safe_centroid_reference = np.where(
-            np.abs(centroid_reference) <= eps,
-            np.nan + 0j,
-            centroid_reference,
-        )
-        centroid_values = centroid_values / safe_centroid_reference[np.newaxis, :]
-        reference_text = "rapports M/M1"
+        centroid_values = centroid_values * np.conj(centroid_reference)[np.newaxis, :]
+        reference_text = "M*conj(M1)"
     gt_values = np.asarray(gt_correctness if gt_correctness is not None else [])
     has_gt = color_mode == "gt" and gt_values.ndim == 2 and gt_values.shape[0] > frequency_index
     correctness = np.zeros(n_times, dtype=float)
@@ -1103,7 +1094,7 @@ def _sawada_complex_plane_figure(
         common_times = min(n_times, gt_values.shape[1])
         correctness[:common_times] = gt_values[frequency_index, :common_times]
 
-    scale_selector = ~invalid_reference
+    scale_selector = np.ones(n_times, dtype=bool)
     if not show_rejected_bins:
         scale_selector = scale_selector & used_by_em
     finite_bin_values = bin_values[:, scale_selector].reshape(-1)
@@ -1128,7 +1119,7 @@ def _sawada_complex_plane_figure(
         col = mic_index % 2 + 1
         values = bin_values[mic_index]
         component_label = (
-            f"M{mic_index + 1}/M1"
+            f"M{mic_index + 1}*conj(M1)"
             if coordinate_mode == "relative"
             else f"Micro {mic_index + 1}"
         )
@@ -1171,7 +1162,7 @@ def _sawada_complex_plane_figure(
                 col=col,
             )
 
-        rejected_selector = rejected_by_energy | invalid_reference
+        rejected_selector = rejected_by_energy
         if show_rejected_bins and np.any(rejected_selector):
             fig.add_trace(
                 go.Scattergl(
@@ -1320,14 +1311,13 @@ def _sawada_centroid_phase_figure(
         and frequency_min > frequency_max
     ):
         frequency_min, frequency_max = frequency_max, frequency_min
-    normalize_by_m1 = reference_mode == "relative"
+    use_relative_phase = reference_mode == "relative"
     divide_by_frequency = angle_mode == "frequency_normalized"
 
-    if normalize_by_m1:
+    if use_relative_phase:
         reference = centroids[:, 0, :]
-        valid_reference = np.abs(reference) > eps
-        safe_reference = np.where(valid_reference, reference, np.nan + 0j)
-        phase_input = centroids / safe_reference[:, np.newaxis, :]
+        valid_reference = np.ones((n_freqs, n_sources), dtype=bool)
+        phase_input = centroids * np.conj(reference)[:, np.newaxis, :]
     else:
         valid_reference = np.ones((n_freqs, n_sources), dtype=bool)
         phase_input = centroids
@@ -1363,7 +1353,7 @@ def _sawada_centroid_phase_figure(
         rows=rows,
         cols=2,
         subplot_titles=[
-            f"M{mic_index + 1}/M1" if normalize_by_m1 else f"M{mic_index + 1}"
+            f"M{mic_index + 1}*conj(M1)" if use_relative_phase else f"M{mic_index + 1}"
             for mic_index in range(n_mics)
         ],
     )
@@ -1501,7 +1491,7 @@ def _sawada_centroid_phase_figure(
     fig.update_layout(
         title=(
             "Centroides Sawada sur cercle unite - "
-            f"{'Cm/M1' if normalize_by_m1 else 'Cm'}, "
+            f"{'Cm*conj(M1)' if use_relative_phase else 'Cm'}, "
             f"{'arg/(f/k)' if divide_by_frequency else 'arg'}"
         ),
         margin={"l": 58, "r": 18, "t": 64, "b": 42},
@@ -2179,7 +2169,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                     dcc.Dropdown(
                                                         id="complex-coordinate-mode-dropdown",
                                                         options=[
-                                                            {"label": "Rapports M/M1", "value": "relative"},
+                                                            {"label": "M*conj(M1)", "value": "relative"},
                                                             {"label": "Directes", "value": "direct"},
                                                         ],
                                                         value="relative",
@@ -2259,7 +2249,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                     dcc.Dropdown(
                                                         id="centroid-phase-reference-dropdown",
                                                         options=[
-                                                            {"label": "Cm/M1", "value": "relative"},
+                                                            {"label": "Cm*conj(M1)", "value": "relative"},
                                                             {"label": "Cm", "value": "direct"},
                                                         ],
                                                         value="relative",
@@ -2866,10 +2856,6 @@ def build_app(config: AppConfig) -> dash.Dash:
             if active_clusters.ndim == 2 and active_clusters.shape[0] > frequency_index
             else source_masks.shape[0]
         )
-        invalid_reference_count = 0
-        if coordinate_mode == "relative":
-            reference_values = bin_vectors[0, frequency_index, :]
-            invalid_reference_count = int(np.sum(np.abs(reference_values) <= 1e-12))
         gt_correctness = (
             _sawada_gt_correctness(bundle, model, gt_permutation)
             if color_mode == "gt"
@@ -2904,8 +2890,7 @@ def build_app(config: AppConfig) -> dash.Dash:
             f"Hors seuil energie: {rejected_count}"
             f"{' affiches' if show_rejected_bins else ' masques'}. "
             f"Repere: {'non blanchi' if vector_space == 'unwhitened' else 'blanchi'}, "
-            f"{'rapports M/M1' if coordinate_mode == 'relative' else 'composantes directes'}."
-            f"{f' Reference M1 trop faible: {invalid_reference_count}.' if invalid_reference_count else ''}"
+            f"{'M*conj(M1)' if coordinate_mode == 'relative' else 'composantes directes'}."
             f"{gt_text}"
         )
         return (
@@ -2990,7 +2975,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         else:
             caption_frequencies = frequencies[:n_freqs]
         divide_by_frequency = (angle_mode or "frequency_normalized") == "frequency_normalized"
-        normalize_by_m1 = (reference_mode or "relative") == "relative"
+        use_relative_phase = (reference_mode or "relative") == "relative"
         frequency_divisor = float(frequency_divisor or 1.0)
         if abs(frequency_divisor) <= 1e-12:
             frequency_divisor = 1.0
@@ -3009,16 +2994,10 @@ def build_app(config: AppConfig) -> dash.Dash:
             frequency_band &= caption_frequencies <= frequency_max
         if divide_by_frequency:
             frequency_band &= caption_frequencies > 1e-12
-        invalid_reference_count = 0
-        if normalize_by_m1:
-            reference = centroids[:, 0, :]
-            invalid_reference_count = int(np.sum(np.abs(reference) <= 1e-12))
-            valid_reference = np.abs(reference) > 1e-12
-        else:
-            valid_reference = np.ones((n_freqs, n_sources), dtype=bool)
+        valid_reference = np.ones((n_freqs, n_sources), dtype=bool)
         point_count = int(np.sum(frequency_band[:, np.newaxis] & valid_reference))
         color_text = "frequence" if (color_mode or "frequency") == "frequency" else "source attribuee"
-        vector_text = "Cm/M1" if normalize_by_m1 else "Cm"
+        vector_text = "Cm*conj(M1)" if use_relative_phase else "Cm"
         theta_text = (
             f"arg({vector_text})/(f/{frequency_divisor:g})"
             if divide_by_frequency
@@ -3040,7 +3019,6 @@ def build_app(config: AppConfig) -> dash.Dash:
             f"Repere: {centroid_space}, theta = {theta_text}. "
             "Chaque point est projete sur le cercle unite avec (cos(theta), sin(theta)). "
             f"Couleur: {color_text}."
-            f"{f' References M1 trop faibles ignorees: {invalid_reference_count}.' if invalid_reference_count else ''}"
         )
         return _sawada_centroid_phase_figure(
             model,
