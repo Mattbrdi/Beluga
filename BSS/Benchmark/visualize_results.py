@@ -1351,6 +1351,14 @@ def _sawada_centroid_phase_figure(
         ],
     )
     source_colors = ["#dc2626", "#2563eb", "#16a34a", "#7c3aed", "#0891b2", "#db2777"]
+    source_frequency_colorscales = [
+        [[0.0, "#fee2e2"], [0.55, "#ef4444"], [1.0, "#7f1d1d"]],
+        [[0.0, "#dbeafe"], [0.55, "#3b82f6"], [1.0, "#1e3a8a"]],
+        [[0.0, "#dcfce7"], [0.55, "#22c55e"], [1.0, "#14532d"]],
+        [[0.0, "#ede9fe"], [0.55, "#8b5cf6"], [1.0, "#4c1d95"]],
+        [[0.0, "#ccfbf1"], [0.55, "#14b8a6"], [1.0, "#134e4a"]],
+        [[0.0, "#fce7f3"], [0.55, "#ec4899"], [1.0, "#831843"]],
+    ]
     color_mode = color_mode or "frequency"
 
     unit_x = np.cos(theta_values_all)
@@ -1398,6 +1406,51 @@ def _sawada_centroid_phase_figure(
                             "size": 7,
                             "color": source_colors[source_index % len(source_colors)],
                             "opacity": 0.78,
+                        },
+                        customdata=np.stack(
+                            [
+                                frequencies[selector],
+                                theta_values[selector, source_index],
+                            ],
+                            axis=1,
+                        ),
+                        hovertemplate=(
+                            f"Source {source_index + 1}<br>"
+                            "f=%{customdata[0]:.1f}Hz<br>"
+                            f"theta=%{{customdata[1]:.4e}} {theta_unit}<br>"
+                            "x=%{x:.4f}<br>y=%{y:.4f}"
+                            "<extra></extra>"
+                        ),
+                    ),
+                    row=row,
+                    col=col,
+                )
+        elif color_mode == "source_frequency":
+            for source_index in range(n_sources):
+                selector = valid_values[:, source_index]
+                if not np.any(selector):
+                    continue
+                fig.add_trace(
+                    go.Scattergl(
+                        x=unit_x[selector, mic_index, source_index],
+                        y=unit_y[selector, mic_index, source_index],
+                        mode="markers",
+                        name=f"Source {source_index + 1}",
+                        legendgroup=f"centroid-phase-source-frequency-{source_index}",
+                        showlegend=mic_index == 0,
+                        marker={
+                            "size": 7,
+                            "color": frequencies[selector],
+                            "colorscale": source_frequency_colorscales[
+                                source_index % len(source_frequency_colorscales)
+                            ],
+                            "showscale": mic_index == 0,
+                            "opacity": 0.8,
+                            "colorbar": {
+                                "title": f"S{source_index + 1} Hz",
+                                "x": 1.02 + 0.08 * source_index,
+                                "len": 0.78,
+                            },
                         },
                         customdata=np.stack(
                             [
@@ -2229,6 +2282,7 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                         options=[
                                                             {"label": "Frequence", "value": "frequency"},
                                                             {"label": "Source attribuee", "value": "source"},
+                                                            {"label": "Frequence + source", "value": "source_frequency"},
                                                         ],
                                                         value="frequency",
                                                         clearable=False,
@@ -2968,7 +3022,12 @@ def build_app(config: AppConfig) -> dash.Dash:
             frequency_band &= np.arange(n_freqs) > 0
         valid_reference = np.ones((n_freqs, n_sources), dtype=bool)
         point_count = int(np.sum(frequency_band[:, np.newaxis] & valid_reference))
-        color_text = "frequence" if (color_mode or "frequency") == "frequency" else "source attribuee"
+        if (color_mode or "frequency") == "frequency":
+            color_text = "frequence"
+        elif color_mode == "source_frequency":
+            color_text = "frequence avec une palette differente par source"
+        else:
+            color_text = "source attribuee"
         vector_text = "Cm*conj(M1)" if use_relative_phase else "Cm"
         theta_text = (
             f"arg({vector_text}(f_i)) - arg({vector_text}(f_i-1))"
