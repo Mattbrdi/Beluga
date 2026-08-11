@@ -1555,6 +1555,133 @@ def _sawada_centroid_phase_figure(
     return fig
 
 
+def _sawada_centroid_argument_frequency_figure(
+    sawada_model: dict[str, np.ndarray],
+    frequency_min: float | None = None,
+    frequency_max: float | None = None,
+) -> go.Figure:
+    centroids = np.asarray(sawada_model.get("centroids_unwhitened", []))
+    if centroids.ndim != 3 or centroids.size == 0:
+        centroids = np.asarray(sawada_model.get("centroids", []))
+    frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
+
+    if centroids.ndim != 3 or centroids.size == 0:
+        fig = go.Figure()
+        fig.update_layout(
+            title="Arguments des centroides indisponibles",
+            annotations=[
+                {
+                    "text": "Relance le benchmark Sawada pour sauvegarder les centroides.",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x": 0.5,
+                    "y": 0.5,
+                    "showarrow": False,
+                }
+            ],
+            margin={"l": 58, "r": 18, "t": 42, "b": 42},
+            paper_bgcolor="#f7f7f3",
+            plot_bgcolor="#ffffff",
+        )
+        return fig
+
+    if frequencies.size == centroids.shape[1] and frequencies.size != centroids.shape[0]:
+        centroids = np.moveaxis(centroids, 1, 0)
+
+    n_freqs, n_mics, n_sources = centroids.shape
+    if frequencies.size < n_freqs:
+        frequencies = np.arange(n_freqs, dtype=float)
+    else:
+        frequencies = frequencies[:n_freqs]
+
+    frequency_min = None if frequency_min is None else float(frequency_min)
+    frequency_max = None if frequency_max is None else float(frequency_max)
+    if (
+        frequency_min is not None
+        and frequency_max is not None
+        and frequency_min > frequency_max
+    ):
+        frequency_min, frequency_max = frequency_max, frequency_min
+
+    frequency_band = np.isfinite(frequencies)
+    if frequency_min is not None:
+        frequency_band &= frequencies >= frequency_min
+    if frequency_max is not None:
+        frequency_band &= frequencies <= frequency_max
+
+    relative_centroids = centroids * np.conj(centroids[:, 0, :])[:, np.newaxis, :]
+    argument_values = np.angle(relative_centroids)
+
+    rows = int(math.ceil(n_mics / 2))
+    fig = make_subplots(
+        rows=rows,
+        cols=2,
+        subplot_titles=[f"M{mic_index + 1}*conj(M1)" for mic_index in range(n_mics)],
+    )
+    source_colors = ["#dc2626", "#2563eb", "#16a34a", "#7c3aed", "#0891b2", "#db2777"]
+
+    for mic_index in range(n_mics):
+        row = mic_index // 2 + 1
+        col = mic_index % 2 + 1
+        for source_index in range(n_sources):
+            selector = frequency_band & np.isfinite(argument_values[:, mic_index, source_index])
+            if not np.any(selector):
+                continue
+            fig.add_trace(
+                go.Scattergl(
+                    x=frequencies[selector],
+                    y=argument_values[selector, mic_index, source_index],
+                    mode="lines+markers",
+                    name=f"Source {source_index + 1}",
+                    legendgroup=f"centroid-argument-source-{source_index}",
+                    showlegend=mic_index == 0,
+                    line={
+                        "color": source_colors[source_index % len(source_colors)],
+                        "width": 1.5,
+                    },
+                    marker={
+                        "size": 5,
+                        "color": source_colors[source_index % len(source_colors)],
+                        "opacity": 0.82,
+                    },
+                    hovertemplate=(
+                        f"Source {source_index + 1}<br>"
+                        "f=%{x:.1f}Hz<br>arg=%{y:.4f} rad"
+                        "<extra></extra>"
+                    ),
+                ),
+                row=row,
+                col=col,
+            )
+
+        fig.update_xaxes(
+            title_text="Frequence (Hz)",
+            zeroline=True,
+            zerolinecolor="#111827",
+            zerolinewidth=1.2,
+            row=row,
+            col=col,
+        )
+        fig.update_yaxes(
+            title_text="arg (rad)",
+            range=[-np.pi, np.pi],
+            zeroline=True,
+            zerolinecolor="#111827",
+            zerolinewidth=1.2,
+            row=row,
+            col=col,
+        )
+
+    fig.update_layout(
+        title="Arguments des centroides relatifs en fonction de la frequence",
+        margin={"l": 58, "r": 18, "t": 64, "b": 42},
+        paper_bgcolor="#f7f7f3",
+        plot_bgcolor="#ffffff",
+        legend={"orientation": "h", "y": -0.12},
+    )
+    return fig
+
+
 def _wav_data_uri(signal: np.ndarray, fs: int) -> str:
     signal = np.asarray(signal, dtype=float)
     signal = np.nan_to_num(signal)
@@ -2358,6 +2485,15 @@ def build_app(config: AppConfig) -> dash.Dash:
                                         id="sawada-centroid-phase-caption",
                                         className="muted panel-body",
                                     ),
+                                    dcc.Graph(
+                                        id="sawada-centroid-argument-frequency-graph",
+                                        config={"displayModeBar": True},
+                                        style={"height": "520px"},
+                                    ),
+                                    html.Div(
+                                        id="sawada-centroid-argument-frequency-caption",
+                                        className="muted panel-body",
+                                    ),
                                 ],
                                 className="panel",
                             ),
@@ -3059,6 +3195,83 @@ def build_app(config: AppConfig) -> dash.Dash:
             frequency_min,
             frequency_max,
         ), caption
+
+    @app.callback(
+        Output("sawada-centroid-argument-frequency-graph", "figure"),
+        Output("sawada-centroid-argument-frequency-caption", "children"),
+        Input("split-dropdown", "value"),
+        Input("scene-dropdown", "value"),
+        Input("algorithm-dropdown", "value"),
+        Input("centroid-phase-frequency-min-input", "value"),
+        Input("centroid-phase-frequency-max-input", "value"),
+    )
+    def update_sawada_centroid_argument_frequency(
+        split: str,
+        scene_id: str,
+        algorithm: str,
+        frequency_min: float | None,
+        frequency_max: float | None,
+    ) -> tuple[go.Figure, str]:
+        if not split or not scene_id or algorithm != "sawada":
+            return (
+                _sawada_centroid_argument_frequency_figure({}, frequency_min, frequency_max),
+                "Disponible uniquement pour Sawada.",
+            )
+
+        bundle = _bundle(config, split, scene_id, algorithm)
+        model = bundle["sawada_model"]
+        centroids = np.asarray(model.get("centroids_unwhitened", []))
+        centroid_space = "non blanchi"
+        if centroids.ndim != 3 or centroids.size == 0:
+            centroids = np.asarray(model.get("centroids", []))
+            centroid_space = "blanchi"
+        if centroids.ndim != 3 or centroids.size == 0:
+            return (
+                _sawada_centroid_argument_frequency_figure(model, frequency_min, frequency_max),
+                "Centroides absents dans sawada_model.npz.",
+            )
+
+        frequencies = np.asarray(model.get("frequencies", []), dtype=float)
+        if frequencies.size == centroids.shape[1] and frequencies.size != centroids.shape[0]:
+            centroids = np.moveaxis(centroids, 1, 0)
+
+        n_freqs, n_mics, n_sources = centroids.shape
+        if frequencies.size < n_freqs:
+            caption_frequencies = np.arange(n_freqs, dtype=float)
+        else:
+            caption_frequencies = frequencies[:n_freqs]
+        frequency_min = None if frequency_min is None else float(frequency_min)
+        frequency_max = None if frequency_max is None else float(frequency_max)
+        if (
+            frequency_min is not None
+            and frequency_max is not None
+            and frequency_min > frequency_max
+        ):
+            frequency_min, frequency_max = frequency_max, frequency_min
+        frequency_band = np.isfinite(caption_frequencies)
+        if frequency_min is not None:
+            frequency_band &= caption_frequencies >= frequency_min
+        if frequency_max is not None:
+            frequency_band &= caption_frequencies <= frequency_max
+        point_count = int(np.sum(frequency_band) * n_sources)
+        if frequency_min is None and frequency_max is None:
+            band_text = "toutes frequences"
+        elif frequency_min is None:
+            band_text = f"f <= {frequency_max:g} Hz"
+        elif frequency_max is None:
+            band_text = f"f >= {frequency_min:g} Hz"
+        else:
+            band_text = f"{frequency_min:g} <= f <= {frequency_max:g} Hz"
+        caption = (
+            f"{n_freqs} lignes frequentielles x {n_sources} sources x {n_mics} composantes. "
+            f"{point_count} centroides traces par composante. "
+            f"Bande: {band_text}. Repere: {centroid_space}, "
+            "arg(Cm*conj(M1)) en fonction de la frequence."
+        )
+        return (
+            _sawada_centroid_argument_frequency_figure(model, frequency_min, frequency_max),
+            caption,
+        )
 
     @app.callback(
         Output("spectrogram-stft-caption", "children"),
