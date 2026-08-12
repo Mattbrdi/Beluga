@@ -279,6 +279,7 @@ def _load_bundle(
             "mixed": scene.mixed.data,
             "clean_mixed": scene.clean_mixed.data,
             "noise": scene.noise.data,
+            "mixing_filters": scene.mixing.filters,
         }
         scene_metadata = {
             "duration": scene.metadata.duration,
@@ -392,6 +393,155 @@ def _sawada_gt_correctness(
     correctness[valid & (predicted == gt_labels[:n_freqs, :n_times])] = 1.0
     correctness[valid & (predicted != gt_labels[:n_freqs, :n_times])] = -1.0
     return correctness
+
+
+def _normalized_mixture_stft_for_gt(
+    bundle: dict[str, Any],
+    sawada_model: dict[str, np.ndarray],
+) -> np.ndarray:
+    vector_key = (
+        "bin_vectors_unwhitened"
+        if np.asarray(sawada_model.get("bin_vectors_unwhitened", [])).ndim == 3
+        else "bin_vectors"
+    )
+    bin_vectors = np.asarray(sawada_model.get(vector_key, []))
+    if bin_vectors.ndim == 3 and bin_vectors.size:
+        return bin_vectors
+
+    mixed = np.asarray(bundle.get("scene_arrays", {}).get("mixed", []), dtype=float)
+    if mixed.ndim != 2 or mixed.size == 0 or not int(bundle.get("fs", 0)):
+        return np.empty((0, 0, 0), dtype=complex)
+
+    stft_kwargs = _stft_kwargs_from_metrics(
+        bundle["metrics"],
+        sawada_model,
+        int(bundle["fs"]),
+    )
+    if mixed.shape[-1] < stft_kwargs["nperseg"]:
+        stft_kwargs["nperseg"] = mixed.shape[-1]
+        if stft_kwargs["noverlap"] is not None:
+            stft_kwargs["noverlap"] = min(stft_kwargs["noverlap"], stft_kwargs["nperseg"] - 1)
+    _, _, mixture_stft = sp_signal.stft(mixed, **stft_kwargs)
+    norms = np.linalg.norm(mixture_stft, axis=0, keepdims=True)
+    return mixture_stft / (norms + 1e-12)
+
+
+def _normalized_source_image_stfts_for_gt(
+    bundle: dict[str, Any],
+    sawada_model: dict[str, np.ndarray],
+    gt_permutation: str = "identity",
+) -> np.ndarray:
+    sources = np.asarray(bundle.get("scene_arrays", {}).get("sources", []), dtype=float)
+    mixing_filters = np.asarray(
+        bundle.get("scene_arrays", {}).get("mixing_filters", []),
+        dtype=float,
+    )
+    if (
+        sources.ndim != 2
+        or sources.size == 0
+        or mixing_filters.ndim != 3
+        or mixing_filters.size == 0
+        or not int(bundle.get("fs", 0))
+    ):
+        return np.empty((0, 0, 0, 0), dtype=complex)
+
+    n_mics, n_sources_from_filters, _ = mixing_filters.shape
+    n_sources = min(sources.shape[0], n_sources_from_filters)
+    if n_sources <= 0:
+        return np.empty((0, 0, 0, 0), dtype=complex)
+
+    source_images = np.zeros((n_sources, n_mics, sources.shape[1]), dtype=float)
+    for source_index in range(n_sources):
+        for mic_index in range(n_mics):
+            source_images[source_index, mic_index] = sp_signal.convolve(
+                sources[source_index],
+                mixing_filters[mic_index, source_index],
+                mode="same",
+                method="auto",
+            )
+
+    if gt_permutation == "swap" and n_sources >= 2:
+        source_images = source_images.copy()
+        source_images[[0, 1]] = source_images[[1, 0]]
+
+    stft_kwargs = _stft_kwargs_from_metrics(
+        bundle["metrics"],
+        sawada_model,
+        int(bundle["fs"]),
+    )
+    if source_images.shape[-1] < stft_kwargs["nperseg"]:
+        stft_kwargs["nperseg"] = source_images.shape[-1]
+        if stft_kwargs["noverlap"] is not None:
+            stft_kwargs["noverlap"] = min(stft_kwargs["noverlap"], stft_kwargs["nperseg"] - 1)
+    _, _, source_stfts = sp_signal.stft(source_images, **stft_kwargs)
+    norms = np.linalg.norm(source_stfts, axis=1, keepdims=True)
+    return source_stfts / (norms + 1e-12)
+
+
+def _ground_truth_centroids(
+    bundle: dict[str, Any],
+    sawada_model: dict[str, np.ndarray],
+    gt_permutation: str = "identity",
+    gt_centroid_mode: str = "mixture_masked",
+) -> np.ndarray:
+    gt_centroid_mode = gt_centroid_mode or "mixture_masked"
+    source_vectors = (
+        _normalized_source_image_stfts_for_gt(bundle, sawada_model, gt_permutation)
+        if gt_centroid_mode == "source_direct"
+        else np.empty((0, 0, 0, 0), dtype=complex)
+    )
+    use_source_vectors = source_vectors.ndim == 4 and source_vectors.size
+    bin_vectors = _normalized_mixture_stft_for_gt(bundle, sawada_model)
+    gt_labels, gt_valid = _ground_truth_tf_labels(bundle, sawada_model, gt_permutation)
+    if gt_labels.ndim != 2 or gt_valid.ndim != 2:
+        return np.empty((0, 0, 0), dtype=complex)
+
+    if use_source_vectors:
+        n_mics = source_vectors.shape[1]
+        n_freqs = min(source_vectors.shape[2], gt_labels.shape[0], gt_valid.shape[0])
+        n_times = min(source_vectors.shape[3], gt_labels.shape[1], gt_valid.shape[1])
+    else:
+        if bin_vectors.ndim != 3 or bin_vectors.size == 0:
+            return np.empty((0, 0, 0), dtype=complex)
+        n_mics = bin_vectors.shape[0]
+        n_freqs = min(bin_vectors.shape[1], gt_labels.shape[0], gt_valid.shape[0])
+        n_times = min(bin_vectors.shape[2], gt_labels.shape[1], gt_valid.shape[1])
+    if n_freqs == 0 or n_times == 0:
+        return np.empty((0, 0, 0), dtype=complex)
+
+    n_sources = int(np.nanmax(gt_labels[:n_freqs, :n_times])) + 1 if gt_labels.size else 0
+    if use_source_vectors:
+        n_sources = max(n_sources, source_vectors.shape[0])
+    masks = np.asarray(sawada_model.get("masks", []), dtype=float)
+    if masks.ndim == 3 and masks.shape[0] > n_sources:
+        n_sources = masks.shape[0]
+    if n_sources <= 0:
+        return np.empty((0, 0, 0), dtype=complex)
+
+    centroids = np.full((n_freqs, n_mics, n_sources), np.nan + 1j * np.nan, dtype=complex)
+    for frequency_index in range(n_freqs):
+        valid_frames = gt_valid[frequency_index, :n_times]
+        for source_index in range(n_sources):
+            if use_source_vectors:
+                if source_index >= source_vectors.shape[0]:
+                    continue
+                X_f = source_vectors[source_index, :, frequency_index, :n_times]
+            else:
+                X_f = bin_vectors[:, frequency_index, :n_times]
+            gamma = valid_frames & (gt_labels[frequency_index, :n_times] == source_index)
+            if not np.any(gamma):
+                continue
+            weighted_X = X_f[:, gamma]
+            R_i = weighted_X @ weighted_X.conj().T
+            try:
+                _, eigenvectors = np.linalg.eigh(R_i)
+            except np.linalg.LinAlgError:
+                continue
+            centroid = eigenvectors[:, -1]
+            centroids[frequency_index, :, source_index] = centroid / (
+                np.linalg.norm(centroid) + 1e-12
+            )
+    return centroids
 
 
 def _trace_labels(prefix: str, count: int) -> tuple[str, ...]:
@@ -1559,6 +1709,7 @@ def _sawada_centroid_argument_frequency_figure(
     sawada_model: dict[str, np.ndarray],
     frequency_min: float | None = None,
     frequency_max: float | None = None,
+    gt_centroids: np.ndarray | None = None,
 ) -> go.Figure:
     centroids = np.asarray(sawada_model.get("centroids_unwhitened", []))
     if centroids.ndim != 3 or centroids.size == 0:
@@ -1611,6 +1762,20 @@ def _sawada_centroid_argument_frequency_figure(
 
     relative_centroids = centroids * np.conj(centroids[:, 0, :])[:, np.newaxis, :]
     argument_values = np.angle(relative_centroids)
+    gt_centroids = np.asarray(gt_centroids if gt_centroids is not None else [])
+    if gt_centroids.ndim == 3 and gt_centroids.size:
+        if gt_centroids.shape[1] == n_freqs and gt_centroids.shape[0] != n_freqs:
+            gt_centroids = np.moveaxis(gt_centroids, 1, 0)
+        gt_n_freqs = min(gt_centroids.shape[0], n_freqs)
+        gt_n_mics = min(gt_centroids.shape[1], n_mics)
+        gt_n_sources = min(gt_centroids.shape[2], n_sources)
+        gt_relative = gt_centroids[:gt_n_freqs, :gt_n_mics, :gt_n_sources] * np.conj(
+            gt_centroids[:gt_n_freqs, 0, :gt_n_sources]
+        )[:, np.newaxis, :]
+        gt_argument_values = np.angle(gt_relative)
+    else:
+        gt_n_freqs = gt_n_mics = gt_n_sources = 0
+        gt_argument_values = np.empty((0, 0, 0), dtype=float)
 
     rows = int(math.ceil(n_mics / 2))
     fig = make_subplots(
@@ -1632,7 +1797,7 @@ def _sawada_centroid_argument_frequency_figure(
                     x=frequencies[selector],
                     y=argument_values[selector, mic_index, source_index],
                     mode="lines+markers",
-                    name=f"Source {source_index + 1}",
+                    name=f"Sawada S{source_index + 1}",
                     legendgroup=f"centroid-argument-source-{source_index}",
                     showlegend=mic_index == 0,
                     line={
@@ -1645,7 +1810,7 @@ def _sawada_centroid_argument_frequency_figure(
                         "opacity": 0.82,
                     },
                     hovertemplate=(
-                        f"Source {source_index + 1}<br>"
+                        f"Sawada S{source_index + 1}<br>"
                         "f=%{x:.1f}Hz<br>arg=%{y:.4f} rad"
                         "<extra></extra>"
                     ),
@@ -1653,6 +1818,46 @@ def _sawada_centroid_argument_frequency_figure(
                 row=row,
                 col=col,
             )
+            if (
+                mic_index < gt_n_mics
+                and source_index < gt_n_sources
+                and gt_n_freqs > 0
+            ):
+                gt_selector = (
+                    frequency_band[:gt_n_freqs]
+                    & np.isfinite(gt_argument_values[:, mic_index, source_index])
+                )
+                if np.any(gt_selector):
+                    fig.add_trace(
+                        go.Scattergl(
+                            x=frequencies[:gt_n_freqs][gt_selector],
+                            y=gt_argument_values[:, mic_index, source_index][gt_selector],
+                            mode="lines+markers",
+                            name=f"GT S{source_index + 1}",
+                            legendgroup=f"centroid-argument-gt-source-{source_index}",
+                            showlegend=mic_index == 0,
+                            line={
+                                "color": source_colors[source_index % len(source_colors)],
+                                "width": 1.4,
+                                "dash": "dash",
+                            },
+                            marker={
+                                "size": 5,
+                                "color": "#ffffff",
+                                "line": {
+                                    "width": 1.4,
+                                    "color": source_colors[source_index % len(source_colors)],
+                                },
+                            },
+                            hovertemplate=(
+                                f"GT S{source_index + 1}<br>"
+                                "f=%{x:.1f}Hz<br>arg=%{y:.4f} rad"
+                                "<extra></extra>"
+                            ),
+                        ),
+                        row=row,
+                        col=col,
+                    )
 
         fig.update_xaxes(
             title_text="Frequence (Hz)",
@@ -2473,6 +2678,27 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                 ],
                                                 style={"width": "100px"},
                                             ),
+                                            html.Div(
+                                                [
+                                                    html.Label("GT centroide"),
+                                                    dcc.Dropdown(
+                                                        id="centroid-gt-mode-dropdown",
+                                                        options=[
+                                                            {
+                                                                "label": "Melange masque",
+                                                                "value": "mixture_masked",
+                                                            },
+                                                            {
+                                                                "label": "Source directe",
+                                                                "value": "source_direct",
+                                                            },
+                                                        ],
+                                                        value="mixture_masked",
+                                                        clearable=False,
+                                                    ),
+                                                ],
+                                                style={"width": "170px"},
+                                            ),
                                         ],
                                         className="panel-header",
                                     ),
@@ -3204,6 +3430,8 @@ def build_app(config: AppConfig) -> dash.Dash:
         Input("algorithm-dropdown", "value"),
         Input("centroid-phase-frequency-min-input", "value"),
         Input("centroid-phase-frequency-max-input", "value"),
+        Input("sawada-gt-permutation-dropdown", "value"),
+        Input("centroid-gt-mode-dropdown", "value"),
     )
     def update_sawada_centroid_argument_frequency(
         split: str,
@@ -3211,6 +3439,8 @@ def build_app(config: AppConfig) -> dash.Dash:
         algorithm: str,
         frequency_min: float | None,
         frequency_max: float | None,
+        gt_permutation: str,
+        gt_centroid_mode: str,
     ) -> tuple[go.Figure, str]:
         if not split or not scene_id or algorithm != "sawada":
             return (
@@ -3254,6 +3484,22 @@ def build_app(config: AppConfig) -> dash.Dash:
         if frequency_max is not None:
             frequency_band &= caption_frequencies <= frequency_max
         point_count = int(np.sum(frequency_band) * n_sources)
+        gt_centroids = _ground_truth_centroids(
+            bundle,
+            model,
+            gt_permutation,
+            gt_centroid_mode,
+        )
+        gt_available = gt_centroids.ndim == 3 and gt_centroids.size > 0
+        gt_point_count = 0
+        if gt_available:
+            gt_n_freqs = min(gt_centroids.shape[0], caption_frequencies.size)
+            gt_point_count = int(np.sum(frequency_band[:gt_n_freqs]) * gt_centroids.shape[2])
+        gt_mode_text = (
+            "source directe"
+            if gt_centroid_mode == "source_direct"
+            else "melange masque"
+        )
         if frequency_min is None and frequency_max is None:
             band_text = "toutes frequences"
         elif frequency_min is None:
@@ -3266,10 +3512,19 @@ def build_app(config: AppConfig) -> dash.Dash:
             f"{n_freqs} lignes frequentielles x {n_sources} sources x {n_mics} composantes. "
             f"{point_count} centroides traces par composante. "
             f"Bande: {band_text}. Repere: {centroid_space}, "
-            "arg(Cm*conj(M1)) en fonction de la frequence."
+            "arg(Cm*conj(M1)) en fonction de la frequence. "
+            f"GT: {'disponible' if gt_available else 'indisponible'}"
+            f"{f', {gt_point_count} centroides GT traces par composante' if gt_available else ''}. "
+            f"Mode GT: {gt_mode_text}. "
+            f"Permutation GT: {'1/2 inversee' if gt_permutation == 'swap' else 'normale'}."
         )
         return (
-            _sawada_centroid_argument_frequency_figure(model, frequency_min, frequency_max),
+            _sawada_centroid_argument_frequency_figure(
+                model,
+                frequency_min,
+                frequency_max,
+                gt_centroids=gt_centroids,
+            ),
             caption,
         )
 
