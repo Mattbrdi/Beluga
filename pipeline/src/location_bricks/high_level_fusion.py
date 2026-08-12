@@ -9,7 +9,7 @@ def fusion_bf(wave_vectors_list: List[np.ndarray], wave_vector_error_variance: L
     
     if len(wave_vectors_list) <= 1:
         print(f'WARNING : Only one active tetrahedra, returning NaNs')
-        return np.full((3, 1), np.nan), np.full((3, 1), np.nan)
+        return np.full(3, np.nan), np.full(3, np.nan)
     positions = []
     for wave_pair, origins in zip(combinations(wave_vectors_list, 2), combinations(tetrahedras_origins_enu, 2)):
         positions.append(two_tetra_intersection(wave_pair, origins, projection_plan))
@@ -205,7 +205,7 @@ def high_fusion(
     tetrahedras_origins_enu = [np.array(tetra.origin_enu) for tetra in environment.tetrahedras.values() if tetra.is_active]
     if len(wave_vectors_list) <= 1:
         print(f'WARNING : Only one active tetrahedra, returning NaNs')
-        return np.full((3, 1), np.nan), np.full((3, 1), np.nan)
+        return np.full(3, np.nan), np.full(3, np.nan)
     positions = []
     for wave_pair, origins in zip(combinations(wave_vectors_list, 2), combinations(tetrahedras_origins_enu, 2)):
         positions.append(

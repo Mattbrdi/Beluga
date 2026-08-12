@@ -28,7 +28,7 @@ from math import radians, sin, cos, sqrt, atan2
 # audio_path = [r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8295.260511133808.wav", 
 #               r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data2026\8296.260511133808.wav"]
 
-point_number = 24
+point_number = 12
 
 
 audio_path = TEST_DATA2026_ALL_AUDIO_PATHS[point_number]

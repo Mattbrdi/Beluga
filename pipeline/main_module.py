@@ -395,6 +395,7 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
 
     use_bf = parameters.beamforming_parameters.use_bf and call_type == "Whistle"
     if use_bf:
+        tdoa_measurements = []
         wave_vectors, wave_vectors_error_variance = wave_vector_and_error(parameters, environment, audio_arrays, central_frequency)
         associated_time = event_start_dt
         
@@ -407,26 +408,26 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
     else:
         tdoas_measured, tdoas_error_variance, tdoas_mask = tdoa_and_error(parameters, audio_arrays)
 
-    associated_time = event_start_dt
-    tdoa_measurements = []
-    for audio_array, tdoa_values, error_variances, pair_mask in zip(
-        audio_arrays, tdoas_measured, tdoas_error_variance, tdoas_mask
-    ):
-        for pair_id, tdoa_value, error_variance, usable in zip(
-            audio_array.pairs_dict.keys(), tdoa_values, error_variances, pair_mask
+        associated_time = event_start_dt
+        tdoa_measurements = []
+        for audio_array, tdoa_values, error_variances, pair_mask in zip(
+            audio_arrays, tdoas_measured, tdoas_error_variance, tdoas_mask
         ):
-            tdoa_measurements.append(
-                {
-                    "timestamp": associated_time,
-                    "duration_s": float(duration),
-                    "call_type": call_type,
-                    "tetra_id": audio_array.metadata.tetra_id,
-                    "pair_id": pair_id,
-                    "tdoa_s": float(tdoa_value),
-                    "error_variance_s2": float(error_variance),
-                    "usable": bool(usable),
-                }
-            )
+            for pair_id, tdoa_value, error_variance, usable in zip(
+                audio_array.pairs_dict.keys(), tdoa_values, error_variances, pair_mask
+            ):
+                tdoa_measurements.append(
+                    {
+                        "timestamp": associated_time,
+                        "duration_s": float(duration),
+                        "call_type": call_type,
+                        "tetra_id": audio_array.metadata.tetra_id,
+                        "pair_id": pair_id,
+                        "tdoa_s": float(tdoa_value),
+                        "error_variance_s2": float(error_variance),
+                        "usable": bool(usable),
+                    }
+                )
 
         if not tdoas_mask_check(tdoas_mask):
             print("Warning : Tdoas are not usable")

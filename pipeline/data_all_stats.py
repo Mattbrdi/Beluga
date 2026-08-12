@@ -68,7 +68,7 @@ from plot_tdoa_distributions import (
     read_tdoa_rows,
 )
 from src.utils.sub_classes import Environment, Parameters
-POINT_NUMBERS = [11, 13]
+POINT_NUMBERS = [8]
 TEST_AUDIO_PATHS = TEST_DATA2026_ALL_AUDIO_PATHS
 DEFAULT_RESULTS_ROOT = Path("test_data2026_all") / "results"
 
