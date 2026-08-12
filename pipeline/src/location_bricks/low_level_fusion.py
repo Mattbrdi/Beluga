@@ -178,4 +178,4 @@ def low_fusion(tdoas_measured : list[np.ndarray], tdoas_error_variance : list[np
     
     pos_tilde = np.sqrt(diag_terms)
 
-    return pos, pos_tilde
+    return pos[..., 0], pos_tilde
