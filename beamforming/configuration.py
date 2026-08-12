@@ -1,6 +1,0 @@
-C = 1450
-L = 0.3
-
-MAX_TDOA = 1.1 * L / C
-
-SAMPLING_RATE = 384000
