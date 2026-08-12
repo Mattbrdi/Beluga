@@ -268,6 +268,42 @@ def save_sawada_model_npz(path: str | Path, result: Any) -> Path | None:
         variances=np.asarray(payload["variances"]),
         weights=np.asarray(payload["weights"]),
         whitening=np.asarray(payload["whitening"]),
+        source_assignment_labels=np.asarray(
+            payload.get("source_assignment_labels", np.empty((0, 0)))
+        ),
+        source_assignment_distances=np.asarray(
+            payload.get("source_assignment_distances", np.empty((0, 0)))
+        ),
+        source_assignment_relative_phases=np.asarray(
+            payload.get("source_assignment_relative_phases", np.empty((0, 0, 0)))
+        ),
+        source_assignment_selected_labels=np.asarray(
+            payload.get("source_assignment_selected_labels", np.empty((0, 0)))
+        ),
+        source_assignment_slopes=np.asarray(
+            payload.get("source_assignment_slopes", np.empty((0, 0)))
+        ),
+        source_assignment_intercepts=np.asarray(
+            payload.get("source_assignment_intercepts", np.empty((0, 0)))
+        ),
+        source_assignment_scores=np.asarray(
+            payload.get("source_assignment_scores", np.empty((0,)))
+        ),
+        source_assignment_n_inliers=np.asarray(
+            payload.get("source_assignment_n_inliers", np.empty((0,)))
+        ),
+        source_assignment_n_trials=np.asarray(
+            payload.get("source_assignment_n_trials", np.empty((0,)))
+        ),
+        source_assignment_converged=np.asarray(
+            payload.get("source_assignment_converged", np.empty((0,)))
+        ),
+        source_assignment_frequency_inliers=np.asarray(
+            payload.get("source_assignment_frequency_inliers", np.empty((0, 0)))
+        ),
+        source_assignment_selected_centroids=np.asarray(
+            payload.get("source_assignment_selected_centroids", np.empty((0, 0)))
+        ),
     )
     return target
 

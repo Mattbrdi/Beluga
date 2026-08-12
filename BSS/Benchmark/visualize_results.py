@@ -1744,6 +1744,15 @@ def _sawada_centroid_argument_frequency_figure(
         frequencies = np.arange(n_freqs, dtype=float)
     else:
         frequencies = frequencies[:n_freqs]
+    assignment_labels = np.asarray(
+        sawada_model.get("source_assignment_labels", []),
+        dtype=int,
+    )
+    use_final_assignment = assignment_labels.shape == (n_freqs, n_sources)
+    if use_final_assignment and np.any(assignment_labels >= 0):
+        n_final_sources = max(n_sources, int(np.max(assignment_labels)) + 1)
+    else:
+        n_final_sources = n_sources
 
     frequency_min = None if frequency_min is None else float(frequency_min)
     frequency_max = None if frequency_max is None else float(frequency_max)
@@ -1784,43 +1793,126 @@ def _sawada_centroid_argument_frequency_figure(
         subplot_titles=[f"M{mic_index + 1}*conj(M1)" for mic_index in range(n_mics)],
     )
     source_colors = ["#dc2626", "#2563eb", "#16a34a", "#7c3aed", "#0891b2", "#db2777"]
+    repeated_frequencies = np.repeat(frequencies[:, np.newaxis], n_sources, axis=1)
+    repeated_clusters = np.repeat(
+        np.arange(n_sources)[np.newaxis, :],
+        n_freqs,
+        axis=0,
+    )
 
     for mic_index in range(n_mics):
         row = mic_index // 2 + 1
         col = mic_index % 2 + 1
-        for source_index in range(n_sources):
-            selector = frequency_band & np.isfinite(argument_values[:, mic_index, source_index])
-            if not np.any(selector):
-                continue
-            fig.add_trace(
-                go.Scattergl(
-                    x=frequencies[selector],
-                    y=argument_values[selector, mic_index, source_index],
-                    mode="lines+markers",
-                    name=f"Sawada S{source_index + 1}",
-                    legendgroup=f"centroid-argument-source-{source_index}",
-                    showlegend=mic_index == 0,
-                    line={
-                        "color": source_colors[source_index % len(source_colors)],
-                        "width": 1.5,
-                    },
-                    marker={
-                        "size": 5,
-                        "color": source_colors[source_index % len(source_colors)],
-                        "opacity": 0.82,
-                    },
-                    hovertemplate=(
-                        f"Sawada S{source_index + 1}<br>"
-                        "f=%{x:.1f}Hz<br>arg=%{y:.4f} rad"
-                        "<extra></extra>"
-                    ),
-                ),
-                row=row,
-                col=col,
+        if use_final_assignment:
+            finite_values = np.isfinite(argument_values[:, mic_index, :])
+            unassigned = (
+                frequency_band[:, np.newaxis]
+                & finite_values
+                & (assignment_labels < 0)
             )
+            if np.any(unassigned):
+                customdata = np.stack(
+                    [
+                        repeated_clusters[unassigned] + 1,
+                        repeated_frequencies[unassigned],
+                    ],
+                    axis=1,
+                )
+                fig.add_trace(
+                    go.Scattergl(
+                        x=repeated_frequencies[unassigned],
+                        y=argument_values[:, mic_index, :][unassigned],
+                        mode="markers",
+                        name="Non attribue RANSAC",
+                        legendgroup="centroid-argument-unassigned",
+                        showlegend=mic_index == 0,
+                        marker={"size": 5, "color": "#9ca3af", "opacity": 0.45},
+                        customdata=customdata,
+                        hovertemplate=(
+                            "Non attribue RANSAC<br>"
+                            "cluster EM=%{customdata[0]:.0f}<br>"
+                            "f=%{customdata[1]:.1f}Hz<br>"
+                            "arg=%{y:.4f} rad"
+                            "<extra></extra>"
+                        ),
+                    ),
+                    row=row,
+                    col=col,
+                )
+            for source_index in range(n_final_sources):
+                selector = (
+                    frequency_band[:, np.newaxis]
+                    & finite_values
+                    & (assignment_labels == source_index)
+                )
+                if not np.any(selector):
+                    continue
+                customdata = np.stack(
+                    [
+                        repeated_clusters[selector] + 1,
+                        repeated_frequencies[selector],
+                    ],
+                    axis=1,
+                )
+                fig.add_trace(
+                    go.Scattergl(
+                        x=repeated_frequencies[selector],
+                        y=argument_values[:, mic_index, :][selector],
+                        mode="markers",
+                        name=f"Sawada final S{source_index + 1}",
+                        legendgroup=f"centroid-argument-final-source-{source_index}",
+                        showlegend=mic_index == 0,
+                        marker={
+                            "size": 5.5,
+                            "color": source_colors[source_index % len(source_colors)],
+                            "opacity": 0.82,
+                        },
+                        customdata=customdata,
+                        hovertemplate=(
+                            f"Source finale RANSAC S{source_index + 1}<br>"
+                            "cluster EM=%{customdata[0]:.0f}<br>"
+                            "f=%{customdata[1]:.1f}Hz<br>"
+                            "arg=%{y:.4f} rad"
+                            "<extra></extra>"
+                        ),
+                    ),
+                    row=row,
+                    col=col,
+                )
+        else:
+            for source_index in range(n_sources):
+                selector = frequency_band & np.isfinite(argument_values[:, mic_index, source_index])
+                if not np.any(selector):
+                    continue
+                fig.add_trace(
+                    go.Scattergl(
+                        x=frequencies[selector],
+                        y=argument_values[selector, mic_index, source_index],
+                        mode="lines+markers",
+                        name=f"Cluster EM {source_index + 1}",
+                        legendgroup=f"centroid-argument-source-{source_index}",
+                        showlegend=mic_index == 0,
+                        line={
+                            "color": source_colors[source_index % len(source_colors)],
+                            "width": 1.5,
+                        },
+                        marker={
+                            "size": 5,
+                            "color": source_colors[source_index % len(source_colors)],
+                            "opacity": 0.82,
+                        },
+                        hovertemplate=(
+                            f"Cluster EM {source_index + 1}<br>"
+                            "f=%{x:.1f}Hz<br>arg=%{y:.4f} rad"
+                            "<extra></extra>"
+                        ),
+                    ),
+                    row=row,
+                    col=col,
+                )
+        for source_index in range(gt_n_sources):
             if (
                 mic_index < gt_n_mics
-                and source_index < gt_n_sources
                 and gt_n_freqs > 0
             ):
                 gt_selector = (
@@ -1878,11 +1970,344 @@ def _sawada_centroid_argument_frequency_figure(
         )
 
     fig.update_layout(
-        title="Arguments des centroides relatifs en fonction de la frequence",
+        title=(
+            "Arguments des centroides relatifs en fonction de la frequence - "
+            f"{'sources finales RANSAC' if use_final_assignment else 'clusters EM locaux'}"
+        ),
         margin={"l": 58, "r": 18, "t": 64, "b": 42},
         paper_bgcolor="#f7f7f3",
         plot_bgcolor="#ffffff",
         legend={"orientation": "h", "y": -0.12},
+    )
+    return fig
+
+
+def _wrap_phase(values: np.ndarray | float) -> np.ndarray | float:
+    return ((np.asarray(values) + np.pi) % (2.0 * np.pi)) - np.pi
+
+
+def _phase_line_with_breaks(
+    x_values: np.ndarray,
+    y_values: np.ndarray,
+    jump_threshold: float = np.pi,
+) -> tuple[np.ndarray, np.ndarray]:
+    x_values = np.asarray(x_values, dtype=float)
+    y_values = np.asarray(y_values, dtype=float)
+    valid = np.isfinite(x_values) & np.isfinite(y_values)
+    x_values = x_values[valid]
+    y_values = y_values[valid]
+    if x_values.size < 2:
+        return x_values, y_values
+
+    x_out: list[float] = [float(x_values[0])]
+    y_out: list[float] = [float(y_values[0])]
+    jumps = np.abs(np.diff(y_values)) > float(jump_threshold)
+    for index in range(1, x_values.size):
+        if bool(jumps[index - 1]):
+            x_out.append(float("nan"))
+            y_out.append(float("nan"))
+        x_out.append(float(x_values[index]))
+        y_out.append(float(y_values[index]))
+    return np.asarray(x_out), np.asarray(y_out)
+
+
+def _sawada_ransac_figure(
+    sawada_model: dict[str, np.ndarray],
+    source_index: int = 0,
+    color_mode: str = "assignment",
+) -> go.Figure:
+    relative_phases = np.asarray(
+        sawada_model.get("source_assignment_relative_phases", []),
+        dtype=float,
+    )
+    labels = np.asarray(sawada_model.get("source_assignment_labels", []), dtype=int)
+    selected_labels = np.asarray(
+        sawada_model.get("source_assignment_selected_labels", []),
+        dtype=int,
+    )
+    distances = np.asarray(
+        sawada_model.get("source_assignment_distances", []),
+        dtype=float,
+    )
+    slopes = np.asarray(sawada_model.get("source_assignment_slopes", []), dtype=float)
+    intercepts = np.asarray(
+        sawada_model.get("source_assignment_intercepts", []),
+        dtype=float,
+    )
+    frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
+    frequency_inliers = np.asarray(
+        sawada_model.get("source_assignment_frequency_inliers", []),
+        dtype=bool,
+    )
+    selected_centroids = np.asarray(
+        sawada_model.get("source_assignment_selected_centroids", []),
+        dtype=int,
+    )
+
+    fig = go.Figure()
+    if (
+        relative_phases.ndim != 3
+        or relative_phases.size == 0
+        or labels.shape != relative_phases.shape[:2]
+        or slopes.ndim != 2
+        or intercepts.shape != slopes.shape
+    ):
+        fig.update_layout(
+            title="RANSAC circulaire indisponible",
+            annotations=[
+                {
+                    "text": "Relance le benchmark Sawada pour sauvegarder les champs source_assignment_*.",
+                    "xref": "paper",
+                    "yref": "paper",
+                    "x": 0.5,
+                    "y": 0.5,
+                    "showarrow": False,
+                }
+            ],
+            margin={"l": 58, "r": 18, "t": 42, "b": 42},
+            paper_bgcolor="#f7f7f3",
+            plot_bgcolor="#ffffff",
+        )
+        return fig
+
+    n_freqs, n_centroids, n_components = relative_phases.shape
+    n_sources = slopes.shape[0]
+    if frequencies.size < n_freqs:
+        frequencies = np.arange(n_freqs, dtype=float)
+    else:
+        frequencies = frequencies[:n_freqs]
+    source_index = min(max(int(source_index or 0), 0), max(n_sources - 1, 0))
+    color_mode = color_mode or "assignment"
+
+    available_points = labels >= 0
+    if selected_labels.shape == labels.shape:
+        available_points |= selected_labels >= 0
+    if distances.ndim == 3 and distances.shape[1:] == labels.shape:
+        available_points |= np.any(np.isfinite(distances), axis=0)
+    elif distances.shape == labels.shape:
+        available_points |= np.isfinite(distances)
+    finite_any_component = np.any(np.isfinite(relative_phases), axis=2)
+    active_points_base = finite_any_component & available_points
+    if not np.any(active_points_base):
+        active_points_base = finite_any_component
+    active_frequencies = np.any(active_points_base, axis=1)
+    repeated_frequencies = np.repeat(frequencies[:, np.newaxis], n_centroids, axis=1)
+    source_colors = ["#dc2626", "#2563eb", "#16a34a", "#7c3aed", "#0891b2", "#db2777"]
+
+    finite_frequencies = np.isfinite(frequencies)
+    t_ref = float(np.nanmean(frequencies[finite_frequencies])) if np.any(finite_frequencies) else 0.0
+    display_frequencies = finite_frequencies & active_frequencies
+    if not np.any(display_frequencies):
+        display_frequencies = finite_frequencies
+
+    active_frequency_values = frequencies[display_frequencies]
+    x_range = None
+    if active_frequency_values.size:
+        x_min = float(np.nanmin(active_frequency_values))
+        x_max = float(np.nanmax(active_frequency_values))
+        padding = max((x_max - x_min) * 0.025, 1.0)
+        x_range = [x_min - padding, x_max + padding]
+
+    rows = int(math.ceil(n_components / 2))
+    cols = 2 if n_components > 1 else 1
+    fig = make_subplots(
+        rows=rows,
+        cols=cols,
+        subplot_titles=[
+            f"M{component_index + 1}*conj(M1)"
+            for component_index in range(n_components)
+        ],
+    )
+
+    for component_index in range(n_components):
+        row = component_index // 2 + 1
+        col = component_index % 2 + 1
+        component_label = f"M{component_index + 1}*conj(M1)"
+        phase_values = relative_phases[:, :, component_index]
+        finite_points = np.isfinite(phase_values) & np.isfinite(frequencies[:, np.newaxis])
+        active_points = finite_points & available_points
+        if not np.any(active_points):
+            active_points = finite_points
+
+        if color_mode == "distance":
+            if distances.ndim == 3 and distances.shape[1:] == labels.shape:
+                distance_values = (
+                    distances[source_index]
+                    if source_index < distances.shape[0]
+                    else np.nanmin(distances, axis=0)
+                )
+            elif distances.shape == labels.shape:
+                distance_values = distances
+            else:
+                distance_values = np.full(labels.shape, np.nan, dtype=float)
+            finite = active_points & np.isfinite(distance_values)
+            fig.add_trace(
+                go.Scattergl(
+                    x=repeated_frequencies[finite],
+                    y=phase_values[finite],
+                    mode="markers",
+                    name=f"Distance a S{source_index + 1}",
+                    showlegend=component_index == 0,
+                    marker={
+                        "size": 5,
+                        "opacity": 0.78,
+                        "color": distance_values[finite],
+                        "colorscale": "Viridis",
+                        "showscale": component_index == 0,
+                        "colorbar": {"title": "dist"},
+                    },
+                    hovertemplate=(
+                        f"{component_label}<br>"
+                        "f=%{x:.1f} Hz<br>"
+                        "phase=%{y:.4f} rad<br>"
+                        "dist=%{marker.color:.4f}<extra></extra>"
+                    ),
+                ),
+                row=row,
+                col=col,
+            )
+        else:
+            unassigned = active_points & (labels < 0)
+            if np.any(unassigned):
+                fig.add_trace(
+                    go.Scattergl(
+                        x=repeated_frequencies[unassigned],
+                        y=phase_values[unassigned],
+                        mode="markers",
+                        name="Non attribue",
+                        showlegend=component_index == 0,
+                        marker={"size": 4.5, "color": "#9ca3af", "opacity": 0.34},
+                        hovertemplate=(
+                            f"{component_label}<br>"
+                            "f=%{x:.1f} Hz<br>phase=%{y:.4f} rad<extra></extra>"
+                        ),
+                    ),
+                    row=row,
+                    col=col,
+                )
+            for label_index in range(n_sources):
+                selector = active_points & (labels == label_index)
+                if not np.any(selector):
+                    continue
+                fig.add_trace(
+                    go.Scattergl(
+                        x=repeated_frequencies[selector],
+                        y=phase_values[selector],
+                        mode="markers",
+                        name=f"Attribue S{label_index + 1}",
+                        showlegend=component_index == 0,
+                        marker={
+                            "size": 5.5 if label_index == source_index else 4.5,
+                            "color": source_colors[label_index % len(source_colors)],
+                            "opacity": 0.82 if label_index == source_index else 0.42,
+                        },
+                        hovertemplate=(
+                            f"{component_label}<br>S{label_index + 1}<br>"
+                            "f=%{x:.1f} Hz<br>phase=%{y:.4f} rad<extra></extra>"
+                        ),
+                    ),
+                    row=row,
+                    col=col,
+                )
+
+        for label_index in range(n_sources):
+            if component_index >= slopes.shape[1]:
+                continue
+            prediction = _wrap_phase(
+                intercepts[label_index, component_index]
+                + (frequencies - t_ref) * slopes[label_index, component_index]
+            )
+            line_x, line_y = _phase_line_with_breaks(
+                frequencies[display_frequencies],
+                prediction[display_frequencies],
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=line_x,
+                    y=line_y,
+                    mode="lines",
+                    name=f"RANSAC S{label_index + 1}",
+                    showlegend=component_index == 0,
+                    line={
+                        "color": source_colors[label_index % len(source_colors)],
+                        "width": 3.0 if label_index == source_index else 1.5,
+                        "dash": "solid" if label_index == source_index else "dash",
+                    },
+                    opacity=0.96 if label_index == source_index else 0.58,
+                    hovertemplate=(
+                        f"{component_label}<br>Modele S{label_index + 1}<br>"
+                        "f=%{x:.1f} Hz<br>phase=%{y:.4f} rad<extra></extra>"
+                    ),
+                ),
+                row=row,
+                col=col,
+            )
+
+        if (
+            frequency_inliers.ndim == 2
+            and selected_centroids.ndim == 2
+            and source_index < frequency_inliers.shape[0]
+            and source_index < selected_centroids.shape[0]
+        ):
+            n_selected_freqs = min(n_freqs, frequency_inliers.shape[1], selected_centroids.shape[1])
+            selected = selected_centroids[source_index, :n_selected_freqs]
+            inliers = frequency_inliers[source_index, :n_selected_freqs]
+            valid_selected = (
+                inliers
+                & (selected >= 0)
+                & (selected < n_centroids)
+                & np.isfinite(frequencies[:n_selected_freqs])
+            )
+            selected_freq_indexes = np.flatnonzero(valid_selected)
+            if selected_freq_indexes.size:
+                selected_centroid_indexes = selected[selected_freq_indexes]
+                fig.add_trace(
+                    go.Scattergl(
+                        x=frequencies[selected_freq_indexes],
+                        y=phase_values[selected_freq_indexes, selected_centroid_indexes],
+                        mode="markers",
+                        name=f"Inliers RANSAC S{source_index + 1}",
+                        showlegend=component_index == 0,
+                        marker={
+                            "symbol": "diamond-open",
+                            "size": 9,
+                            "color": "#111827",
+                            "line": {"width": 2.0, "color": "#f59e0b"},
+                        },
+                        hovertemplate=(
+                            f"{component_label}<br>Inlier selectionne<br>"
+                            "f=%{x:.1f} Hz<br>phase=%{y:.4f} rad<extra></extra>"
+                        ),
+                    ),
+                    row=row,
+                    col=col,
+                )
+
+        fig.update_xaxes(
+            title_text="Frequence (Hz)",
+            zeroline=True,
+            zerolinecolor="#111827",
+            zerolinewidth=1.2,
+            range=x_range,
+            row=row,
+            col=col,
+        )
+        fig.update_yaxes(
+            title_text="arg (rad)",
+            range=[-np.pi, np.pi],
+            zeroline=True,
+            zerolinecolor="#111827",
+            zerolinewidth=1.2,
+            row=row,
+            col=col,
+        )
+
+    fig.update_layout(
+        title=f"RANSAC circulaire - Source {source_index + 1}, toutes composantes",
+        margin={"l": 58, "r": 18, "t": 64, "b": 48},
+        paper_bgcolor="#f7f7f3",
+        plot_bgcolor="#ffffff",
+        legend={"orientation": "h", "y": -0.14},
     )
     return fig
 
@@ -2726,6 +3151,52 @@ def build_app(config: AppConfig) -> dash.Dash:
                             html.Div(
                                 [
                                     html.Div(
+                                        [
+                                            html.H2("RANSAC circulaire", className="panel-title"),
+                                            html.Div(
+                                                [
+                                                    html.Label("Source"),
+                                                    dcc.Dropdown(
+                                                        id="ransac-source-dropdown",
+                                                        value=0,
+                                                        clearable=False,
+                                                    ),
+                                                ],
+                                                style={"width": "140px"},
+                                            ),
+                                            html.Div(
+                                                [
+                                                    html.Label("Couleur"),
+                                                    dcc.Dropdown(
+                                                        id="ransac-color-dropdown",
+                                                        options=[
+                                                            {"label": "Attribution", "value": "assignment"},
+                                                            {"label": "Distance", "value": "distance"},
+                                                        ],
+                                                        value="assignment",
+                                                        clearable=False,
+                                                    ),
+                                                ],
+                                                style={"width": "150px"},
+                                            ),
+                                        ],
+                                        className="panel-header",
+                                    ),
+                                    dcc.Graph(
+                                        id="sawada-ransac-graph",
+                                        config={"displayModeBar": True},
+                                        style={"height": "720px"},
+                                    ),
+                                    html.Div(
+                                        id="sawada-ransac-caption",
+                                        className="muted panel-body",
+                                    ),
+                                ],
+                                className="panel",
+                            ),
+                            html.Div(
+                                [
+                                    html.Div(
                                         [html.H2("TDOA", className="panel-title")],
                                         className="panel-header",
                                     ),
@@ -3005,6 +3476,48 @@ def build_app(config: AppConfig) -> dash.Dash:
                 label = str(frequency_index)
             options.append({"label": label, "value": frequency_index})
         return options, value
+
+    @app.callback(
+        Output("ransac-source-dropdown", "options"),
+        Output("ransac-source-dropdown", "value"),
+        Input("split-dropdown", "value"),
+        Input("scene-dropdown", "value"),
+        Input("algorithm-dropdown", "value"),
+        State("ransac-source-dropdown", "value"),
+    )
+    def update_ransac_controls(
+        split: str,
+        scene_id: str,
+        algorithm: str,
+        current_source: int | None,
+    ) -> tuple[list[dict[str, int]], int]:
+        if not split or not scene_id or algorithm != "sawada":
+            return [], 0
+
+        model = _bundle(config, split, scene_id, algorithm)["sawada_model"]
+        slopes = np.asarray(model.get("source_assignment_slopes", []), dtype=float)
+        labels = np.asarray(model.get("source_assignment_labels", []), dtype=int)
+        masks = np.asarray(model.get("masks", []))
+
+        if slopes.ndim == 2 and slopes.size:
+            n_sources = slopes.shape[0]
+        elif labels.ndim == 2 and labels.size:
+            valid_labels = labels[labels >= 0]
+            n_sources = int(np.max(valid_labels)) + 1 if valid_labels.size else 0
+        elif masks.ndim == 3 and masks.size:
+            n_sources = masks.shape[0]
+        else:
+            n_sources = 0
+
+        source_indexes = list(range(n_sources))
+        source_value = current_source if current_source in source_indexes else 0
+        return (
+            [
+                {"label": f"Source {source_index + 1}", "value": source_index}
+                for source_index in source_indexes
+            ],
+            int(source_value),
+        )
 
     @app.callback(
         Output("sawada-mask-graph", "figure"),
@@ -3381,6 +3894,11 @@ def build_app(config: AppConfig) -> dash.Dash:
             centroids = np.moveaxis(centroids, 1, 0)
 
         n_freqs, n_mics, n_sources = centroids.shape
+        assignment_labels = np.asarray(
+            model.get("source_assignment_labels", []),
+            dtype=int,
+        )
+        use_final_assignment = assignment_labels.shape == (n_freqs, n_sources)
         if frequencies.size < n_freqs:
             caption_frequencies = np.arange(n_freqs, dtype=float)
         else:
@@ -3533,6 +4051,7 @@ def build_app(config: AppConfig) -> dash.Dash:
             f"{point_count} centroides traces par composante. "
             f"Bande: {band_text}. Repere: {centroid_space}, "
             "arg(Cm*conj(M1)) en fonction de la frequence. "
+            f"Couleur Sawada: {'source finale RANSAC' if use_final_assignment else 'cluster EM local'}. "
             f"GT: {'disponible' if gt_available else 'indisponible'}"
             f"{f', {gt_point_count} centroides GT traces par composante' if gt_available else ''}. "
             f"Mode GT: {gt_mode_text}. "
@@ -3547,6 +4066,156 @@ def build_app(config: AppConfig) -> dash.Dash:
             ),
             caption,
         )
+
+    @app.callback(
+        Output("sawada-ransac-graph", "figure"),
+        Output("sawada-ransac-caption", "children"),
+        Input("split-dropdown", "value"),
+        Input("scene-dropdown", "value"),
+        Input("algorithm-dropdown", "value"),
+        Input("ransac-source-dropdown", "value"),
+        Input("ransac-color-dropdown", "value"),
+    )
+    def update_sawada_ransac(
+        split: str,
+        scene_id: str,
+        algorithm: str,
+        source_index: int,
+        color_mode: str,
+    ) -> tuple[go.Figure, str]:
+        if not split or not scene_id or algorithm != "sawada":
+            return _sawada_ransac_figure({}, source_index), "Disponible uniquement pour Sawada."
+
+        model = _bundle(config, split, scene_id, algorithm)["sawada_model"]
+        relative_phases = np.asarray(
+            model.get("source_assignment_relative_phases", []),
+            dtype=float,
+        )
+        labels = np.asarray(model.get("source_assignment_labels", []), dtype=int)
+        selected_labels = np.asarray(
+            model.get("source_assignment_selected_labels", []),
+            dtype=int,
+        )
+        distances = np.asarray(model.get("source_assignment_distances", []), dtype=float)
+        frequencies = np.asarray(model.get("frequencies", []), dtype=float)
+        slopes = np.asarray(model.get("source_assignment_slopes", []), dtype=float)
+        scores = np.asarray(model.get("source_assignment_scores", []), dtype=float)
+        n_inliers = np.asarray(model.get("source_assignment_n_inliers", []), dtype=float)
+        n_trials = np.asarray(model.get("source_assignment_n_trials", []), dtype=float)
+        converged = np.asarray(model.get("source_assignment_converged", []), dtype=bool)
+        frequency_inliers = np.asarray(
+            model.get("source_assignment_frequency_inliers", []),
+            dtype=bool,
+        )
+        selected_centroids = np.asarray(
+            model.get("source_assignment_selected_centroids", []),
+            dtype=int,
+        )
+
+        if (
+            relative_phases.ndim != 3
+            or labels.shape != relative_phases.shape[:2]
+            or slopes.ndim != 2
+            or slopes.size == 0
+        ):
+            return (
+                _sawada_ransac_figure(model, source_index, color_mode),
+                "RANSAC absent dans sawada_model.npz. Relance le benchmark Sawada avec cette version.",
+            )
+
+        n_freqs, n_centroids, n_components = relative_phases.shape
+        n_sources = slopes.shape[0]
+        if frequencies.size < n_freqs:
+            frequencies = np.arange(n_freqs, dtype=float)
+        else:
+            frequencies = frequencies[:n_freqs]
+        source_index = min(max(int(source_index or 0), 0), n_sources - 1)
+
+        available_points = labels >= 0
+        if selected_labels.shape == labels.shape:
+            available_points |= selected_labels >= 0
+        if distances.ndim == 3 and distances.shape[1:] == labels.shape:
+            available_points |= np.any(np.isfinite(distances), axis=0)
+        elif distances.shape == labels.shape:
+            available_points |= np.isfinite(distances)
+        active_frequencies = np.any(available_points, axis=1)
+        active_frequency_count = int(np.sum(active_frequencies))
+        max_active_frequency = (
+            float(np.nanmax(frequencies[active_frequencies & np.isfinite(frequencies)]))
+            if np.any(active_frequencies & np.isfinite(frequencies))
+            else float("nan")
+        )
+        max_frequency_text = (
+            "-"
+            if np.isnan(max_active_frequency)
+            else f"{max_active_frequency:.1f} Hz"
+        )
+        counts = [
+            f"S{label_index + 1}: {int(np.sum(labels == label_index))}"
+            for label_index in range(n_sources)
+        ]
+        rejected_count = int(np.sum(labels < 0))
+        finite_count = int(
+            np.sum(
+                np.isfinite(relative_phases)
+                & available_points[:, :, np.newaxis]
+            )
+        )
+
+        selected_inlier_count = 0
+        if (
+            frequency_inliers.ndim == 2
+            and selected_centroids.ndim == 2
+            and source_index < frequency_inliers.shape[0]
+            and source_index < selected_centroids.shape[0]
+        ):
+            n_selected_freqs = min(n_freqs, frequency_inliers.shape[1], selected_centroids.shape[1])
+            selected = selected_centroids[source_index, :n_selected_freqs]
+            selected_inlier_count = int(
+                np.sum(
+                    frequency_inliers[source_index, :n_selected_freqs]
+                    & (selected >= 0)
+                    & (selected < n_centroids)
+                )
+            )
+
+        score_text = (
+            "-"
+            if scores.ndim != 1 or scores.size <= source_index or not np.isfinite(scores[source_index])
+            else f"{float(scores[source_index]):.4g}"
+        )
+        inliers_text = (
+            "-"
+            if n_inliers.ndim != 1 or n_inliers.size <= source_index
+            else str(int(n_inliers[source_index]))
+        )
+        trials_text = (
+            "-"
+            if n_trials.ndim != 1 or n_trials.size <= source_index
+            else str(int(n_trials[source_index]))
+        )
+        converged_text = (
+            "-"
+            if converged.ndim != 1 or converged.size <= source_index
+            else ("oui" if bool(converged[source_index]) else "non")
+        )
+        caption = (
+            f"RANSAC sur {n_freqs} frequences x {n_centroids} centroides x "
+            f"{n_components} composantes de phase relative. "
+            f"Frequences avec centroides disponibles: {active_frequency_count}, "
+            f"max {max_frequency_text}. "
+            "Toutes les composantes sont affichees simultanement. "
+            f"Attributions finales: {', '.join(counts)}, non attribues: {rejected_count}. "
+            f"Source affichee S{source_index + 1}: score {score_text}, "
+            f"inliers declares {inliers_text}, inliers selectionnes visibles {selected_inlier_count}, "
+            f"essais {trials_text}, convergence {converged_text}. "
+            f"Points finis traces sur toutes les composantes: {finite_count}."
+        )
+        return _sawada_ransac_figure(
+            model,
+            source_index,
+            color_mode,
+        ), caption
 
     @app.callback(
         Output("spectrogram-stft-caption", "children"),

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import numpy as np
@@ -24,6 +24,15 @@ BENCHMARK_SAWADA_EM_PARAMETERS = EMClusteringParameters(
     energy_floor_percentile=20.0,
     min_active_frames_per_frequency=3,
     merge_centroid_distance_scale=1.0,
+    source_alignment_method="ransac",
+    ransac_residual_threshold=0.4,
+    ransac_max_trials=300,
+    ransac_slope_bound=None,
+    ransac_random_state=0,
+    ransac_local_optimization_steps=1,
+    ransac_slope_grid_size=60,
+    ransac_n_local_refinements=2,
+    ransac_max_hypotheses_per_pair=100,
 )
 
 
@@ -159,6 +168,66 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
             "variances": variances,
             "weights": weights,
             "whitening": np.asarray(model.whitening),
+            "source_assignment_labels": np.asarray(
+                model.source_assignment_labels
+                if model.source_assignment_labels is not None
+                else np.empty((0, 0))
+            ),
+            "source_assignment_distances": np.asarray(
+                model.source_assignment_distances
+                if model.source_assignment_distances is not None
+                else np.empty((0, 0))
+            ),
+            "source_assignment_relative_phases": np.asarray(
+                model.source_assignment_relative_phases
+                if model.source_assignment_relative_phases is not None
+                else np.empty((0, 0, 0))
+            ),
+            "source_assignment_selected_labels": np.asarray(
+                model.source_assignment_selected_labels
+                if model.source_assignment_selected_labels is not None
+                else np.empty((0, 0))
+            ),
+            "source_assignment_slopes": np.asarray(
+                model.source_assignment_slopes
+                if model.source_assignment_slopes is not None
+                else np.empty((0, 0))
+            ),
+            "source_assignment_intercepts": np.asarray(
+                model.source_assignment_intercepts
+                if model.source_assignment_intercepts is not None
+                else np.empty((0, 0))
+            ),
+            "source_assignment_scores": np.asarray(
+                model.source_assignment_scores
+                if model.source_assignment_scores is not None
+                else np.empty((0,))
+            ),
+            "source_assignment_n_inliers": np.asarray(
+                model.source_assignment_n_inliers
+                if model.source_assignment_n_inliers is not None
+                else np.empty((0,))
+            ),
+            "source_assignment_n_trials": np.asarray(
+                model.source_assignment_n_trials
+                if model.source_assignment_n_trials is not None
+                else np.empty((0,))
+            ),
+            "source_assignment_converged": np.asarray(
+                model.source_assignment_converged
+                if model.source_assignment_converged is not None
+                else np.empty((0,))
+            ),
+            "source_assignment_frequency_inliers": np.asarray(
+                model.source_assignment_frequency_inliers
+                if model.source_assignment_frequency_inliers is not None
+                else np.empty((0, 0))
+            ),
+            "source_assignment_selected_centroids": np.asarray(
+                model.source_assignment_selected_centroids
+                if model.source_assignment_selected_centroids is not None
+                else np.empty((0, 0))
+            ),
         }
     }
 
@@ -170,10 +239,18 @@ def run_sawada(
 ) -> SeparationResult:
     start = time.perf_counter()
     max_lag_samples = _max_lag_samples(scene)
+    sawada_em_parameters = BENCHMARK_SAWADA_EM_PARAMETERS
+    if max_lag_samples is not None and scene.metadata.fs:
+        slope_bound = 2.0 * np.pi * float(max_lag_samples) / float(scene.metadata.fs)
+        if np.isfinite(slope_bound) and slope_bound > 0.0:
+            sawada_em_parameters = replace(
+                BENCHMARK_SAWADA_EM_PARAMETERS,
+                ransac_slope_bound=1.2 * slope_bound,
+            )
     model = SawadaBSS(
         n_sources=scene.metadata.n_sources,
         stft_parameters=BENCHMARK_STFT_PARAMETERS,
-        em_clustering_parameters=BENCHMARK_SAWADA_EM_PARAMETERS,
+        em_clustering_parameters=sawada_em_parameters,
         whitening=False,
     )
     model.process_signal(scene.mixed)
@@ -198,20 +275,35 @@ def run_sawada(
                 "padded": BENCHMARK_STFT_PARAMETERS.padded,
             },
             "em_clustering_parameters": {
-                "n_iter": BENCHMARK_SAWADA_EM_PARAMETERS.n_iter,
-                "phi": BENCHMARK_SAWADA_EM_PARAMETERS.phi,
-                "eps": BENCHMARK_SAWADA_EM_PARAMETERS.eps,
+                "n_iter": sawada_em_parameters.n_iter,
+                "phi": sawada_em_parameters.phi,
+                "eps": sawada_em_parameters.eps,
                 "energy_threshold_db_above_floor": (
-                    BENCHMARK_SAWADA_EM_PARAMETERS.energy_threshold_db_above_floor
+                    sawada_em_parameters.energy_threshold_db_above_floor
                 ),
                 "energy_floor_percentile": (
-                    BENCHMARK_SAWADA_EM_PARAMETERS.energy_floor_percentile
+                    sawada_em_parameters.energy_floor_percentile
                 ),
                 "min_active_frames_per_frequency": (
-                    BENCHMARK_SAWADA_EM_PARAMETERS.min_active_frames_per_frequency
+                    sawada_em_parameters.min_active_frames_per_frequency
                 ),
                 "merge_centroid_distance_scale": (
-                    BENCHMARK_SAWADA_EM_PARAMETERS.merge_centroid_distance_scale
+                    sawada_em_parameters.merge_centroid_distance_scale
+                ),
+                "source_alignment_method": sawada_em_parameters.source_alignment_method,
+                "ransac_residual_threshold": sawada_em_parameters.ransac_residual_threshold,
+                "ransac_max_trials": sawada_em_parameters.ransac_max_trials,
+                "ransac_slope_bound": sawada_em_parameters.ransac_slope_bound,
+                "ransac_random_state": sawada_em_parameters.ransac_random_state,
+                "ransac_local_optimization_steps": (
+                    sawada_em_parameters.ransac_local_optimization_steps
+                ),
+                "ransac_slope_grid_size": sawada_em_parameters.ransac_slope_grid_size,
+                "ransac_n_local_refinements": (
+                    sawada_em_parameters.ransac_n_local_refinements
+                ),
+                "ransac_max_hypotheses_per_pair": (
+                    sawada_em_parameters.ransac_max_hypotheses_per_pair
                 ),
             },
             "reference_microphone": reference_microphone,

@@ -819,6 +819,8 @@ def sequential_centroid_circular_ransac(
     frequencies: np.ndarray,
     n_components: int,
     available: np.ndarray | None = None,
+    remove_compatible_centroids: bool = False,
+    verbose: bool = False,
     **ransac_kwargs: object,
 ) -> CentroidSequentialRansacResult:
     """Extract several trajectories from centroid observations shaped (F, C, D)."""
@@ -842,7 +844,17 @@ def sequential_centroid_circular_ransac(
     models: list[CircularLineRANSAC] = []
 
     for component in range(n_components):
-        if int(np.sum(np.any(available, axis=1))) < 2:
+        available_frequencies = int(np.sum(np.any(available, axis=1)))
+        available_centroids = int(np.sum(available))
+        if verbose:
+            print(
+                f"  RANSAC source {component + 1}/{n_components}: "
+                f"{available_frequencies} frequences, {available_centroids} centroides disponibles...",
+                flush=True,
+            )
+        if available_frequencies < 2:
+            if verbose:
+                print("  arret RANSAC: moins de 2 frequences disponibles.", flush=True)
             break
         model = CircularLineRANSAC(
             random_state=int(rng.integers(0, np.iinfo(np.int32).max)),
@@ -850,18 +862,54 @@ def sequential_centroid_circular_ransac(
         )
         try:
             model.fit_centroids(theta, frequencies, available=available)
-        except RuntimeError:
+        except RuntimeError as exc:
+            if verbose:
+                print(f"  RANSAC source {component + 1}: echec ({exc}).", flush=True)
             break
 
         selected = np.asarray(model.selected_centroids_, dtype=int)
         inliers = np.asarray(model.frequency_inliers_, dtype=bool)
-        valid = inliers & (selected >= 0)
-        if not np.any(valid):
+        if remove_compatible_centroids:
+            if model.intercept_ is None or model.slope_ is None or model.t_ref_ is None:
+                break
+            x = frequencies - model.t_ref_
+            best_distances, _, distances_fc = model._centroid_distances(
+                theta,
+                x,
+                model.intercept_,
+                model.slope_,
+                available,
+            )
+            removal_mask = (
+                available
+                & (distances_fc < model.residual_threshold)
+                & (best_distances[:, None] < model.residual_threshold)
+            )
+            rows, cols = np.nonzero(removal_mask)
+        else:
+            valid = inliers & (selected >= 0)
+            rows = np.flatnonzero(valid)
+            cols = selected[valid]
+
+        if rows.size == 0:
+            if verbose:
+                print(
+                    f"  RANSAC source {component + 1}: aucun centroide compatible a retirer.",
+                    flush=True,
+                )
             break
-        rows = np.flatnonzero(valid)
-        cols = selected[valid]
         labels[rows, cols] = component
         available[rows, cols] = False
         models.append(model)
+        if verbose:
+            score_text = "-" if model.score_ is None else f"{model.score_:.4g}"
+            print(
+                f"  RANSAC source {component + 1}: "
+                f"{model.n_inliers_} frequences inliers, "
+                f"{rows.size} centroides attribues, "
+                f"score={score_text}, trials={model.n_trials_}, "
+                f"converge={model.converged_}.",
+                flush=True,
+            )
 
     return CentroidSequentialRansacResult(models=models, labels=labels, available=available)

@@ -27,6 +27,7 @@ def complex_centroids_to_relative_phases(
     centroids: np.ndarray,
     reference_component: int = 0,
     component_axis: int = -1,
+    available: np.ndarray | None = None,
 ) -> np.ndarray:
     """
     Convert complex centroids to relative phase vectors.
@@ -51,8 +52,6 @@ def complex_centroids_to_relative_phases(
         raise ValueError("centroids must have three axes: frequency, centroid, component.")
     if not np.iscomplexobj(centroids):
         raise ValueError("centroids must be complex-valued.")
-    if not np.all(np.isfinite(centroids.real)) or not np.all(np.isfinite(centroids.imag)):
-        raise ValueError("centroids must not contain NaN or inf.")
     component_axis = int(component_axis)
     if component_axis < 0:
         component_axis += centroids.ndim
@@ -60,6 +59,20 @@ def complex_centroids_to_relative_phases(
         raise ValueError("component_axis must be 1 or 2 for a three-dimensional centroid tensor.")
     if component_axis != 2:
         centroids = np.moveaxis(centroids, component_axis, 2)
+
+    if available is None:
+        available = np.ones(centroids.shape[:2], dtype=bool)
+    else:
+        available = np.asarray(available, dtype=bool)
+        if available.shape != centroids.shape[:2]:
+            raise ValueError("available must have shape (F, C).")
+
+    finite = np.all(np.isfinite(centroids.real) & np.isfinite(centroids.imag), axis=2)
+    if np.any(available & ~finite):
+        raise ValueError("available centroids must not contain NaN or inf.")
+    if np.any(~finite):
+        centroids = centroids.copy()
+        centroids[~finite] = 1.0 + 0.0j
 
     n_components = centroids.shape[2]
     if not 0 <= reference_component < n_components:
@@ -155,6 +168,7 @@ def fit_centroid_source_trajectories(
     available: np.ndarray | None = None,
     assignment_threshold: float | None = None,
     mark_outliers: bool = True,
+    verbose: bool = False,
     **ransac_kwargs: object,
 ) -> CentroidSourceAssignment:
     """
@@ -177,6 +191,7 @@ def fit_centroid_source_trajectories(
         complex_centroids,
         reference_component=reference_component,
         component_axis=component_axis,
+        available=available,
     )
     if available is not None:
         available = np.asarray(available, dtype=bool)
@@ -191,6 +206,8 @@ def fit_centroid_source_trajectories(
         frequencies,
         n_components=n_sources,
         available=initial_available,
+        remove_compatible_centroids=True,
+        verbose=verbose,
         slope_bounds=slope_bounds,
         residual_threshold=residual_threshold,
         random_state=ransac_kwargs.pop("random_state", None),

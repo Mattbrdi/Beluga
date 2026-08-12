@@ -8,6 +8,11 @@ except ModuleNotFoundError:
 from ..Utils.signal_class import Signal, MultiSignal, NSpectrogram
 from dataclasses import dataclass, field, asdict
 from ..Utils.associated_dataclasses import StftParameters, EMClusteringParameters, SawadaBssParameters
+from ..CircularRansac.source_assignment import (
+    CentroidSourceAssignment,
+    fit_centroid_source_trajectories,
+    labels_to_source_masks,
+)
 from sklearn.cluster import KMeans # Utilisé uniquement pour l'initialisation rapide
 from typing import List, Dict, Optional
 from itertools import permutations
@@ -233,6 +238,19 @@ class SawadaBSS:
     tf_energy: Optional[np.ndarray] = None
     active_tf_mask: Optional[np.ndarray] = None
     active_frequency_mask: Optional[np.ndarray] = None
+    source_assignment: Optional[CentroidSourceAssignment] = None
+    source_assignment_labels: Optional[np.ndarray] = None
+    source_assignment_distances: Optional[np.ndarray] = None
+    source_assignment_relative_phases: Optional[np.ndarray] = None
+    source_assignment_selected_labels: Optional[np.ndarray] = None
+    source_assignment_slopes: Optional[np.ndarray] = None
+    source_assignment_intercepts: Optional[np.ndarray] = None
+    source_assignment_scores: Optional[np.ndarray] = None
+    source_assignment_n_inliers: Optional[np.ndarray] = None
+    source_assignment_n_trials: Optional[np.ndarray] = None
+    source_assignment_converged: Optional[np.ndarray] = None
+    source_assignment_frequency_inliers: Optional[np.ndarray] = None
+    source_assignment_selected_centroids: Optional[np.ndarray] = None
     energy_threshold_db: Optional[float] = None
     
     eigenvalues_matrix: Optional[np.ndarray] = None
@@ -507,7 +525,6 @@ class SawadaBSS:
             # Cette étape estime a_i(f) et sigma_i(f)
             model.fit(X_fit)
             active_clusters = np.ones(self.n_sources, dtype=bool)
-            active_clusters = self._merge_close_clusters(model, X_fit)
             
             # 4. Génération du masque binaire (Hard labeling) pour ce bin
             # mask_f shape: (n_sources, n_times)
@@ -555,6 +572,177 @@ class SawadaBSS:
             centroids_tensor[f_idx] = model.centroids
             
         return centroids_tensor
+
+    def _circular_ransac_slope_bounds(self, n_micros: int) -> np.ndarray:
+        slope_bound = self.em_clustering_parameters.ransac_slope_bound
+        if slope_bound is None:
+            slope_bound = 0.05
+        slope_bound = float(abs(slope_bound))
+        if not np.isfinite(slope_bound) or slope_bound <= 0.0:
+            raise ValueError("ransac_slope_bound doit etre strictement positif.")
+
+        bounds = np.tile(np.asarray([-slope_bound, slope_bound], dtype=float), (n_micros, 1))
+        reference_bound = max(slope_bound * 1e-6, self.em_clustering_parameters.eps)
+        bounds[0] = [-reference_bound, reference_bound]
+        return bounds
+
+    def _centroid_assignment_available_mask(self, centroids: np.ndarray) -> np.ndarray:
+        n_freqs, _, n_clusters = centroids.shape
+        available = np.all(np.isfinite(centroids.real) & np.isfinite(centroids.imag), axis=1)
+        if self.active_frequency_mask is not None and self.active_frequency_mask.size >= n_freqs:
+            available &= self.active_frequency_mask[:n_freqs, np.newaxis]
+
+        active_clusters = self.get_final_active_clusters()
+        if active_clusters.ndim == 2 and active_clusters.shape[0] >= n_freqs:
+            available &= active_clusters[:n_freqs, :n_clusters]
+        return available
+
+    def align_sources_with_circular_ransac(self) -> None:
+        """
+        Aligne les clusters frequentiels avec le RANSAC circulaire sur les centroides.
+
+        Les centroides complexes (F, micros, clusters) sont convertis en phases
+        relatives via C_m * conj(C_1), puis le RANSAC extrait des droites de
+        phase coherentes. Les labels obtenus fusionnent ensuite les masques de
+        clusters en masques sources finaux.
+        """
+        if self.nspectro_preprocessed is None:
+            raise ValueError("Aucun spectrogramme pretraite disponible.")
+        if not self.bin_masks:
+            raise ValueError("Aucun masque de cluster disponible.")
+
+        centroids = self.all_centroids
+        if centroids.ndim != 3 or centroids.size == 0:
+            raise ValueError("Aucun centroide disponible pour le RANSAC circulaire.")
+
+        n_freqs, n_micros, _ = centroids.shape
+        frequencies = np.asarray(self.nspectro_preprocessed.f, dtype=float)[:n_freqs]
+        available = self._centroid_assignment_available_mask(centroids)
+        if int(np.sum(np.any(available, axis=1))) < max(2, self.n_sources):
+            raise RuntimeError("Pas assez de frequences avec centroides disponibles pour le RANSAC.")
+        slope_bounds = self._circular_ransac_slope_bounds(n_micros)
+        print(
+            "RANSAC circulaire: "
+            f"{int(np.sum(np.any(available, axis=1)))}/{n_freqs} frequences utilisables, "
+            f"{int(np.sum(available))} centroides disponibles, "
+            f"{self.n_sources} sources, {n_micros} composantes.",
+            flush=True,
+        )
+        print(
+            "RANSAC circulaire params: "
+            f"threshold={self.em_clustering_parameters.ransac_residual_threshold}, "
+            f"max_trials={self.em_clustering_parameters.ransac_max_trials}, "
+            f"slope_grid={self.em_clustering_parameters.ransac_slope_grid_size}, "
+            f"LO={self.em_clustering_parameters.ransac_local_optimization_steps}, "
+            f"slope_bound={float(np.max(np.abs(slope_bounds[:, 1]))):.4g}.",
+            flush=True,
+        )
+
+        assignment = fit_centroid_source_trajectories(
+            centroids,
+            frequencies,
+            n_sources=self.n_sources,
+            slope_bounds=slope_bounds,
+            residual_threshold=self.em_clustering_parameters.ransac_residual_threshold,
+            component_axis=1,
+            available=available,
+            verbose=True,
+            max_trials=self.em_clustering_parameters.ransac_max_trials,
+            random_state=self.em_clustering_parameters.ransac_random_state,
+            local_optimization_steps=(
+                self.em_clustering_parameters.ransac_local_optimization_steps
+            ),
+            slope_grid_size=self.em_clustering_parameters.ransac_slope_grid_size,
+            n_local_refinements=(
+                self.em_clustering_parameters.ransac_n_local_refinements
+            ),
+            max_hypotheses_per_pair=(
+                self.em_clustering_parameters.ransac_max_hypotheses_per_pair
+            ),
+            min_inliers=max(
+                2,
+                self.em_clustering_parameters.min_active_frames_per_frequency,
+            ),
+        )
+        print(
+            f"RANSAC circulaire termine: {len(assignment.models)}/{self.n_sources} trajectoires trouvees.",
+            flush=True,
+        )
+
+        cluster_masks = self.get_final_masks()
+        source_masks = labels_to_source_masks(
+            cluster_masks,
+            assignment.labels,
+            n_sources=self.n_sources,
+            cluster_axis=0,
+            aggregation="sum",
+            clip=True,
+        )
+        cluster_posteriors = self.get_final_posteriors()
+        source_posteriors = labels_to_source_masks(
+            cluster_posteriors,
+            assignment.labels,
+            n_sources=self.n_sources,
+            cluster_axis=0,
+            aggregation="sum",
+            clip=True,
+        )
+
+        for frequency_index in range(source_masks.shape[1]):
+            self.bin_masks[frequency_index] = source_masks[:, frequency_index, :]
+            self.bin_posteriors[frequency_index] = source_posteriors[:, frequency_index, :]
+            self.bin_active_clusters[frequency_index] = np.any(
+                source_masks[:, frequency_index, :] > 0.5,
+                axis=1,
+            )
+
+        self.source_assignment = assignment
+        self.source_assignment_labels = assignment.labels
+        self.source_assignment_distances = assignment.distances
+        self.source_assignment_relative_phases = assignment.relative_phases
+        self.source_assignment_selected_labels = assignment.selected_labels
+        self.source_assignment_slopes = np.asarray(
+            [model.slope_ for model in assignment.models if model.slope_ is not None],
+            dtype=float,
+        )
+        self.source_assignment_intercepts = np.asarray(
+            [model.intercept_ for model in assignment.models if model.intercept_ is not None],
+            dtype=float,
+        )
+        self.source_assignment_scores = np.asarray(
+            [np.nan if model.score_ is None else model.score_ for model in assignment.models],
+            dtype=float,
+        )
+        self.source_assignment_n_inliers = np.asarray(
+            [model.n_inliers_ for model in assignment.models],
+            dtype=int,
+        )
+        self.source_assignment_n_trials = np.asarray(
+            [model.n_trials_ for model in assignment.models],
+            dtype=int,
+        )
+        self.source_assignment_converged = np.asarray(
+            [model.converged_ for model in assignment.models],
+            dtype=bool,
+        )
+        self.source_assignment_frequency_inliers = np.asarray(
+            [
+                np.zeros(n_freqs, dtype=bool)
+                if model.frequency_inliers_ is None
+                else model.frequency_inliers_
+                for model in assignment.models
+            ],
+            dtype=bool,
+        )
+        self.source_assignment_selected_centroids = np.asarray(
+            [
+                np.full(n_freqs, -1, dtype=int)
+                if model.selected_centroids_ is None
+                else model.selected_centroids_
+                for model in assignment.models
+            ],
+            dtype=int,
+        )
     
     def align_permutations(self, memory: str = 'ema'):
         """
@@ -715,9 +903,18 @@ class SawadaBSS:
         print("Démarrage du clustering EM par bin...")
         self.fit_bins(nspectro_preprocessed, self.active_tf_mask)
         
-        # 3. Algo : Alignement des permutations entre les fréquences
-        print("Alignement des permutations...")
-        self.align_permutations()
+        # 3. Algo : coherence des sources entre frequences
+        alignment_method = self.em_clustering_parameters.source_alignment_method
+        if alignment_method == "ransac":
+            print("Alignement des sources par RANSAC circulaire...")
+            self.align_sources_with_circular_ransac()
+        elif alignment_method == "envelope":
+            print("Alignement des permutations par enveloppes...")
+            self.align_permutations()
+        elif alignment_method in {"none", None}:
+            print("Alignement des sources desactive.")
+        else:
+            raise ValueError(f"Methode d'alignement inconnue: {alignment_method}")
         
         return None
     
