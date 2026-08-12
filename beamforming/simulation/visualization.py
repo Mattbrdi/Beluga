@@ -1,15 +1,20 @@
-from mpl_toolkits import mplot3d
-from mpl_toolkits.mplot3d import Axes3D
-import matplotlib.pyplot as plt
-from pathlib import Path
-import sys
 from itertools import combinations
 
+
+from pathlib import Path
+import sys
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
-from beamforming.configuration import *
-from beamforming.classes import *
+
+
+from mpl_toolkits import mplot3d
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
+
+
+from beamforming.config import *
+from beamforming.geometry import *
 
 
 def _draw_tetrahedra_3D(ax: Axes3D, tetrahedra: TetrahedralArray):

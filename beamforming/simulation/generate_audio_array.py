@@ -1,7 +1,11 @@
 import numpy as np
+
+
 from BSS.Utils.signal_class import MultiSignal, Mixture, Signal
-from beamforming.classes import *
-from beamforming.configuration import *
+
+
+from beamforming.geometry import *
+from beamforming.config import *
 from beamforming.simulation.tdoas import get_tdoas_from_source
 
 

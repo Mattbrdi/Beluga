@@ -122,8 +122,10 @@ class WTDenoiseParameters:
 class BeamformingParameters:
     use_bf : bool = False
     beamformer : str = "mvdr"
-    bandwidth : str = "narrowband"
+    workflow : str = "CSSM"
     use_tf_mask : bool = False
+    mesh_size : int = 100
+    use_coarse_and_fine_search : bool = False
     
 @dataclass
 class LocationParameters:
@@ -187,8 +189,10 @@ class Parameters:
         self.beamforming_parameters = BeamformingParameters(
             use_bf=data["beamforming_parameters"]["use_beamforming"],
             beamformer=data["beamforming_parameters"]["beamformer"],
-            bandwidth=data["beamforming_parameters"]["bandwidth"],
-            use_tf_mask=data["beamforming_parameters"]["use_tf_mask"]
+            workflow=data["beamforming_parameters"]["workflow"],
+            use_tf_mask=data["beamforming_parameters"]["use_tf_mask"],
+            mesh_size=data["beamforming_parameters"]["mesh_size"],
+            use_coarse_and_fine_search=data["beamforming_parameters"]["use_coarse_and_fine_search"],
         )
         self.pre_filter_parameters = PreFilterParameters(data["pre_filter_parameters"]["order"], data["pre_filter_parameters"]["filtering_method"])
 

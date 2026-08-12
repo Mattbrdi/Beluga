@@ -297,10 +297,11 @@ def wave_vector_and_error(
     wave_vectors = []
     wave_vectors_error_variance = []
     tetrahedras = [tetra for tetra in environment.tetrahedras.values() if tetra.is_active]
+    C = environment.sound_speed
     for tetrahedra, audio_array in zip(tetrahedras, audio_arrays):
         tetrahedral_array = get_tetrahedra(tetrahedra)
 
-        u = beamforming_doa(parameters, fc, tetrahedral_array, audio_array.data_array)
+        u = beamforming_doa(parameters, fc, tetrahedral_array, audio_array, C)
 
         wave_vectors.append(u.reshape(-1, 1))
         #TODO: implement wave_vectors_error_variance
@@ -392,7 +393,7 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
         audio_arrays[i] = filter_audio_array(audio_arrays[i], parameters.pre_filter_parameters)
 
 
-    use_bf = parameters.beamforming_parameters.use_bf
+    use_bf = parameters.beamforming_parameters.use_bf and call_type == "Whistle"
     if use_bf:
         wave_vectors, wave_vectors_error_variance = wave_vector_and_error(parameters, environment, audio_arrays, central_frequency)
         associated_time = event_start_dt

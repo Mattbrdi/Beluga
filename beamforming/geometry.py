@@ -1,9 +1,52 @@
-import numpy as np
 from dataclasses import dataclass
+
+
+import numpy as np
 from numpy.typing import NDArray
-from beamforming.configuration import *
+
+
+from beamforming.config import *
 
 Vector3 = NDArray[np.float64]
+
+@dataclass
+class Direction:
+    vector: np.ndarray
+
+    def __post_init__(self) -> None:
+        self.vector = np.asarray(self.vector, dtype=np.float64)
+
+        if self.vector.shape != (3,):
+            raise ValueError(
+                f"Incorrect shape for direction got {self.vector.shape} instead of (3,)"
+            )
+
+    @classmethod
+    def from_spherical(
+        cls,
+        theta: float,
+        phi: float,
+    ) -> "Direction":
+        return cls(
+            np.array(
+                [
+                    np.sin(theta) * np.cos(phi),
+                    np.sin(theta) * np.sin(phi),
+                    np.cos(theta),
+                ]
+            )
+        )
+
+    @property
+    def theta(self) -> float:
+        return np.arccos(np.clip(self.vector[2], -1.0, 1.0))
+
+    @property
+    def phi(self) -> float:
+        return np.mod(
+            np.arctan2(self.vector[1], self.vector[0]),
+            2 * np.pi,
+        )
 
 
 def as_vector3(value) -> Vector3:
@@ -41,15 +84,9 @@ class TetrahedralArray:
             or not np.isclose(L23, L24)
             or not np.isclose(L24, L34)
         ):
-            raise ValueError("Tetrahedra is not reguliar got incorrect positions")
+            raise ValueError("Tetrahedra is not regular got incorrect positions")
 
-    # @classmethod
-    # def from_length_base_centroid(cls, radius : float, height) -> TetrahedralArray:
-    #     p1 = np.asarray([])
-    #     p2 = np.asarray([])
-    #     p3 = np.asarray([])
-    #     p4 = np.asarray([])
-    #     return cls()
+        self.D = np.mean([L12, L13,L14, L23, L24, L34])
 
     @classmethod
     def from_length_tetrahedra_centroid(cls, length: float):
@@ -119,10 +156,6 @@ class TetrahedralArray:
         self.p2 = p2
         self.p3 = p3
         self.p4 = p4
-
-
-class AudioArray:
-    pass
 
 
 @dataclass

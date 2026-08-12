@@ -18,7 +18,8 @@ runs/
 test_data/
 sandbox*.py
 results*/
-results*.py 
 .vscode/*
 /time_frequency_mask/data_generation/data/*
 pipeline/test_data2026_all/
+time_frequency_mask/data_generation/data/
+pipeline/test_data2026_beluga/*

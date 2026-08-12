@@ -1,0 +1,17 @@
+from time_frequency_mask.configuration import N_FFT, HOP_LENGTH, MIN_FREQ, MAX_FREQ
+
+C = 1450
+L = 0.3
+
+MAX_TDOA = 1.1 * L / C
+
+SAMPLING_RATE = 384000
+
+THETA = 250
+PHI = 250
+
+COARSE_PHI = 96
+COARSE_THETA = 48
+
+FINE_THETA = 200
+FINE_PHI = 200

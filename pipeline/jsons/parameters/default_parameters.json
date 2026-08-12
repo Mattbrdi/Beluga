@@ -46,10 +46,12 @@
         "energy_perc": 0.90
   },
   "beamforming_parameters": {
-    "use_beamforming": true,
-    "beamformer": "cssm_mvdr",
-    "bandwidth": "narrowband",
-    "use_tf_mask": false
+    "use_beamforming": false,
+    "beamformer": "mvdr",
+    "workflow": "SRPPHAT",
+    "use_tf_mask": true,
+    "mesh_size": 100,
+    "use_coarse_and_fine_search": true
   },
   "pre_filter_parameters": {
     "order": 4,
