@@ -22,7 +22,7 @@ BENCHMARK_SAWADA_EM_PARAMETERS = EMClusteringParameters(
     eps=1e-12,
     energy_threshold_db_above_floor=6.0,
     energy_floor_percentile=20.0,
-    min_active_frames_per_frequency=2,
+    min_active_frames_per_frequency=3,
     merge_centroid_distance_scale=1.0,
 )
 
@@ -85,9 +85,9 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
         else np.ones_like(tf_energy, dtype=bool)
     )
 
-    n_freqs = len(model.bin_models)
-    variances = np.zeros((n_freqs, model.n_sources), dtype=float)
-    weights = np.zeros((n_freqs, model.n_sources), dtype=float)
+    n_freqs = model.nspectro_preprocessed.Sxx.shape[1]
+    variances = np.full((n_freqs, model.n_sources), np.nan, dtype=float)
+    weights = np.full((n_freqs, model.n_sources), np.nan, dtype=float)
     for frequency_index, bin_model in model.bin_models.items():
         variances[frequency_index] = bin_model.variances
         weights[frequency_index] = bin_model.weights
@@ -135,6 +135,11 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
             "masks": model.get_final_masks().astype(np.uint8),
             "posteriors": model.get_final_posteriors(),
             "active_clusters": model.get_final_active_clusters().astype(np.uint8),
+            "active_frequency_mask": (
+                np.asarray(model.active_frequency_mask, dtype=np.uint8)
+                if model.active_frequency_mask is not None
+                else np.ones(n_freqs, dtype=np.uint8)
+            ),
             "bin_vectors": model.nspectro_preprocessed.Sxx,
             "bin_vectors_unwhitened": (
                 np.empty((0, 0, 0))

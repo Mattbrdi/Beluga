@@ -3147,6 +3147,7 @@ def build_app(config: AppConfig) -> dash.Dash:
 
         threshold = np.asarray(model.get("energy_threshold_db", np.nan)).item()
         active_tf_mask = np.asarray(model.get("active_tf_mask", []), dtype=float)
+        active_frequency_mask = np.asarray(model.get("active_frequency_mask", []), dtype=bool)
         frequency_energy = np.mean(energy, axis=1)
         db = 10 * np.log10(frequency_energy + 1e-20)
         quiet_threshold = np.nanpercentile(db, 10)
@@ -3157,9 +3158,16 @@ def build_app(config: AppConfig) -> dash.Dash:
             if active_tf_mask.ndim != 2 or active_tf_mask.size == 0
             else f"{float(np.mean(active_tf_mask)):.1%}"
         )
+        active_frequency_text = (
+            "-"
+            if active_frequency_mask.ndim != 1 or active_frequency_mask.size == 0
+            else f"{int(np.sum(active_frequency_mask))}/{active_frequency_mask.size}"
+        )
         caption = (
             f"Energie brute avant normalisation: {energy.shape[0]} bins frequences x "
-            f"{energy.shape[1]} trames. Seuil EM {threshold_text}, bins actifs {active_text}. "
+            f"{energy.shape[1]} trames. Seuil EM {threshold_text}, "
+            f"bins actifs apres filtrage temporel {active_text}, "
+            f"frequences utilisees par l'EM {active_frequency_text}. "
             f"{quiet_count} bins frequences sont dans les 10% les plus faibles."
         )
         return _sawada_energy_figure(model, frequency_scale), caption
@@ -3202,6 +3210,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         bin_vectors = np.asarray(model.get(vector_key, []))
         masks = np.asarray(model.get("masks", []), dtype=float)
         active_tf_mask = np.asarray(model.get("active_tf_mask", []), dtype=bool)
+        active_frequency_mask = np.asarray(model.get("active_frequency_mask", []), dtype=bool)
         active_clusters = np.asarray(model.get("active_clusters", []), dtype=bool)
         centroids = np.asarray(model.get(centroid_key, []))
         if bin_vectors.ndim != 3 or bin_vectors.size == 0:
@@ -3251,6 +3260,16 @@ def build_app(config: AppConfig) -> dash.Dash:
             if active_clusters.ndim == 2 and active_clusters.shape[0] > frequency_index
             else source_masks.shape[0]
         )
+        frequency_used_text = (
+            "oui"
+            if active_frequency_mask.ndim == 1
+            and active_frequency_mask.size > frequency_index
+            and active_frequency_mask[frequency_index]
+            else "non"
+            if active_frequency_mask.ndim == 1
+            and active_frequency_mask.size > frequency_index
+            else "inconnu"
+        )
         gt_correctness = (
             _sawada_gt_correctness(bundle, model, gt_permutation)
             if color_mode == "gt"
@@ -3280,6 +3299,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         caption = (
             f"Ligne frequencielle {frequency_index} ({frequency_text}): {n_times} trames x "
             f"{n_mics} composantes complexes. Points: {', '.join(point_counts)}. "
+            f"Frequence utilisee par l'EM: {frequency_used_text}. "
             f"Clusters actifs: {active_cluster_count}/{source_masks.shape[0]}. "
             f"Non utilises par l'EM: {inactive_count}. "
             f"Hors seuil energie: {rejected_count}"

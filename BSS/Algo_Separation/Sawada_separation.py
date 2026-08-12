@@ -232,6 +232,7 @@ class SawadaBSS:
     bin_active_clusters: Dict[int, np.ndarray] = field(default_factory=dict)
     tf_energy: Optional[np.ndarray] = None
     active_tf_mask: Optional[np.ndarray] = None
+    active_frequency_mask: Optional[np.ndarray] = None
     energy_threshold_db: Optional[float] = None
     
     eigenvalues_matrix: Optional[np.ndarray] = None
@@ -246,12 +247,51 @@ class SawadaBSS:
             whitening=self.whitening,
         )
 
+    @staticmethod
+    def _keep_consecutive_active_runs(active_frames: np.ndarray, min_run_length: int) -> np.ndarray:
+        """
+        Conserve uniquement les groupes temporels actifs suffisamment longs.
+
+        Un bin temps-frequence actif isole ne porte pas assez d'information locale
+        pour stabiliser l'EM; on le retire donc avant le clustering.
+        """
+        active_frames = np.asarray(active_frames, dtype=bool)
+        if min_run_length <= 1 or active_frames.size == 0:
+            return active_frames.copy()
+
+        padded = np.r_[False, active_frames, False]
+        transitions = np.diff(padded.astype(int))
+        starts = np.flatnonzero(transitions == 1)
+        stops = np.flatnonzero(transitions == -1)
+
+        filtered = np.zeros_like(active_frames, dtype=bool)
+        for start, stop in zip(starts, stops):
+            if stop - start >= min_run_length:
+                filtered[start:stop] = True
+        return filtered
+
+    def _filter_active_tf_runs(self, active_mask: np.ndarray) -> np.ndarray:
+        min_run_length = max(
+            1,
+            int(self.em_clustering_parameters.min_active_frames_per_frequency),
+        )
+        if min_run_length <= 1:
+            return np.asarray(active_mask, dtype=bool).copy()
+
+        filtered_mask = np.zeros_like(active_mask, dtype=bool)
+        for frequency_index in range(active_mask.shape[0]):
+            filtered_mask[frequency_index] = self._keep_consecutive_active_runs(
+                active_mask[frequency_index],
+                min_run_length,
+            )
+        return filtered_mask
+
     def _compute_active_tf_mask(self, tf_energy: np.ndarray) -> np.ndarray:
         threshold_margin = self.em_clustering_parameters.energy_threshold_db_above_floor
         active_mask = np.ones_like(tf_energy, dtype=bool)
         self.energy_threshold_db = None
         if threshold_margin is None:
-            return active_mask
+            return self._filter_active_tf_runs(active_mask)
 
         energy_db = 10 * np.log10(tf_energy + self.em_clustering_parameters.eps)
         floor_db = np.percentile(
@@ -259,7 +299,8 @@ class SawadaBSS:
             self.em_clustering_parameters.energy_floor_percentile,
         )
         self.energy_threshold_db = float(floor_db + threshold_margin)
-        return energy_db >= self.energy_threshold_db
+        active_mask = energy_db >= self.energy_threshold_db
+        return self._filter_active_tf_runs(active_mask)
     
     
     
@@ -417,6 +458,11 @@ class SawadaBSS:
         """
         # Sxx shape: (n_micros, n_freqs, n_times)
         n_micros, n_freqs, n_times = nspectro.Sxx.shape
+        self.bin_models.clear()
+        self.bin_masks.clear()
+        self.bin_posteriors.clear()
+        self.bin_active_clusters.clear()
+        self.active_frequency_mask = np.zeros(n_freqs, dtype=bool)
         
         print(f"Début du clustering pour {n_freqs} bins fréquentiels...")
 
@@ -429,12 +475,24 @@ class SawadaBSS:
                 if active_tf_mask is None
                 else np.asarray(active_tf_mask[f_idx], dtype=bool)
             )
+            active_frames = self._keep_consecutive_active_runs(
+                active_frames,
+                self.em_clustering_parameters.min_active_frames_per_frequency,
+            )
             min_active = max(
                 self.n_sources,
                 self.em_clustering_parameters.min_active_frames_per_frequency,
             )
             has_enough_active_frames = int(np.sum(active_frames)) >= min_active
-            X_fit = X_f[:, active_frames] if has_enough_active_frames else X_f
+            self.bin_masks[f_idx] = np.zeros((self.n_sources, n_times), dtype=int)
+            self.bin_posteriors[f_idx] = np.zeros((self.n_sources, n_times), dtype=float)
+            self.bin_active_clusters[f_idx] = np.zeros(self.n_sources, dtype=bool)
+            if not has_enough_active_frames:
+                print(f"\r frequence numéro {f_idx} ignorée", end="", flush=True)
+                continue
+
+            self.active_frequency_mask[f_idx] = True
+            X_fit = X_f[:, active_frames]
             
             # 2. Initialisation de l'EM pour ce bin
             # On utilise les paramètres de la classe Sawada
@@ -449,24 +507,22 @@ class SawadaBSS:
             # Cette étape estime a_i(f) et sigma_i(f)
             model.fit(X_fit)
             active_clusters = np.ones(self.n_sources, dtype=bool)
-            if has_enough_active_frames:
-                active_clusters = self._merge_close_clusters(model, X_fit)
+            active_clusters = self._merge_close_clusters(model, X_fit)
             
             # 4. Génération du masque binaire (Hard labeling) pour ce bin
             # mask_f shape: (n_sources, n_times)
             mask_f = np.zeros((self.n_sources, n_times), dtype=int)
             posterior_f = np.zeros((self.n_sources, n_times), dtype=float)
-            if has_enough_active_frames:
-                posterior_active = model.posteriors
-                if posterior_active is None:
-                    posterior_active = model.e_step(X_fit)
-                posterior_f[:, active_frames] = posterior_active
-                best_source = np.argmax(posterior_active, axis=0)
-                for source_index in range(self.n_sources):
-                    if active_clusters[source_index]:
-                        mask_f[source_index, active_frames] = (
-                            best_source == source_index
-                        )
+            posterior_active = model.posteriors
+            if posterior_active is None:
+                posterior_active = model.e_step(X_fit)
+            posterior_f[:, active_frames] = posterior_active
+            best_source = np.argmax(posterior_active, axis=0)
+            for source_index in range(self.n_sources):
+                if active_clusters[source_index]:
+                    mask_f[source_index, active_frames] = (
+                        best_source == source_index
+                    )
             
             self.bin_models[f_idx] = model
             self.bin_masks[f_idx] = mask_f
@@ -481,10 +537,20 @@ class SawadaBSS:
         Retourne tous les centroïdes estimés sous forme de tenseur.
         Shape: (n_freqs, n_micros, n_sources)
         """
-        n_freqs = len(self.bin_models)
-        n_micros = self.bin_models[0].centroids.shape[0]
+        if self.nspectro_preprocessed is not None:
+            n_micros, n_freqs, _ = self.nspectro_preprocessed.Sxx.shape
+        elif self.bin_models:
+            n_freqs = max(self.bin_models) + 1
+            first_model = next(iter(self.bin_models.values()))
+            n_micros = first_model.centroids.shape[0]
+        else:
+            return np.empty((0, 0, self.n_sources), dtype=complex)
         
-        centroids_tensor = np.zeros((n_freqs, n_micros, self.n_sources), dtype=complex)
+        centroids_tensor = np.full(
+            (n_freqs, n_micros, self.n_sources),
+            np.nan + 1j * np.nan,
+            dtype=complex,
+        )
         for f_idx, model in self.bin_models.items():
             centroids_tensor[f_idx] = model.centroids
             
@@ -610,8 +676,14 @@ class SawadaBSS:
 
     def get_final_active_clusters(self) -> np.ndarray:
         """Retourne les clusters Sawada conserves apres fusion locale."""
-        n_freqs = len(self.bin_models)
-        active_clusters = np.ones((n_freqs, self.n_sources), dtype=bool)
+        if self.nspectro_preprocessed is not None:
+            n_freqs = self.nspectro_preprocessed.Sxx.shape[1]
+        elif self.bin_active_clusters:
+            n_freqs = max(self.bin_active_clusters) + 1
+        else:
+            return np.empty((0, self.n_sources), dtype=bool)
+
+        active_clusters = np.zeros((n_freqs, self.n_sources), dtype=bool)
         for f in range(n_freqs):
             if f in self.bin_active_clusters:
                 active_clusters[f] = self.bin_active_clusters[f]
