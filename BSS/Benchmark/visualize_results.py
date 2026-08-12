@@ -1714,15 +1714,29 @@ def _sawada_centroid_argument_frequency_figure(
     centroids = np.asarray(sawada_model.get("centroids_unwhitened", []))
     if centroids.ndim != 3 or centroids.size == 0:
         centroids = np.asarray(sawada_model.get("centroids", []))
+    relative_phases = np.asarray(
+        sawada_model.get("source_assignment_relative_phases", []),
+        dtype=float,
+    )
     frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
 
-    if centroids.ndim != 3 or centroids.size == 0:
+    if centroids.ndim == 3 and centroids.size:
+        if frequencies.size == centroids.shape[1] and frequencies.size != centroids.shape[0]:
+            centroids = np.moveaxis(centroids, 1, 0)
+
+        n_freqs, n_mics, n_sources = centroids.shape
+        relative_centroids = centroids * np.conj(centroids[:, 0, :])[:, np.newaxis, :]
+        argument_values = np.angle(relative_centroids)
+    elif relative_phases.ndim == 3 and relative_phases.size:
+        n_freqs, n_sources, n_mics = relative_phases.shape
+        argument_values = np.moveaxis(relative_phases, 2, 1)
+    else:
         fig = go.Figure()
         fig.update_layout(
             title="Arguments des centroides indisponibles",
             annotations=[
                 {
-                    "text": "Relance le benchmark Sawada pour sauvegarder les centroides.",
+                    "text": "Relance le benchmark Sawada pour sauvegarder les centroides ou les phases RANSAC.",
                     "xref": "paper",
                     "yref": "paper",
                     "x": 0.5,
@@ -1736,10 +1750,6 @@ def _sawada_centroid_argument_frequency_figure(
         )
         return fig
 
-    if frequencies.size == centroids.shape[1] and frequencies.size != centroids.shape[0]:
-        centroids = np.moveaxis(centroids, 1, 0)
-
-    n_freqs, n_mics, n_sources = centroids.shape
     if frequencies.size < n_freqs:
         frequencies = np.arange(n_freqs, dtype=float)
     else:
@@ -1769,8 +1779,6 @@ def _sawada_centroid_argument_frequency_figure(
     if frequency_max is not None:
         frequency_band &= frequencies <= frequency_max
 
-    relative_centroids = centroids * np.conj(centroids[:, 0, :])[:, np.newaxis, :]
-    argument_values = np.angle(relative_centroids)
     gt_centroids = np.asarray(gt_centroids if gt_centroids is not None else [])
     if gt_centroids.ndim == 3 and gt_centroids.size:
         if gt_centroids.shape[1] == n_freqs and gt_centroids.shape[0] != n_freqs:
@@ -2147,6 +2155,7 @@ def _sawada_ransac_figure(
                     y=phase_values[finite],
                     mode="markers",
                     name=f"Distance a S{source_index + 1}",
+                    legendgroup=f"ransac-distance-source-{source_index}",
                     showlegend=component_index == 0,
                     marker={
                         "size": 5,
@@ -2175,6 +2184,7 @@ def _sawada_ransac_figure(
                         y=phase_values[unassigned],
                         mode="markers",
                         name="Non attribue",
+                        legendgroup="ransac-unassigned",
                         showlegend=component_index == 0,
                         marker={"size": 4.5, "color": "#9ca3af", "opacity": 0.34},
                         hovertemplate=(
@@ -2195,6 +2205,7 @@ def _sawada_ransac_figure(
                         y=phase_values[selector],
                         mode="markers",
                         name=f"Attribue S{label_index + 1}",
+                        legendgroup=f"ransac-assigned-source-{label_index}",
                         showlegend=component_index == 0,
                         marker={
                             "size": 5.5 if label_index == source_index else 4.5,
@@ -2227,6 +2238,7 @@ def _sawada_ransac_figure(
                     y=line_y,
                     mode="lines",
                     name=f"RANSAC S{label_index + 1}",
+                    legendgroup=f"ransac-line-source-{label_index}",
                     showlegend=component_index == 0,
                     line={
                         "color": source_colors[label_index % len(source_colors)],
@@ -2267,6 +2279,7 @@ def _sawada_ransac_figure(
                         y=phase_values[selected_freq_indexes, selected_centroid_indexes],
                         mode="markers",
                         name=f"Inliers RANSAC S{source_index + 1}",
+                        legendgroup=f"ransac-inliers-source-{source_index}",
                         showlegend=component_index == 0,
                         marker={
                             "symbol": "diamond-open",
@@ -2307,7 +2320,7 @@ def _sawada_ransac_figure(
         margin={"l": 58, "r": 18, "t": 64, "b": 48},
         paper_bgcolor="#f7f7f3",
         plot_bgcolor="#ffffff",
-        legend={"orientation": "h", "y": -0.14},
+        legend={"orientation": "h", "y": -0.14, "groupclick": "togglegroup"},
     )
     return fig
 
@@ -3993,17 +4006,31 @@ def build_app(config: AppConfig) -> dash.Dash:
         if centroids.ndim != 3 or centroids.size == 0:
             centroids = np.asarray(model.get("centroids", []))
             centroid_space = "blanchi"
-        if centroids.ndim != 3 or centroids.size == 0:
+        relative_phases = np.asarray(
+            model.get("source_assignment_relative_phases", []),
+            dtype=float,
+        )
+        has_complex_centroids = centroids.ndim == 3 and centroids.size > 0
+        has_relative_phases = relative_phases.ndim == 3 and relative_phases.size > 0
+        if not has_complex_centroids and not has_relative_phases:
             return (
                 _sawada_centroid_argument_frequency_figure(model, frequency_min, frequency_max),
-                "Centroides absents dans sawada_model.npz.",
+                "Centroides et phases RANSAC absents dans sawada_model.npz.",
             )
 
         frequencies = np.asarray(model.get("frequencies", []), dtype=float)
-        if frequencies.size == centroids.shape[1] and frequencies.size != centroids.shape[0]:
-            centroids = np.moveaxis(centroids, 1, 0)
-
-        n_freqs, n_mics, n_sources = centroids.shape
+        if has_complex_centroids:
+            if frequencies.size == centroids.shape[1] and frequencies.size != centroids.shape[0]:
+                centroids = np.moveaxis(centroids, 1, 0)
+            n_freqs, n_mics, n_sources = centroids.shape
+        else:
+            n_freqs, n_sources, n_mics = relative_phases.shape
+            centroid_space = "phases RANSAC sauvegardees"
+        assignment_labels = np.asarray(
+            model.get("source_assignment_labels", []),
+            dtype=int,
+        )
+        use_final_assignment = assignment_labels.shape == (n_freqs, n_sources)
         if frequencies.size < n_freqs:
             caption_frequencies = np.arange(n_freqs, dtype=float)
         else:
