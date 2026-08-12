@@ -16,7 +16,9 @@ def fusion_bf(wave_vectors_list: List[np.ndarray], wave_vector_error_variance: L
     positions = np.array(positions)
     position = np.mean(positions, axis=0)
     estimated_error = np.zeros(3) # TODO ajouter module d'erreur ici si on garde
-    return position.reshape(-1, 1), estimated_error
+    # return position.reshape(-1, 1), estimated_error
+    return position, estimated_error
+
 
 def wave_vectors(tdoas_measured: List[np.ndarray], environment):
     """
