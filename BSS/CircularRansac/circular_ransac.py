@@ -818,6 +818,7 @@ def sequential_centroid_circular_ransac(
     theta: np.ndarray,
     frequencies: np.ndarray,
     n_components: int,
+    available: np.ndarray | None = None,
     **ransac_kwargs: object,
 ) -> CentroidSequentialRansacResult:
     """Extract several trajectories from centroid observations shaped (F, C, D)."""
@@ -831,7 +832,12 @@ def sequential_centroid_circular_ransac(
     base_seed = ransac_kwargs.pop("random_state", None)
     rng = np.random.default_rng(base_seed)
     f_count, c_count, _ = theta.shape
-    available = np.ones((f_count, c_count), dtype=bool)
+    if available is None:
+        available = np.ones((f_count, c_count), dtype=bool)
+    else:
+        available = np.asarray(available, dtype=bool).copy()
+        if available.shape != (f_count, c_count):
+            raise ValueError("available must have shape (F, C).")
     labels = np.full((f_count, c_count), -1, dtype=int)
     models: list[CircularLineRANSAC] = []
 
