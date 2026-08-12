@@ -1,6 +1,8 @@
-from beamforming.classes import *
-from beamforming.configuration import *
 from itertools import combinations
+
+
+from beamforming.geometry import *
+from beamforming.config import *
 
 
 def get_tdoas_from_source(
