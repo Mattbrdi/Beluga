@@ -50,8 +50,16 @@ def whistles_only_scenario(
     """Limite les sources utiles aux sifflements, sans modifier les bruits."""
     return AudioSceneSpec(
         allowed_source_signal_types=(WhistleSignal.signal_type,),
+        snr_db = snr_seed(_seed)
     )
-
+def snr_seed(seed: int):
+    if seed%3 == 0: 
+        return 10
+    elif seed%3 == 1: 
+        return 0 
+    else:
+        return -1
+    
 @register_scenario("Whistles_and_boat")
 def whistle_and_boat(_split : str, _index: int, _seed: int) -> AudioSceneSpec: 
 
@@ -62,7 +70,7 @@ def whistle_and_boat(_split : str, _index: int, _seed: int) -> AudioSceneSpec:
         source_specs=[CompositeSignalSpec(n_placements=1,allowed_signal_types=LargeShipNoise.signal_type, 
                                           placements= [SignalPlacementSpec(gain = 1)])],
         snr_db= snr(_seed))
-    
+
 def snr(seed :int): 
     if seed%3 == 0: 
         return 1
