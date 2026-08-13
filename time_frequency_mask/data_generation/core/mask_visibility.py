@@ -8,30 +8,38 @@ from time_frequency_mask.stft import scipy_stft_complex_psd, frequency_band
 BOX_SIZE_TIMES = 10
 BOX_SIZE_FREQS = 10
 
-TIME_COUNT = int(np.ceil(N_TIMES / BOX_SIZE_TIMES)) # num of boxes in the horizontal axis
-FREQ_COUNT = int(np.ceil(N_FREQS / BOX_SIZE_FREQS)) # num of boxes in the vertical axis
-
 df = SAMPLING_RATE / N_FFT
 
-def get_idx(freq_idx : int, time_idx : int) -> tuple[int, int, int, int]:
-    start_idx_freqs = freq_idx * BOX_SIZE_FREQS
-    end_idx_freqs = (freq_idx+1) * BOX_SIZE_FREQS
+def get_idx(freq_idx : int, time_idx : int, n_freqs : int, n_times : int, box_size_freqs = BOX_SIZE_FREQS, box_size_times = BOX_SIZE_TIMES) -> tuple[int, int, int, int]:
+    start_idx_freqs = freq_idx * box_size_freqs
+    end_idx_freqs = (freq_idx+1) * box_size_freqs
 
-    start_idx_times = time_idx * BOX_SIZE_TIMES
-    end_idx_times = (time_idx+1) * BOX_SIZE_TIMES
+    start_idx_times = time_idx * box_size_times
+    end_idx_times = (time_idx+1) * box_size_times
 
-    return min(start_idx_freqs, N_FREQS), min(end_idx_freqs, N_FREQS), min(start_idx_times, N_TIMES), min(end_idx_times, N_TIMES)
+    return min(start_idx_freqs, n_freqs), min(end_idx_freqs, n_freqs), min(start_idx_times, n_times), min(end_idx_times, n_times)
 
-def compute_signal_bin_mask_discrimination(Zxx_s_nu : NDArray[np.complex128], Zxx_nu : NDArray[np.complex128], mask : NDArray[np.uint8], perc_thr : float = 0.5):
-    true_or_false_board = np.zeros(shape=(FREQ_COUNT, TIME_COUNT), dtype=bool)
+def compute_signal_bin_mask_discrimination(Zxx_s_nu : NDArray[np.complex128], Zxx_nu : NDArray[np.complex128], mask : NDArray[np.uint8], box_size_freqs = BOX_SIZE_FREQS, box_size_times = BOX_SIZE_TIMES, perc_thr : float = 0.5):
+
+    if Zxx_s_nu.shape != Zxx_nu.shape:
+        raise ValueError(
+            f"Incorrect shape for Zxx_s_nu and Zxx_nu got {Zxx_s_nu.shape} and {Zxx_nu.shape}"
+        )
+    n_freqs, n_times = Zxx_s_nu.shape
+
+    time_count = int(np.ceil(n_times / box_size_times)) # num of boxes in the horizontal axis
+    freq_count = int(np.ceil(n_freqs / box_size_freqs)) # num of boxes in the vertical axis
+
+    true_or_false_board = np.zeros(shape=(freq_count, time_count), dtype=bool)
     
     Pxx_s_nu = np.abs(Zxx_s_nu)**2
     Pxx_nu = np.abs(Zxx_nu)**2
     global_noise_psd = np.sum(2 * df * Pxx_s_nu[mask == 0]) / np.sum(2 * df * (mask == 0))
 
-    for freq_idx in range(FREQ_COUNT):
-        for time_idx in range(TIME_COUNT):
-            start_i, end_i, start_j, end_j = get_idx(freq_idx, time_idx)
+    #TODO: Vectorize and remove for loops
+    for freq_idx in range(freq_count):
+        for time_idx in range(time_count):
+            start_i, end_i, start_j, end_j = get_idx(freq_idx, time_idx, n_freqs, n_times)
 
             Pxx_s_nu_ij = Pxx_s_nu[start_i:end_i, start_j:end_j]
             Pxx_nu_ij = Pxx_nu[start_i:end_i, start_j:end_j]
@@ -55,11 +63,13 @@ def update_mask_for_noise(waveform : NDArray[np.float64], noise : NDArray[np.flo
 
     freqs, _, Zxx_nu = scipy_stft_complex_psd(noise)
     freqs, Zxx_nu = frequency_band(freqs, Zxx_nu)
+
+    n_freqs, n_times = Zxx_s_nu.shape
     
     true_or_false_board = compute_signal_bin_mask_discrimination(Zxx_s_nu, Zxx_nu, mask)
     for i, line in enumerate(true_or_false_board):
         for j, boolean in enumerate(line):
             if not boolean:
-                start_i, end_i, start_j, end_j = get_idx(i, j)
+                start_i, end_i, start_j, end_j = get_idx(i, j, n_freqs, n_times)
                 mask[start_i:end_i, start_j:end_j] = False
     return mask
