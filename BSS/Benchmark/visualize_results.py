@@ -2421,10 +2421,17 @@ def _overview_children(bundle: dict[str, Any]) -> list[Any]:
 def _tdoa_rows(metrics: dict[str, Any]) -> list[dict[str, Any]]:
     labels = metrics.get("pairwise_labels") or []
     true_samples = np.asarray(metrics.get("true_pairwise_tdoas_samples", []), dtype=float)
-    estimated_samples = np.asarray(metrics.get("estimated_pairwise_tdoas_samples", []), dtype=float)
     aligned_samples = np.asarray(metrics.get("aligned_pairwise_tdoas_samples", []), dtype=float)
+    ransac_samples = np.asarray(
+        metrics.get("ransac_aligned_pairwise_tdoas_samples", []),
+        dtype=float,
+    )
     true_seconds = np.asarray(metrics.get("true_pairwise_tdoas_seconds", []), dtype=float)
     aligned_seconds = np.asarray(metrics.get("aligned_pairwise_tdoas_seconds", []), dtype=float)
+    ransac_seconds = np.asarray(
+        metrics.get("ransac_aligned_pairwise_tdoas_seconds", []),
+        dtype=float,
+    )
 
     rows: list[dict[str, Any]] = []
     if (
@@ -2435,14 +2442,24 @@ def _tdoa_rows(metrics: dict[str, Any]) -> list[dict[str, Any]]:
     ):
         return rows
 
+    has_ransac = ransac_samples.shape == true_samples.shape and ransac_seconds.shape == true_seconds.shape
+
+    def value_or_dash(value: float, digits: int) -> float | str:
+        return "-" if not np.isfinite(value) else round(float(value), digits)
+
     for source_index in range(true_samples.shape[0]):
         for pair_index, label in enumerate(labels):
-            estimated = (
-                estimated_samples[source_index, pair_index]
-                if estimated_samples.shape == true_samples.shape
+            aligned = aligned_samples[source_index, pair_index]
+            ransac = (
+                ransac_samples[source_index, pair_index]
+                if has_ransac
                 else np.nan
             )
-            aligned = aligned_samples[source_index, pair_index]
+            ransac_second = (
+                ransac_seconds[source_index, pair_index]
+                if has_ransac
+                else np.nan
+            )
             truth = true_samples[source_index, pair_index]
             rows.append(
                 {
@@ -2450,10 +2467,12 @@ def _tdoa_rows(metrics: dict[str, Any]) -> list[dict[str, Any]]:
                     "pair": label,
                     "true_samples": round(float(truth), 3),
                     "estimated_samples": round(float(aligned), 3),
-                    "raw_estimated_samples": round(float(estimated), 3),
                     "error_samples": round(float(aligned - truth), 3),
+                    "ransac_samples": value_or_dash(ransac, 3),
+                    "ransac_error_samples": value_or_dash(ransac - truth, 3),
                     "true_ms": round(float(true_seconds[source_index, pair_index] * 1000), 4),
                     "estimated_ms": round(float(aligned_seconds[source_index, pair_index] * 1000), 4),
+                    "ransac_ms": value_or_dash(ransac_second * 1000, 4),
                 }
             )
     return rows
@@ -2463,25 +2482,84 @@ def _tdoa_figure(metrics: dict[str, Any]) -> go.Figure:
     labels = metrics.get("pairwise_labels") or []
     true_samples = np.asarray(metrics.get("true_pairwise_tdoas_samples", []), dtype=float)
     aligned_samples = np.asarray(metrics.get("aligned_pairwise_tdoas_samples", []), dtype=float)
+    ransac_samples = np.asarray(
+        metrics.get("ransac_aligned_pairwise_tdoas_samples", []),
+        dtype=float,
+    )
 
-    fig = go.Figure()
-    if true_samples.ndim == 2 and aligned_samples.shape == true_samples.shape:
-        errors = aligned_samples - true_samples
+    if true_samples.ndim != 2 or aligned_samples.shape != true_samples.shape:
+        fig = go.Figure()
+        fig.update_layout(
+            margin={"l": 52, "r": 18, "t": 34, "b": 42},
+            title="Erreur TDOA alignee",
+            paper_bgcolor="#f7f7f3",
+            plot_bgcolor="#ffffff",
+        )
+        return fig
+
+    corr_errors = aligned_samples - true_samples
+    has_ransac = ransac_samples.shape == true_samples.shape
+    ransac_errors = ransac_samples - true_samples if has_ransac else None
+    all_errors = (
+        np.concatenate([corr_errors.reshape(-1), ransac_errors.reshape(-1)])
+        if ransac_errors is not None
+        else corr_errors.reshape(-1)
+    )
+    finite_errors = all_errors[np.isfinite(all_errors)]
+    max_abs_error = float(np.max(np.abs(finite_errors))) if finite_errors.size else 1.0
+    max_abs_error = max(max_abs_error, 1e-9)
+    source_labels = [f"S{index + 1}" for index in range(corr_errors.shape[0])]
+
+    if has_ransac:
+        fig = make_subplots(
+            rows=1,
+            cols=2,
+            subplot_titles=["Correlation", "Pentes RANSAC"],
+            shared_yaxes=True,
+        )
         fig.add_trace(
             go.Heatmap(
-                z=errors,
+                z=corr_errors,
                 x=labels,
-                y=[f"S{index + 1}" for index in range(errors.shape[0])],
-                colorscale="RdBu",
-                zmid=0,
-                colorbar={"title": "samples"},
+                y=source_labels,
+                coloraxis="coloraxis",
+            ),
+            row=1,
+            col=1,
+        )
+        fig.add_trace(
+            go.Heatmap(
+                z=ransac_errors,
+                x=labels,
+                y=source_labels,
+                coloraxis="coloraxis",
+            ),
+            row=1,
+            col=2,
+        )
+    else:
+        fig = go.Figure()
+        fig.add_trace(
+            go.Heatmap(
+                z=corr_errors,
+                x=labels,
+                y=source_labels,
+                coloraxis="coloraxis",
             )
         )
+
     fig.update_layout(
         margin={"l": 52, "r": 18, "t": 34, "b": 42},
         title="Erreur TDOA alignee",
         paper_bgcolor="#f7f7f3",
         plot_bgcolor="#ffffff",
+        coloraxis={
+            "colorscale": "RdBu",
+            "cmid": 0,
+            "cmin": -max_abs_error,
+            "cmax": max_abs_error,
+            "colorbar": {"title": "samples"},
+        },
     )
     return fig
 
@@ -3265,11 +3343,13 @@ def build_app(config: AppConfig) -> dash.Dash:
                                                 {"name": "Source", "id": "source"},
                                                 {"name": "Paire", "id": "pair"},
                                                 {"name": "Vrai (samples)", "id": "true_samples"},
-                                                {"name": "Estime (samples)", "id": "estimated_samples"},
-                                                {"name": "Erreur", "id": "error_samples"},
-                                                {"name": "Estime brut", "id": "raw_estimated_samples"},
+                                                {"name": "Estime corr. (samples)", "id": "estimated_samples"},
+                                                {"name": "Erreur corr.", "id": "error_samples"},
+                                                {"name": "Estime RANSAC (samples)", "id": "ransac_samples"},
+                                                {"name": "Erreur RANSAC", "id": "ransac_error_samples"},
                                                 {"name": "Vrai (ms)", "id": "true_ms"},
-                                                {"name": "Estime (ms)", "id": "estimated_ms"},
+                                                {"name": "Estime corr. (ms)", "id": "estimated_ms"},
+                                                {"name": "Estime RANSAC (ms)", "id": "ransac_ms"},
                                             ],
                                             data=[],
                                             sort_action="native",

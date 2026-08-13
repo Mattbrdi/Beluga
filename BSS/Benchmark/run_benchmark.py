@@ -4,6 +4,8 @@ import argparse
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+
 from .config import BenchmarkConfig
 from .io import (
     iter_scenes,
@@ -23,6 +25,27 @@ from .tdoa_metrics import (
     true_reference_tdoas_samples,
     true_reference_tdoas_seconds,
 )
+
+
+def _pairwise_tdoas_from_ransac_slopes(result: Any) -> np.ndarray:
+    sawada_model = result.debug_artifacts.get("sawada_model", {})
+    slopes = np.asarray(sawada_model.get("source_assignment_slopes", []), dtype=float)
+    if slopes.ndim != 2 or slopes.size == 0:
+        return np.empty((0, 0), dtype=float)
+    if not np.all(np.isfinite(slopes)):
+        return np.empty((0, 0), dtype=float)
+
+    # RANSAC fits arg(C_m * conj(C_1)) = intercept + slope_m * f.
+    # For pure delays, slope_m = -2*pi*(delay_m - delay_1).
+    relative_delays = -slopes / (2.0 * np.pi)
+    n_sources, n_mics = relative_delays.shape
+    pairwise = np.empty((n_sources, n_mics * (n_mics - 1) // 2), dtype=float)
+    pair_index = 0
+    for first in range(n_mics - 1):
+        for second in range(first + 1, n_mics):
+            pairwise[:, pair_index] = relative_delays[:, second] - relative_delays[:, first]
+            pair_index += 1
+    return pairwise
 
 
 def parse_args() -> argparse.Namespace:
@@ -58,7 +81,9 @@ def _success_summary_row(
     metrics: dict[str, float],
     runtime_seconds: float,
     permutation: tuple[int, ...],
+    ransac_metrics: dict[str, float] | None = None,
 ) -> dict[str, Any]:
+    ransac_metrics = {} if ransac_metrics is None else ransac_metrics
     return {
         "status": "ok",
         "split": record.split,
@@ -67,6 +92,7 @@ def _success_summary_row(
         "runtime_seconds": runtime_seconds,
         "source_permutation": list(permutation),
         **metrics,
+        **{f"ransac_{key}": value for key, value in ransac_metrics.items()},
     }
 
 
@@ -111,6 +137,28 @@ def _run_one_algorithm(
         target_seconds=target_pairwise_seconds,
         fs=fs,
     )
+    ransac_pairwise_seconds = (
+        _pairwise_tdoas_from_ransac_slopes(result)
+        if algorithm == "sawada"
+        else np.empty((0, 0), dtype=float)
+    )
+    ransac_alignment = None
+    ransac_aligned_seconds = np.empty((0, 0), dtype=float)
+    ransac_metrics: dict[str, float] = {}
+    if ransac_pairwise_seconds.shape == target_pairwise_seconds.shape:
+        ransac_alignment = align_sources_by_tdoa(
+            estimated_tdoas=ransac_pairwise_seconds,
+            target_tdoas=target_pairwise_seconds,
+            metric="rmse",
+        )
+        ransac_aligned_seconds = ransac_alignment.aligned_estimated
+        ransac_metrics = compute_tdoa_error_metrics(
+            aligned_estimated_seconds=ransac_aligned_seconds,
+            target_seconds=target_pairwise_seconds,
+            fs=fs,
+        )
+    ransac_pairwise_samples = ransac_pairwise_seconds * fs
+    ransac_aligned_samples = ransac_aligned_seconds * fs
     labels = pairwise_tdoa_labels(scene.metadata.n_mics)
     output_dir = scene_result_dir(config.output, record.split, record.scene_id)
 
@@ -148,12 +196,28 @@ def _run_one_algorithm(
             "estimated_tdoas": result.estimated_tdoas_seconds.shape,
             "true_pairwise_tdoas": target_pairwise_seconds.shape,
             "aligned_tdoas": alignment.aligned_estimated.shape,
+            "ransac_pairwise_tdoas": ransac_pairwise_seconds.shape,
         },
         "metrics": metrics,
+        "ransac_metrics": ransac_metrics,
         "estimated_pairwise_tdoas_seconds": result.estimated_tdoas_seconds,
         "estimated_pairwise_tdoas_samples": result.estimated_tdoas_samples,
         "aligned_pairwise_tdoas_seconds": alignment.aligned_estimated,
         "aligned_pairwise_tdoas_samples": aligned_samples,
+        "ransac_pairwise_tdoas_seconds": ransac_pairwise_seconds,
+        "ransac_pairwise_tdoas_samples": ransac_pairwise_samples,
+        "ransac_aligned_pairwise_tdoas_seconds": ransac_aligned_seconds,
+        "ransac_aligned_pairwise_tdoas_samples": ransac_aligned_samples,
+        "ransac_source_permutation": (
+            ()
+            if ransac_alignment is None
+            else ransac_alignment.permutation
+        ),
+        "ransac_alignment_score_seconds": (
+            np.nan
+            if ransac_alignment is None
+            else ransac_alignment.score
+        ),
         "true_pairwise_tdoas_seconds": target_pairwise_seconds,
         "true_pairwise_tdoas_samples": target_pairwise_samples,
         "true_reference_tdoas_seconds": true_reference_tdoas_seconds(
@@ -172,6 +236,7 @@ def _run_one_algorithm(
         metrics=metrics,
         runtime_seconds=result.runtime_seconds,
         permutation=alignment.permutation,
+        ransac_metrics=ransac_metrics,
     )
 
 
