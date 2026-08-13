@@ -1159,8 +1159,14 @@ def _sawada_complex_plane_figure(
     centroid_key = "centroids_unwhitened" if vector_space == "unwhitened" else "centroids"
     bin_vectors = np.asarray(sawada_model.get(vector_key, []))
     masks = np.asarray(sawada_model.get("masks", []), dtype=float)
+    cluster_masks = np.asarray(sawada_model.get("cluster_masks", []), dtype=float)
     active_tf_mask = np.asarray(sawada_model.get("active_tf_mask", []), dtype=bool)
     active_clusters = np.asarray(sawada_model.get("active_clusters", []), dtype=bool)
+    cluster_active = np.asarray(sawada_model.get("cluster_active", []), dtype=bool)
+    source_assignment_labels = np.asarray(
+        sawada_model.get("source_assignment_labels", []),
+        dtype=int,
+    )
     centroids = np.asarray(sawada_model.get(centroid_key, []))
     frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
     times = np.asarray(sawada_model.get("times", []), dtype=float)
@@ -1211,21 +1217,40 @@ def _sawada_complex_plane_figure(
         subplot_titles=[f"Micro {mic_index + 1}" for mic_index in range(n_mics)],
     )
     source_colors = ["#dc2626", "#2563eb", "#16a34a", "#7c3aed", "#0891b2", "#db2777"]
-    source_masks = masks[:, frequency_index, :]
+    use_cluster_masks = (
+        cluster_masks.ndim == 3
+        and cluster_masks.size
+        and cluster_masks.shape[1] > frequency_index
+        and cluster_masks.shape[2] == n_times
+    )
+    cluster_source_masks = (
+        cluster_masks[:, frequency_index, :]
+        if use_cluster_masks
+        else masks[:, frequency_index, :]
+    )
+    n_clusters = cluster_source_masks.shape[0]
     used_by_em = (
         active_tf_mask[frequency_index]
         if active_tf_mask.ndim == 2 and active_tf_mask.shape[0] > frequency_index
-        else np.max(source_masks, axis=0) > 0.5
+        else np.max(cluster_source_masks, axis=0) > 0.5
     )
     rejected_by_energy = ~used_by_em
     source_active = (
-        active_clusters[frequency_index]
+        cluster_active[frequency_index]
+        if cluster_active.ndim == 2 and cluster_active.shape[0] > frequency_index
+        else active_clusters[frequency_index]
         if active_clusters.ndim == 2 and active_clusters.shape[0] > frequency_index
-        else np.ones(n_sources, dtype=bool)
+        else np.ones(n_clusters, dtype=bool)
     )
-    assigned = np.argmax(source_masks, axis=0)
-    assigned_strength = np.max(source_masks, axis=0)
+    assigned = np.argmax(cluster_source_masks, axis=0)
+    assigned_strength = np.max(cluster_source_masks, axis=0)
     has_assignment = assigned_strength > 0.5
+    ransac_labels = (
+        source_assignment_labels[frequency_index]
+        if source_assignment_labels.ndim == 2
+        and source_assignment_labels.shape[0] > frequency_index
+        else np.full(n_clusters, -99, dtype=int)
+    )
     time_values = times if times.size == n_times else np.arange(n_times)
     bin_values = bin_vectors[:, frequency_index, :].copy()
     centroid_values = centroids[frequency_index].copy()
@@ -1282,11 +1307,11 @@ def _sawada_complex_plane_figure(
         else:
             classes = [
                 (
-                    f"Source {source_index + 1}",
-                    used_by_em & has_assignment & (assigned == source_index),
-                    source_colors[source_index % len(source_colors)],
+                    f"Cluster EM {cluster_index + 1}",
+                    used_by_em & has_assignment & (assigned == cluster_index),
+                    source_colors[cluster_index % len(source_colors)],
                 )
-                for source_index in range(n_sources)
+                for cluster_index in range(n_clusters)
             ]
 
         for label, selector, color in classes:
@@ -1339,28 +1364,43 @@ def _sawada_complex_plane_figure(
                 col=col,
             )
 
-        for source_index in range(min(n_sources, centroids.shape[2])):
-            if source_index < source_active.size and not source_active[source_index]:
+        for cluster_index in range(min(n_clusters, centroids.shape[2])):
+            if cluster_index < source_active.size and not source_active[cluster_index]:
                 continue
-            centroid = centroid_values[mic_index, source_index]
+            centroid = centroid_values[mic_index, cluster_index]
+            ransac_label = int(ransac_labels[cluster_index]) if cluster_index < ransac_labels.size else -99
+            centroid_name = (
+                f"Centroide C{cluster_index + 1} -> S{ransac_label + 1}"
+                if ransac_label >= 0
+                else f"Centroide C{cluster_index + 1} non attribue"
+                if ransac_label == -1
+                else f"Centroide C{cluster_index + 1}"
+            )
+            centroid_color = (
+                source_colors[ransac_label % len(source_colors)]
+                if ransac_label >= 0
+                else "#9ca3af"
+                if ransac_label == -1
+                else "#f59e0b"
+            )
             fig.add_trace(
                 go.Scatter(
                     x=[float(np.real(centroid))],
                     y=[float(np.imag(centroid))],
                     mode="markers+text",
-                    name=f"Centroide S{source_index + 1}",
-                    legendgroup=f"centroid-{source_index}",
+                    name=centroid_name,
+                    legendgroup=f"centroid-{cluster_index}",
                     showlegend=mic_index == 0,
-                    text=[f"C{source_index + 1}"],
+                    text=[f"C{cluster_index + 1}"],
                     textposition="top center",
                     marker={
                         "size": 12,
-                        "color": "#f59e0b",
+                        "color": centroid_color,
                         "symbol": "diamond",
                         "line": {"width": 1.4, "color": "#111827"},
                     },
                     hovertemplate=(
-                        f"Centroide S{source_index + 1}<br>"
+                        f"{centroid_name}<br>"
                         "Re=%{x:.4f}<br>Im=%{y:.4f}<extra></extra>"
                     ),
                 ),
@@ -3735,9 +3775,15 @@ def build_app(config: AppConfig) -> dash.Dash:
         centroid_key = "centroids_unwhitened" if vector_space == "unwhitened" else "centroids"
         bin_vectors = np.asarray(model.get(vector_key, []))
         masks = np.asarray(model.get("masks", []), dtype=float)
+        cluster_masks = np.asarray(model.get("cluster_masks", []), dtype=float)
         active_tf_mask = np.asarray(model.get("active_tf_mask", []), dtype=bool)
         active_frequency_mask = np.asarray(model.get("active_frequency_mask", []), dtype=bool)
         active_clusters = np.asarray(model.get("active_clusters", []), dtype=bool)
+        cluster_active = np.asarray(model.get("cluster_active", []), dtype=bool)
+        source_assignment_labels = np.asarray(
+            model.get("source_assignment_labels", []),
+            dtype=int,
+        )
         centroids = np.asarray(model.get(centroid_key, []))
         if bin_vectors.ndim != 3 or bin_vectors.size == 0:
             return (
@@ -3772,7 +3818,18 @@ def build_app(config: AppConfig) -> dash.Dash:
             if frequencies.size > frequency_index
             else f"bin {frequency_index}"
         )
-        source_masks = masks[:, frequency_index, :]
+        use_cluster_masks = (
+            cluster_masks.ndim == 3
+            and cluster_masks.size
+            and cluster_masks.shape[1] > frequency_index
+            and cluster_masks.shape[2] == n_times
+        )
+        source_masks = (
+            cluster_masks[:, frequency_index, :]
+            if use_cluster_masks
+            else masks[:, frequency_index, :]
+        )
+        n_clusters = source_masks.shape[0]
         used_by_em = (
             active_tf_mask[frequency_index]
             if active_tf_mask.ndim == 2 and active_tf_mask.shape[0] > frequency_index
@@ -3782,10 +3839,20 @@ def build_app(config: AppConfig) -> dash.Dash:
         assigned_strength = np.max(source_masks, axis=0)
         has_assignment = assigned_strength > 0.5
         active_cluster_count = (
+            int(np.sum(cluster_active[frequency_index]))
+            if cluster_active.ndim == 2 and cluster_active.shape[0] > frequency_index
+            else
             int(np.sum(active_clusters[frequency_index]))
             if active_clusters.ndim == 2 and active_clusters.shape[0] > frequency_index
             else source_masks.shape[0]
         )
+        ransac_labels = (
+            source_assignment_labels[frequency_index]
+            if source_assignment_labels.ndim == 2
+            and source_assignment_labels.shape[0] > frequency_index
+            else np.full(n_clusters, -99, dtype=int)
+        )
+        ransac_unassigned_clusters = int(np.sum(ransac_labels[:n_clusters] == -1))
         frequency_used_text = (
             "oui"
             if active_frequency_mask.ndim == 1
@@ -3802,9 +3869,9 @@ def build_app(config: AppConfig) -> dash.Dash:
             else np.empty((0, 0), dtype=float)
         )
         counts = [
-            f"S{source_index + 1}: "
-            f"{int(np.sum(used_by_em & has_assignment & (assigned == source_index)))}"
-            for source_index in range(source_masks.shape[0])
+            f"C{cluster_index + 1}: "
+            f"{int(np.sum(used_by_em & has_assignment & (assigned == cluster_index)))}"
+            for cluster_index in range(n_clusters)
         ]
         inactive_count = int(np.sum(~has_assignment))
         rejected_count = int(np.sum(~used_by_em))
@@ -3824,9 +3891,11 @@ def build_app(config: AppConfig) -> dash.Dash:
                 gt_text = " GT indisponible."
         caption = (
             f"Ligne frequencielle {frequency_index} ({frequency_text}): {n_times} trames x "
-            f"{n_mics} composantes complexes. Points: {', '.join(point_counts)}. "
+            f"{n_mics} composantes complexes. Points par cluster EM: {', '.join(point_counts)}. "
             f"Frequence utilisee par l'EM: {frequency_used_text}. "
-            f"Clusters actifs: {active_cluster_count}/{source_masks.shape[0]}. "
+            f"Masques affiches: {'clusters EM avant RANSAC' if use_cluster_masks else 'sources finales fallback ancien fichier'}. "
+            f"Clusters actifs: {active_cluster_count}/{n_clusters}. "
+            f"Clusters non assignes RANSAC: {ransac_unassigned_clusters if use_cluster_masks else 'inconnu'}. "
             f"Non utilises par l'EM: {inactive_count}. "
             f"Hors seuil energie: {rejected_count}"
             f"{' affiches' if show_rejected_bins else ' masques'}. "

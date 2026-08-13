@@ -144,6 +144,21 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
             "masks": model.get_final_masks().astype(np.uint8),
             "posteriors": model.get_final_posteriors(),
             "active_clusters": model.get_final_active_clusters().astype(np.uint8),
+            "cluster_masks": np.asarray(
+                model.cluster_masks_before_assignment
+                if model.cluster_masks_before_assignment is not None
+                else np.empty((0, 0, 0))
+            ),
+            "cluster_posteriors": np.asarray(
+                model.cluster_posteriors_before_assignment
+                if model.cluster_posteriors_before_assignment is not None
+                else np.empty((0, 0, 0))
+            ),
+            "cluster_active": np.asarray(
+                model.cluster_active_before_assignment
+                if model.cluster_active_before_assignment is not None
+                else np.empty((0, 0))
+            ),
             "active_frequency_mask": (
                 np.asarray(model.active_frequency_mask, dtype=np.uint8)
                 if model.active_frequency_mask is not None

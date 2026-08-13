@@ -235,6 +235,9 @@ class SawadaBSS:
     bin_masks: Dict[int, np.ndarray] = field(default_factory=dict)
     bin_posteriors: Dict[int, np.ndarray] = field(default_factory=dict)
     bin_active_clusters: Dict[int, np.ndarray] = field(default_factory=dict)
+    cluster_masks_before_assignment: Optional[np.ndarray] = None
+    cluster_posteriors_before_assignment: Optional[np.ndarray] = None
+    cluster_active_before_assignment: Optional[np.ndarray] = None
     tf_energy: Optional[np.ndarray] = None
     active_tf_mask: Optional[np.ndarray] = None
     active_frequency_mask: Optional[np.ndarray] = None
@@ -670,6 +673,7 @@ class SawadaBSS:
         )
 
         cluster_masks = self.get_final_masks()
+        self.cluster_masks_before_assignment = cluster_masks.copy()
         source_masks = labels_to_source_masks(
             cluster_masks,
             assignment.labels,
@@ -679,6 +683,8 @@ class SawadaBSS:
             clip=True,
         )
         cluster_posteriors = self.get_final_posteriors()
+        self.cluster_posteriors_before_assignment = cluster_posteriors.copy()
+        self.cluster_active_before_assignment = self.get_final_active_clusters().copy()
         source_posteriors = labels_to_source_masks(
             cluster_posteriors,
             assignment.labels,

@@ -248,6 +248,11 @@ def save_sawada_model_npz(path: str | Path, result: Any) -> Path | None:
         masks=np.asarray(payload["masks"]),
         posteriors=np.asarray(payload["posteriors"]),
         active_clusters=np.asarray(payload.get("active_clusters", np.empty((0, 0)))),
+        cluster_masks=np.asarray(payload.get("cluster_masks", np.empty((0, 0, 0)))),
+        cluster_posteriors=np.asarray(
+            payload.get("cluster_posteriors", np.empty((0, 0, 0)))
+        ),
+        cluster_active=np.asarray(payload.get("cluster_active", np.empty((0, 0)))),
         active_frequency_mask=np.asarray(
             payload.get("active_frequency_mask", np.empty((0,)))
         ),
