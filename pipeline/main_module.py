@@ -8,6 +8,7 @@ import soundfile as sf
 import pandas as pd
 from src.detection_bricks.mono_audio_detection import SpectrogramGenerator, MobileNetMultilabel, get_audio_start_time, run_pipeline_overlaps_long_spects
 from src.detection_bricks.canals_matching import spotting_to_location_preparation
+from src.detection_bricks.time_frequency_mask import load_tf_mask_model
 from src.utils.sub_classes import Environment, Parameters, AudioMetadata, AudioArray
 from src.location_bricks.frequencies_filtering import filter_audio_array, filter_audio_array_from_calltype
 from src.denoising_bricks.vmd_denoising import vmd_denoise
@@ -220,12 +221,13 @@ def tdoas_mask_check(tdoas_mask : list[np.ndarray]):
 def tdoa_and_error(
     parameters : Parameters,
     audio_arrays : list[AudioArray],
+    model = None,
 ):
     tdoas_measured = []
     tdoas_error_variance = []
     tdoas_mask = []
     for audio_array in audio_arrays:
-        new_tdoa, new_crb, new_mask, _ = tdoas(audio_array, use_gcc=False, compute_scores=False, use_mask_based_tdoa=parameters.use_mask_based_tdoa)
+        new_tdoa, new_crb, new_mask, _ = tdoas(audio_array, use_gcc=False, compute_scores=False, use_mask_based_tdoa=parameters.use_mask_based_tdoa, model = model)
         tdoas_measured.append(new_tdoa)
         tdoas_error_variance.append(new_crb)
         tdoas_mask.append(new_mask)
@@ -262,7 +264,8 @@ def wave_vector_and_error(
     parameters : Parameters,
     environment : Environment,
     audio_arrays : list[AudioArray],
-    fc : float
+    fc : float,
+    model = None
 ):
     wave_vectors = []
     wave_vectors_error_variance = []
@@ -271,7 +274,7 @@ def wave_vector_and_error(
     for tetrahedra, audio_array in zip(tetrahedras, audio_arrays):
         tetrahedral_array = get_tetrahedra(tetrahedra)
 
-        u = beamforming_doa(parameters, fc, tetrahedral_array, audio_array, C)
+        u = beamforming_doa(parameters, fc, tetrahedral_array, audio_array, C, model=model)
 
         wave_vectors.append(u.reshape(-1, 1))
         #TODO: implement wave_vectors_error_variance
@@ -285,7 +288,7 @@ def wave_vector_and_error(
 ###############################
 
 def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds: list[pd.Series],
-                 call_type: str, offset: timedelta, environment: Environment, sound_mask):
+                 call_type: str, offset: timedelta, environment: Environment, sound_mask, model = None):
 
     start_detection = time()
 
@@ -346,7 +349,7 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
 
     use_bf = parameters.beamforming_parameters.use_bf and call_type == "Whistle"
     if use_bf:
-        wave_vectors, wave_vectors_error_variance = wave_vector_and_error(parameters, environment, audio_arrays, central_frequency)
+        wave_vectors, wave_vectors_error_variance = wave_vector_and_error(parameters, environment, audio_arrays, central_frequency, model)
         associated_time = event_start_dt
         
         end_bf = time()
@@ -356,7 +359,7 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
         position_enu, position_error_variance = fusion_bf(wave_vectors, wave_vectors_error_variance, environment, parameters.location_parameters.projection_plan)
 
     else:
-        tdoas_measured, tdoas_error_variance, tdoas_mask = tdoa_and_error(parameters, audio_arrays)
+        tdoas_measured, tdoas_error_variance, tdoas_mask = tdoa_and_error(parameters, audio_arrays, model)
 
         associated_time = event_start_dt
 
@@ -401,6 +404,11 @@ def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_fi
     model.load_model(model_path)
     parameters = Parameters(param_path)
     environment = Environment(env_path, parameters.location_parameters.use_h4)
+
+    ##### Time frequency mask model #####
+    tf_mask_model = None
+    if parameters.use_mask_based_tdoa or parameters.beamforming_parameters.use_tf_mask:
+        tf_mask_model = load_tf_mask_model()
     
     ##### Time variables initialisation #####
     iters = 0
@@ -497,7 +505,7 @@ def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_fi
                         sounds_lines = [result_df.loc[iters] for result_df in results_dfs]
                         if parameters.print_level >1:
                             print(f'offset : {offset}')
-                        position_enu, position_error_variance, associated_time, duration, status = one_iteration(parameters, audio_files, sounds_lines, call_type, offset, environment, sound_mask)
+                        position_enu, position_error_variance, associated_time, duration, status = one_iteration(parameters, audio_files, sounds_lines, call_type, offset, environment, sound_mask, tf_mask_model)
 
                         if associated_time is not None:
                             event_times.append(associated_time)

@@ -20,7 +20,7 @@ from time_frequency_mask.configuration import DURATION
 from time_frequency_mask.stft import frequency_band, scipy_stft_complex_psd
 from time_frequency_mask.data_generation.models.mask import AudioMask
 from time_frequency_mask.data_generation.core.power_computation import compute_P_moy, df
-from time_frequency_mask.masknet.run_inference import get_mask_from_array, pad_crop_audio_array, pad_crop_audio_canal
+from time_frequency_mask.masknet.run_inference import get_mask_from_array, pad_crop_audio_array, pad_crop_audio_canal, get_mask_from_array_arbitrary_size
 from time_frequency_mask.tdoa_estimation.blob import output_blobs_from_mask, blob_filtering_heuristic, output_mask_from_blobs
 from time_frequency_mask.tdoa_estimation.tdoa import compute_cross_corr_from_blob
 ############################
@@ -159,7 +159,7 @@ def masked_tdoa_from_pair(audio_one, audio_two, max_delay, blobs, sample_rate, c
     use_tdoa = True
         
     ############################################################
-    cross_corr = compute_cross_corr_from_blob(audio_one, audio_two, blobs)[:-1] # cuz we need an even number
+    cross_corr = compute_cross_corr_from_blob(audio_one, audio_two, blobs, sample_rate)[:-1] # cuz we need an even number
 
     ############################################################
     
@@ -401,7 +401,7 @@ def crb_from_pair(metadata : AudioMetadata, duration: float, hydrophone_pair: Hy
     if metadata.beluga_call_type == 'HFPC':
         return hfpc_crb_from_pair(metadata, snr, omega0, duration, delay, bandwidth)
     
-def masked_crb_from_pair(metadata : AudioMetadata, duration: float, hydrophone_pair: HydrophonePair, audio_one, audio_two, signal_mask, noise_mask, bandwidth : Optional[float] = None):
+def masked_crb_from_pair(metadata : AudioMetadata, duration: float, hydrophone_pair: HydrophonePair, audio_one, audio_two, signal_mask, noise_mask, sampling_rate, bandwidth : Optional[float] = None):
     """
     Calculate Cramér-Rao Bound (CRB) from a pair of hydrophones.
 
@@ -424,13 +424,13 @@ def masked_crb_from_pair(metadata : AudioMetadata, duration: float, hydrophone_p
         return best_error_bound, True
 
     if metadata.beluga_call_type == 'Whistle':
-        freqs, time, Zxx_1 = scipy_stft_complex_psd(audio_one)
+        freqs, time, Zxx_1 = scipy_stft_complex_psd(audio_one, sampling_rate)
         freqs, Zxx_1 = frequency_band(freqs, Zxx_1)
         
         Pxx_1 = np.abs(Zxx_1)**2
         global_noise_psd_1 = np.sum(2 * df * Pxx_1[noise_mask.data == 0]) / np.sum(2 * df * (noise_mask.data == 0))
 
-        freqs, time, Zxx_2 = scipy_stft_complex_psd(audio_two)
+        freqs, time, Zxx_2 = scipy_stft_complex_psd(audio_two, sampling_rate)
         freqs, Zxx_2 = frequency_band(freqs, Zxx_2)
         
         Pxx_2 = np.abs(Zxx_2)**2
@@ -465,7 +465,7 @@ def masked_crb_from_pair(metadata : AudioMetadata, duration: float, hydrophone_p
         return hfpc_crb_from_pair(metadata, snr, omega0, duration, delay, bandwidth)
 
 
-def tdoas(audio_array: AudioArray, use_gcc : bool = False, compute_scores : bool = False, use_mask_based_tdoa : bool = False):
+def tdoas(audio_array: AudioArray, use_gcc : bool = False, compute_scores : bool = False, use_mask_based_tdoa : bool = False, model = None):
     """
     Compute TDOAs from an audio array.
 
@@ -486,24 +486,26 @@ def tdoas(audio_array: AudioArray, use_gcc : bool = False, compute_scores : bool
 
     if use_mask_based_tdoa and audio_array.metadata.beluga_call_type == 'Whistle':
         audio_array_data = audio_array.data_array.copy()
-        audio_array_data = pad_crop_audio_array(audio_array_data)
-        original_mask = AudioMask(get_mask_from_array(audio_array_data, debug=False))
+        # audio_array_data = pad_crop_audio_array(audio_array_data)
+        mask = get_mask_from_array_arbitrary_size(audio_array_data, model)
+        original_mask = AudioMask(mask, mask.shape[0], mask.shape[1])
 
         blobs = output_blobs_from_mask(original_mask)
         blobs = blob_filtering_heuristic(blobs)
         
-        filtered_mask = output_mask_from_blobs(blobs)
+        filtered_mask = output_mask_from_blobs(blobs, mask.shape[0], mask.shape[1])
     
     for hydrophone_pair in audio_array.pairs_dict.values():
         ##### Computing #####
         if use_mask_based_tdoa and audio_array.metadata.beluga_call_type == 'Whistle' and len(blobs) != 0:
-            audio_one = pad_crop_audio_canal(hydrophone_pair.hydrophone_ref.audio_r)
-            audio_two = pad_crop_audio_canal(hydrophone_pair.hydrophone_delta.audio_r)
-
+            # audio_one = pad_crop_audio_canal(hydrophone_pair.hydrophone_ref.audio_r)
+            # audio_two = pad_crop_audio_canal(hydrophone_pair.hydrophone_delta.audio_r)
+            audio_one = hydrophone_pair.hydrophone_ref.audio_r
+            audio_two = hydrophone_pair.hydrophone_delta.audio_r
             tdoa, use_tdoa, scores = masked_tdoa_from_pair(audio_one, audio_two, hydrophone_pair.max_delay_idx, blobs, audio_array.metadata.sample_rate, compute_scores)            
             
-            duration = DURATION
-            crb, use_crb = masked_crb_from_pair(audio_array.metadata, duration, hydrophone_pair, audio_one, audio_two, filtered_mask, original_mask)
+            duration = len(audio_one) / audio_array.metadata.sample_rate
+            crb, use_crb = masked_crb_from_pair(audio_array.metadata, duration, hydrophone_pair, audio_one, audio_two, filtered_mask, original_mask, audio_array.metadata.sample_rate)
         else:
             tdoa, use_tdoa, scores = tdoa_from_pair(hydrophone_pair, audio_array.metadata.sample_rate, use_gcc, compute_scores)
 
