@@ -4,7 +4,7 @@ from numpy.typing import NDArray
 
 from scipy.signal import istft
 
-from time_frequency_mask.configuration import MAX_TDOA, N_FREQS, MIN_FREQ, MAX_FREQ, SAMPLING_RATE, N_FFT, HOP_LENGTH
+from time_frequency_mask.configuration import MAX_TDOA, N_FREQS, MIN_FREQ, MAX_FREQ, SAMPLING_RATE, N_FFT, HOP_LENGTH, DURATION
 from time_frequency_mask.stft import scipy_stft_complex
 from time_frequency_mask.data_generation.core.preprocess import bandpass_filter
 from time_frequency_mask.data_generation.generators.beluga_whistle_generator import generate_whistle_from_bank
@@ -15,8 +15,8 @@ def set_num_whistles() -> int:
     # return rd.choice(a = 5, p = [0.2, 0.4, 0.3, 0.09, 0.01])
     return rd.choice(a = [1,2,3,4,5,6,7], p = [0.35, 0.25, 0.15, 0.12, 0.08, 0.03,0.02])
 
-def set_start_time() -> float:
-    start_time = rd.uniform()
+def set_start_time(duration : float) -> float:
+    start_time = rd.uniform() * duration
     return start_time
 
 def set_shift() -> float:
@@ -110,7 +110,7 @@ def generate_whiste(start_time : float, is_augmentation : bool) -> Whistle:
 def set_snr() -> float:
     return 10.5*rd.random() - 0.5
 
-def sample(is_augmentation = False) -> tuple[int, list[float], list[int], list[Whistle]]:
+def sample(is_augmentation = False, duration = DURATION) -> tuple[int, list[float], list[int], list[Whistle]]:
     """Sample values at each generated sample
 
     Returns
@@ -120,8 +120,7 @@ def sample(is_augmentation = False) -> tuple[int, list[float], list[int], list[W
     """
     num_whistles = set_num_whistles()
 
-    num_whistles = 0 
-    start_times = [set_start_time() for _ in range(num_whistles)]
+    start_times = [set_start_time(duration) for _ in range(num_whistles)]
 
     shifts = [set_shift() for _ in range(3)]
 

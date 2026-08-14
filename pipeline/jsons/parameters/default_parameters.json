@@ -3,7 +3,7 @@
   "print_level": 0,
   "max_position_frames": null,
   "use_gcc": false,
-  "use_mask_based_tdoa": true,
+  "use_mask_based_tdoa": false,
   "location_parameters": {
     "use_h4": true,
     "fusion_type": "low",
@@ -43,6 +43,14 @@
         "recon_mode": "smooth",
         "method": "stein",
         "energy_perc": 0.90
+  },
+  "beamforming_parameters": {
+    "use_beamforming": false,
+    "beamformer": "mvdr",
+    "workflow": "SRPPHAT",
+    "use_tf_mask": true,
+    "mesh_size": 100,
+    "use_coarse_and_fine_search": true
   },
   "pre_filter_parameters": {
     "order": 4,

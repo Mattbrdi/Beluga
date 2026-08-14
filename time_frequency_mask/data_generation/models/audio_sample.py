@@ -4,7 +4,7 @@ import numpy as np
 from numpy.typing import NDArray
 import numpy.random as rd 
 
-from time_frequency_mask.configuration import SAMPLING_RATE, DURATION, N_FFT, HOP_LENGTH, MAX_TDOA, MIN_FREQ, MAX_FREQ
+from time_frequency_mask.configuration import SAMPLING_RATE, DURATION, N_FFT, HOP_LENGTH, MAX_TDOA, MIN_FREQ, MAX_FREQ, M, N_FREQS, N_TIMES
 from time_frequency_mask.stft import compute_power_from_waveform_and_mask, scipy_spectrogram, frequency_band, scipy_stft_complex_psd
 from time_frequency_mask.data_generation.core.multi_canal import set_channels_tdoas
 from time_frequency_mask.data_generation.core.power_computation import compute_P_moy, set_std_from_snr
@@ -17,9 +17,10 @@ class AudioSample:
     def __init__(self, waveform : NDArray[np.float64], mask : WhistleMask, sampling_rate : float):
         if sampling_rate != SAMPLING_RATE:
             raise ValueError(f"incorrect sampling_rate got {sampling_rate} instead of {SAMPLING_RATE}")
-        N_TIMES_SPECTRO = int(1 + np.floor(len(waveform) - N_FFT) / HOP_LENGTH)
-        if N_TIMES_SPECTRO != mask.data.shape[1]:
-            raise ValueError(f"Non matching times bins got {N_TIMES_SPECTRO} for waveform and {mask.data.shape[1]} for label")
+        
+        n_times_spectro = int(1 + np.floor(len(waveform) - N_FFT) / HOP_LENGTH)
+        if n_times_spectro != mask.data.shape[1]:
+            raise ValueError(f"Non matching times bins got {n_times_spectro} for waveform and {mask.data.shape[1]} for label")
 
         self.waveform = waveform
         self.mask = mask
@@ -43,56 +44,59 @@ class Whistle(AudioSample):
         mask = WhistleMask.from_path(mask_path, SAMPLING_RATE)
         return cls(waveform, mask, sampling_rate, start_time)
 
-    def place(self) -> LabeledAudioSample:
+    def place(self, n_freqs = N_FREQS, n_times = N_TIMES, duration = DURATION) -> LabeledAudioSample:
         if self.start_time is None:
             raise ValueError("Error placing Whistle without providing start_time")
         
-        if self.start_time >= DURATION:
-            raise ValueError(f"provided start time {self.start_time} is greater than DURATION {DURATION}")
+        if self.start_time >= duration:
+            raise ValueError(f"provided start time {self.start_time} is greater than DURATION {self.duration}")
         
-        N = int(DURATION * SAMPLING_RATE)
+        length = int(duration * self.sampling_rate)
 
-        start_index = int(np.floor(SAMPLING_RATE * self.start_time))
+        start_index = int(np.floor(self.sampling_rate * self.start_time))
         whistle_width = self.waveform.shape[0]
         dst_start = max(0, start_index)
         src_start = max(0, -start_index)
 
-        available_dst = N - dst_start
+        available_dst = length - dst_start
         available_src = whistle_width - src_start
         
         placed_width = min(available_dst, available_src)
 
         if placed_width <= 0:
-            return LabeledAudioSample.from_empty_wav()
+            return LabeledAudioSample.from_empty_wav(duration, self.sampling_rate)
         
         dst_end = dst_start + placed_width
         src_end = src_start + placed_width
 
-        waveform = np.zeros(N, dtype=np.float64)
+        waveform = np.zeros(length, dtype=np.float64)
         waveform[ dst_start: dst_end] = self.waveform[src_start:src_end]
 
-        mask = self.mask.place(self.start_time)
-        return LabeledAudioSample(waveform, mask, self.sampling_rate)
+        mask = self.mask.place(self.start_time, n_freqs, n_times, duration)
+        return LabeledAudioSample(waveform, mask, duration, self.sampling_rate)
 
 class LabeledAudioSample(AudioSample):
-    def __init__(self, waveform: NDArray[np.float64], mask : AudioMask, sampling_rate : float):
+    def __init__(self, waveform: NDArray[np.float64], mask : AudioMask, duration : float = DURATION, sampling_rate : float = SAMPLING_RATE):
         super().__init__(waveform, mask, sampling_rate)
 
-        if len(self.waveform) != DURATION * SAMPLING_RATE:
-            raise ValueError(f"wrong waveform duration got {len(self.waveform)} samples instead of {DURATION * SAMPLING_RATE}")
+        if len(self.waveform) != duration * sampling_rate:
+            raise ValueError(f"wrong waveform duration got {len(self.waveform)} samples instead of {duration * sampling_rate}")
 
     @classmethod
-    def from_empty_wav(cls) -> LabeledAudioSample:
-        waveform = np.zeros(shape=(DURATION * SAMPLING_RATE), dtype=np.float64)
-        mask = AudioMask.create_empty_mask(SAMPLING_RATE)
-        return cls(waveform, mask, SAMPLING_RATE)
+    def from_empty_wav(cls, duration = DURATION, sampling_rate = SAMPLING_RATE) -> LabeledAudioSample:
+        waveform = np.zeros(shape=int(duration * sampling_rate), dtype=np.float64)
+
+        n_times =  int(1 + np.floor((duration*sampling_rate - N_FFT) / HOP_LENGTH))
+        n_freqs = int(np.floor(MAX_FREQ * N_FFT /sampling_rate) - np.ceil(MIN_FREQ * N_FFT / SAMPLING_RATE) + 1)
+        mask = AudioMask.create_empty_mask(n_freqs, n_times, sampling_rate)
+        return cls(waveform, mask, duration, sampling_rate)
 
     def __add__(self, other : AudioSample) -> LabeledAudioSample:
         if isinstance(other, Whistle):
             if other.start_time is None:
                 raise ValueError(f"Error no start_time provided for whistle added to LabeledAudioSample")
             
-            placed_whistle = other.place()
+            placed_whistle = other.place(self.mask.data.shape[0], self.mask.data.shape[1], self.duration)
             waveform = self.waveform + placed_whistle.waveform
             mask = self.mask + placed_whistle.mask
         
@@ -103,23 +107,23 @@ class LabeledAudioSample(AudioSample):
         else:
             raise NotImplemented
         
-        return LabeledAudioSample(waveform, mask, self.sampling_rate)
+        return LabeledAudioSample(waveform, mask, self.duration, self.sampling_rate)
 
 class TetrahedraAudioSample:
-    def __init__(self, labeled_audio_sample_list : list[LabeledAudioSample]):
-        if not len(labeled_audio_sample_list) == 4:
-            raise ValueError(f"labeled_audio_sample_list is of length {len(labeled_audio_sample_list)} instead of 4")
+    def __init__(self, labeled_audio_sample_list : list[LabeledAudioSample], sampling_rate = SAMPLING_RATE, num_microphones = M):
+        if not len(labeled_audio_sample_list) == num_microphones:
+            raise ValueError(f"Labeled_audio_sample_list is of length {len(labeled_audio_sample_list)} instead of {num_microphones}")
         
         if not labeled_audio_sample_list[0].sampling_rate == labeled_audio_sample_list[1].sampling_rate == labeled_audio_sample_list[2].sampling_rate == labeled_audio_sample_list[3].sampling_rate: 
-            raise ValueError(f"got not matching sampling rates")
+            raise ValueError(f"Non matching sampling rates")
 
-        if not labeled_audio_sample_list[0].sampling_rate == SAMPLING_RATE:
-            raise ValueError(f"labeled_audio_samples have sampling rate {labeled_audio_sample_list[0].sampling_rate} instead of {SAMPLING_RATE}")
+        if not labeled_audio_sample_list[0].sampling_rate == sampling_rate:
+            raise ValueError(f"labeled_audio_samples have sampling rate {labeled_audio_sample_list[0].sampling_rate} instead of {sampling_rate}")
         
         self.waveforms = np.array([labeled_audio_sample.waveform for labeled_audio_sample in labeled_audio_sample_list], dtype=np.float64)
         self.masks = np.array([labeled_audio_sample.mask for labeled_audio_sample in labeled_audio_sample_list])
 
-        self.sampling_rate = labeled_audio_sample_list[0].sampling_rate
+        self.sampling_rate = sampling_rate
 
         self.shifted_waveforms = self.waveforms.copy()
         self.shifted_masks = self.masks.copy()
@@ -152,24 +156,26 @@ class TetrahedraAudioSample:
 
         self.shifted_waveforms = np.array(shifted_waveforms, dtype=np.float64)
         self.shifted_masks = np.array([
-            AudioMask(mask, self.sampling_rate) for mask in shifted_masks
+            AudioMask(mask, mask.shape[0], mask.shape[1], self.sampling_rate) for mask in shifted_masks
         ])
 
     def set_common_impulsive_noise(self):
         pass
 
-    def set_gaussian_noise(self, snrs_db : list[float]):
+    def set_gaussian_noise(self, snrs_db : list[float], duration = DURATION, sampling_rate = SAMPLING_RATE):
         low_band_noise = True
         if rd.uniform() < 0.25:
             low_band_noise = False
 
-        for i in range(4):
+        M = len(self.shifted_waveforms)
+
+        for i in range(M):
             shifted_waveform, mask = self.shifted_waveforms[i], self.shifted_masks[i]
             noise_std = set_std_from_snr(shifted_waveform, mask.data, snrs_db[i])
             if not low_band_noise:
-                noise = gaussian_noise_generator(noise_std)
+                noise = gaussian_noise_generator(noise_std, duration=duration, sampling_rate=sampling_rate)
             else:
-                noise = gaussian_noise_generator_2(noise_std)
+                noise = gaussian_noise_generator_2(noise_std, duration=duration, sampling_rate=sampling_rate)
             new_mask_data = update_mask_for_noise(shifted_waveform, noise, mask.data)
             self.shifted_waveforms[i] += noise
             self.shifted_masks[i].data = new_mask_data

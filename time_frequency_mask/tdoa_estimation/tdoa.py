@@ -12,14 +12,14 @@ from time_frequency_mask.tdoa_estimation.blob import Blob
 from time_frequency_mask.data_generation.core.preprocess import bandpass_filter
 from scipy.signal import correlate
 
-def windowed_correlation(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64], idx_0 : int, win_size = N_FFT):
+def windowed_correlation(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64], idx_0 : int, win_size = N_FFT, max_tdoa = MAX_TDOA, sampling_rate = SAMPLING_RATE):
     
     if len(audio_one) != len(audio_two):
         raise ValueError(f"Audio length mismatch got {len(audio_one)} and {len(audio_two)}")
 
     L = len(audio_one)
 
-    n_tdoa = int(np.ceil(SAMPLING_RATE*MAX_TDOA))
+    n_tdoa = int(np.ceil(sampling_rate*max_tdoa))
 
     if win_size < 2*n_tdoa +1:
         raise ValueError(f"Incorrect win_size too small to compute accurate tdoa got {win_size} smaller than {2*n_tdoa +1}")
@@ -46,10 +46,10 @@ def windowed_correlation(audio_one : NDArray[np.float64], audio_two : NDArray[np
     cross_corr = np.array([corr(k) for k in range(2*n_tdoa +1)]).astype(np.float64)
     return cross_corr / norm2_s2_w
 
-def compute_tdoa(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64], idx_0 : int, win_size = N_FFT):
-    n_tdoa = int(np.ceil(SAMPLING_RATE*MAX_TDOA))
-    one_full_two_windowed = windowed_correlation(audio_one, audio_two, idx_0, win_size)
-    two_full_one_windowed = windowed_correlation(audio_two, audio_one, idx_0, win_size)
+def compute_tdoa(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64], idx_0 : int, win_size = N_FFT, max_tdoa = MAX_TDOA, sampling_rate = SAMPLING_RATE):
+    n_tdoa = int(np.ceil(sampling_rate*max_tdoa))
+    one_full_two_windowed = windowed_correlation(audio_one, audio_two, idx_0, win_size, max_tdoa, sampling_rate)
+    two_full_one_windowed = windowed_correlation(audio_two, audio_one, idx_0, win_size, max_tdoa, sampling_rate)
 
     two_full_one_windowed = np.flipud(two_full_one_windowed)
 
@@ -68,7 +68,7 @@ def compute_cross_corr(audio_one : NDArray[np.float64], audio_two : NDArray[np.f
     # return (cross_corr)/np.std(cross_corr)
     return (cross_corr)
 
-def compute_cross_corr_from_blob(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64], blobs : list[Blob]) -> NDArray[np.float64]:
+def compute_cross_corr_from_blob(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64], blobs : list[Blob], sampling_rate = SAMPLING_RATE) -> NDArray[np.float64]:
     
     correlations = []
     for i, blob in enumerate(blobs):
@@ -80,9 +80,8 @@ def compute_cross_corr_from_blob(audio_one : NDArray[np.float64], audio_two : ND
 
         fmin = blob.fmin
         fmax = blob.fmax
-
-        audio_one_filtered = bandpass_filter(audio_one, SAMPLING_RATE, fmin, fmax)
-        audio_two_filtered = bandpass_filter(audio_two, SAMPLING_RATE, fmin, fmax)
+        audio_one_filtered = bandpass_filter(audio_one, sampling_rate, fmin, fmax)
+        audio_two_filtered = bandpass_filter(audio_two, sampling_rate, fmin, fmax)
 
         correlations.append(blob.area*compute_cross_corr(audio_one_filtered, audio_two_filtered, idx_center, win_size))
 

@@ -8,12 +8,14 @@ import soundfile as sf
 import pandas as pd
 from src.detection_bricks.mono_audio_detection import SpectrogramGenerator, MobileNetMultilabel, get_audio_start_time, run_pipeline_overlaps_long_spects
 from src.detection_bricks.canals_matching import spotting_to_location_preparation
+from src.detection_bricks.time_frequency_mask import load_tf_mask_model
 from src.utils.sub_classes import Environment, Parameters, AudioMetadata, AudioArray
 from src.location_bricks.frequencies_filtering import filter_audio_array, filter_audio_array_from_calltype
 from src.denoising_bricks.vmd_denoising import vmd_denoise
 from src.location_bricks.tdoa_brick import tdoas
 from src.location_bricks.low_level_fusion import low_fusion
-from src.location_bricks.high_level_fusion import high_fusion
+from src.location_bricks.high_level_fusion import high_fusion, fusion_bf
+from src.location_bricks.beamforming import get_tetrahedra, beamforming_doa
 from src.utils.plots import plot_spectro
 from src.denoising_bricks.wt_denoising import wt_denoise
 
@@ -216,13 +218,77 @@ def tdoas_mask_check(tdoas_mask : list[np.ndarray]):
         return False
     return True
     
+def tdoa_and_error(
+    parameters : Parameters,
+    audio_arrays : list[AudioArray],
+    model = None,
+):
+    tdoas_measured = []
+    tdoas_error_variance = []
+    tdoas_mask = []
+    for audio_array in audio_arrays:
+        new_tdoa, new_crb, new_mask, _ = tdoas(audio_array, use_gcc=False, compute_scores=False, use_mask_based_tdoa=parameters.use_mask_based_tdoa, model = model)
+        tdoas_measured.append(new_tdoa)
+        tdoas_error_variance.append(new_crb)
+        tdoas_mask.append(new_mask)
+
+    return tdoas_measured, tdoas_error_variance, tdoas_mask
+
+def fusion(
+    parameters : Parameters,
+    environment : Environment,
+    tdoas_measured,
+    tdoas_error_variance,
+    tdoas_mask,
+    end_tdoa
+):
+    # Fusion
+    if parameters.location_parameters.fusion_type == 'low':
+        position_enu, position_error_variance = low_fusion(
+            tdoas_measured, tdoas_error_variance, tdoas_mask, environment,
+            parameters.location_parameters.projection_plan
+        )
+    else:
+        position_enu, position_error_variance = high_fusion(
+            tdoas_measured, tdoas_error_variance, environment,
+            projection_plan=parameters.location_parameters.projection_plan
+        )
+
+    end_fusion = time()
+    if parameters.print_level > 0:
+        print(f"▒▒▒▒▒▒▒▒▒▒▒▒ Fusion finished in: {end_fusion - end_tdoa:.2f}s")
+    
+    return position_enu, position_error_variance
+
+def wave_vector_and_error(
+    parameters : Parameters,
+    environment : Environment,
+    audio_arrays : list[AudioArray],
+    fc : float,
+    model = None
+):
+    wave_vectors = []
+    wave_vectors_error_variance = []
+    tetrahedras = [tetra for tetra in environment.tetrahedras.values() if tetra.is_active]
+    C = environment.sound_speed
+    for tetrahedra, audio_array in zip(tetrahedras, audio_arrays):
+        tetrahedral_array = get_tetrahedra(tetrahedra)
+
+        u = beamforming_doa(parameters, fc, tetrahedral_array, audio_array, C, model=model)
+
+        wave_vectors.append(u.reshape(-1, 1))
+        #TODO: implement wave_vectors_error_variance
+        wave_vectors_error_variance.append(0)
+
+    return wave_vectors, wave_vectors_error_variance
+
 
 ###############################
 ########## Full loop ##########
 ###############################
 
 def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds: list[pd.Series],
-                 call_type: str, offset: timedelta, environment: Environment, sound_mask):
+                 call_type: str, offset: timedelta, environment: Environment, sound_mask, model = None):
 
     start_detection = time()
 
@@ -280,41 +346,32 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
     for i in range(len(audio_arrays)):
         audio_arrays[i] = filter_audio_array(audio_arrays[i], parameters.pre_filter_parameters)
 
-    # TDOAs and CRBs
-    tdoas_measured = []
-    tdoas_error_variance = []
-    tdoas_mask = []
-    for audio_array in audio_arrays:
-        new_tdoa, new_crb, new_mask, _ = tdoas(audio_array, use_gcc=False, compute_scores=False, use_mask_based_tdoa=parameters.use_mask_based_tdoa)
-        tdoas_measured.append(new_tdoa)
-        tdoas_error_variance.append(new_crb)
-        tdoas_mask.append(new_mask)
 
-    associated_time = event_start_dt
+    use_bf = parameters.beamforming_parameters.use_bf and call_type == "Whistle"
+    if use_bf:
+        wave_vectors, wave_vectors_error_variance = wave_vector_and_error(parameters, environment, audio_arrays, central_frequency, model)
+        associated_time = event_start_dt
+        
+        end_bf = time()
+        if parameters.print_level > 0:
+            print(f"▒▒▒▒▒▒▒▒▒▒▒▒ wave vectors computed in: {end_bf - end_denoising:.2f}s")
 
-    if not tdoas_mask_check(tdoas_mask):
-        print("Warning : Tdoas are not usable")
-        return None, None, associated_time, duration, "reject_tdoa"
+        position_enu, position_error_variance = fusion_bf(wave_vectors, wave_vectors_error_variance, environment, parameters.location_parameters.projection_plan)
 
-    end_tdoa = time()
-    if parameters.print_level > 0:
-        print(f"▒▒▒▒▒▒▒▒▒▒▒▒ TDOAs computed in: {end_tdoa - end_denoising:.2f}s")
-
-    # Fusion
-    if parameters.location_parameters.fusion_type == 'low':
-        position_enu, position_error_variance = low_fusion(
-            tdoas_measured, tdoas_error_variance, tdoas_mask, environment,
-            parameters.location_parameters.projection_plan
-        )
     else:
-        position_enu, position_error_variance = high_fusion(
-            tdoas_measured, tdoas_error_variance, environment,
-            projection_plan=parameters.location_parameters.projection_plan
-        )
+        tdoas_measured, tdoas_error_variance, tdoas_mask = tdoa_and_error(parameters, audio_arrays, model)
 
-    end_fusion = time()
-    if parameters.print_level > 0:
-        print(f"▒▒▒▒▒▒▒▒▒▒▒▒ Fusion finished in: {end_fusion - end_tdoa:.2f}s")
+        associated_time = event_start_dt
+
+        if not tdoas_mask_check(tdoas_mask):
+            print("Warning : Tdoas are not usable")
+            return None, None, associated_time, duration, "reject_tdoa"
+        
+        end_tdoa = time()
+        if parameters.print_level > 0:
+            print(f"▒▒▒▒▒▒▒▒▒▒▒▒ TDOAs computed in: {end_tdoa - end_denoising:.2f}s")
+
+        position_enu, position_error_variance = fusion(parameters, environment, tdoas_measured, tdoas_error_variance, tdoas_mask, end_tdoa)
 
     if position_enu is None:
         return None, None, associated_time, duration, "reject_fusion"
@@ -347,6 +404,11 @@ def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_fi
     model.load_model(model_path)
     parameters = Parameters(param_path)
     environment = Environment(env_path, parameters.location_parameters.use_h4)
+
+    ##### Time frequency mask model #####
+    tf_mask_model = None
+    if parameters.use_mask_based_tdoa or parameters.beamforming_parameters.use_tf_mask:
+        tf_mask_model = load_tf_mask_model()
     
     ##### Time variables initialisation #####
     iters = 0
@@ -443,7 +505,7 @@ def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_fi
                         sounds_lines = [result_df.loc[iters] for result_df in results_dfs]
                         if parameters.print_level >1:
                             print(f'offset : {offset}')
-                        position_enu, position_error_variance, associated_time, duration, status = one_iteration(parameters, audio_files, sounds_lines, call_type, offset, environment, sound_mask)
+                        position_enu, position_error_variance, associated_time, duration, status = one_iteration(parameters, audio_files, sounds_lines, call_type, offset, environment, sound_mask, tf_mask_model)
 
                         if associated_time is not None:
                             event_times.append(associated_time)

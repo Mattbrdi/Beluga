@@ -19,7 +19,7 @@ from time_frequency_mask.tdoa_estimation.tdoa import compute_tdoa, compute_cross
 from time_frequency_mask.data_generation.models.mask import AudioMask
 from time_frequency_mask.data_generation.io.data_parser import read_wav_file
 from time_frequency_mask.data_generation.core.preprocess import bandpass_filter
-from time_frequency_mask.masknet.run_inference import get_mask_from_array
+from time_frequency_mask.masknet.run_inference import get_mask_from_array, load_model
 
 WAV_PATH = r"C:\Users\amine\Downloads\amine.wav"#r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\input\beluga_2026_7.wav"
 
@@ -29,7 +29,7 @@ denoise = False
 std_noise = 5
 amplitude = 1
 # n_tdoa = int(np.ceil(SAMPLING_RATE*MAX_TDOA))
-n_tdoa = int(SAMPLING_RATE*MAX_TDOA)
+n_tdoa = int(np.ceil(SAMPLING_RATE*MAX_TDOA))
 
 delay_matrix = np.array([
     [0],  
@@ -90,7 +90,9 @@ def main():
         # Wiener filter; mysize controls the local window size
         tetra_noised = wiener(tetra_noised, mysize=(1, 1000), noise=noise_var)
 
-    mask = AudioMask(get_mask_from_array(tetra_noised))
+    model = load_model()
+
+    mask = AudioMask(get_mask_from_array(tetra_noised, model))
 
     if signal_energy is not None:
         active_count = np.count_nonzero(msignal.data[0])
