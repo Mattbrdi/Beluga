@@ -17,7 +17,7 @@ from beamforming.workflows.wideband.masked import MaskedBeamformer
 from beamforming.grid import SearchGrid
 from beamforming.signal.stft import compute_band_stft, STFTConfig
 from time_frequency_mask.data_generation.models.mask import AudioMask
-from time_frequency_mask.masknet.run_inference import get_mask_from_array, pad_crop_audio_array
+from time_frequency_mask.masknet.run_inference import get_mask_from_array, pad_crop_audio_array, get_mask_from_array_arbitrary_size
 from time_frequency_mask.tdoa_estimation.blob import output_blobs_from_mask, output_mask_from_blobs, blob_filtering_heuristic
 #TODO: Fix this by removing the need for sys and pathlib
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -67,7 +67,7 @@ def perform_doa(tetrahedra, audio_array, grid, workflow, use_tf_mask, central_fr
     return doa_estimator.doa
 
 
-def beamforming_doa(parameters : Parameters, central_frequency : float, tetrahedra : TetrahedralArray, audio_array : AudioArray, sound_speed : float, stft_config : STFTConfig = STFTConfig()):
+def beamforming_doa(parameters : Parameters, central_frequency : float, tetrahedra : TetrahedralArray, audio_array : AudioArray, sound_speed : float, stft_config : STFTConfig = STFTConfig(), model=None):
     audio_array_data = audio_array.data_array
     sampling_rate = audio_array.metadata.sample_rate
 
@@ -91,9 +91,10 @@ def beamforming_doa(parameters : Parameters, central_frequency : float, tetrahed
         )
 
     if use_tf_mask:
-        audio_array_data = pad_crop_audio_array(audio_array_data)
-        audio_mask = AudioMask(get_mask_from_array(audio_array_data))
-        blobs = output_blobs_from_mask(audio_mask)
+        # audio_array_data = pad_crop_audio_array(audio_array_data)
+        mask = get_mask_from_array_arbitrary_size(audio_array_data, model)
+        mask = AudioMask(mask, mask.shape[0], mask.shape[1])
+        blobs = output_blobs_from_mask(mask)
         blobs = blob_filtering_heuristic(blobs)
         mask = output_mask_from_blobs(blobs).data
 

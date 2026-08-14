@@ -41,42 +41,42 @@ class WhistleMask(Mask):
     def __init__(self, data, sampling_rate):
         super().__init__(data, sampling_rate)
 
-    def place(self, start_time : float) -> AudioMask:
+    def place(self, start_time : float, n_freqs = N_FREQS, n_times = N_TIMES, duration = DURATION) -> AudioMask:
         if start_time >= DURATION:
             raise ValueError(f"provided start time {start_time} is greater than DURATION {DURATION}")
         
         
-        start_index = int(np.floor(N_TIMES * start_time / DURATION))
+        start_index = int(np.floor(n_times * start_time / duration))
         whistle_width = self.width
         dst_start = max(0, start_index)
         src_start = max(0, -start_index)
 
-        available_dst = N_TIMES - dst_start
+        available_dst = n_times - dst_start
         available_src = whistle_width - src_start
         
         placed_width = min(available_dst, available_src)
 
         if placed_width <= 0:
-            return AudioMask.create_empty_Mask(self, self.sampling_rate)
+            return AudioMask.create_empty_mask(n_freqs, n_times, self.sampling_rate)
         
         dst_end = dst_start + placed_width
         src_end = src_start + placed_width
 
-        data = np.zeros((N_FREQS, N_TIMES), dtype=np.uint8)
+        data = np.zeros((n_freqs, n_times), dtype=np.uint8)
         data[:, dst_start: dst_end] = self.data[:, src_start:src_end]
-        return AudioMask(data=data, sampling_rate=self.sampling_rate)
+        return AudioMask(data=data, n_freqs=n_freqs, n_times=n_times, sampling_rate=self.sampling_rate)
 
 class AudioMask(Mask):
-    def __init__(self, data, sampling_rate = SAMPLING_RATE):
+    def __init__(self, data, n_freqs = N_FREQS, n_times = N_TIMES, sampling_rate = SAMPLING_RATE):
         super().__init__(data, sampling_rate)
 
-        if np.shape(self.data) != (N_FREQS, N_TIMES):
-            raise ValueError(f"incorrect data shape got {self.data} instead of {(N_FREQS, N_TIMES)}")
+        if np.shape(self.data) != (n_freqs, n_times):
+            raise ValueError(f"incorrect data shape got {self.data.shape} instead of {(n_freqs, n_times)}")
 
     @classmethod
-    def create_empty_mask(cls, sampling_rate : float) -> AudioMask:
-        data = np.zeros((N_FREQS, N_TIMES), dtype=np.uint8)
-        return cls(data, sampling_rate)
+    def create_empty_mask(cls, n_freqs = N_FREQS, n_times = N_TIMES, sampling_rate : float = SAMPLING_RATE) -> AudioMask:
+        data = np.zeros((n_freqs, n_times), dtype=np.uint8)
+        return cls(data, n_freqs, n_times, sampling_rate)
     
     def __add__(self, other : Mask) -> AudioMask:
         if isinstance(other, AudioMask):
@@ -85,7 +85,7 @@ class AudioMask(Mask):
             
             if self.data.shape != other.data.shape:
                 raise ValueError(f"Incorrect array format self is {self.data.shape} and other is {other.data.shape}")
-            return AudioMask(self.data | other.data, self.sampling_rate)
+            return AudioMask(self.data | other.data, self.data.shape[0], self.data.shape[1], self.sampling_rate)
         elif isinstance(other, WhistleMask):
             raise  TypeError(
             f"Cannot add {type(self).__name__} and {type(other).__name__}: "

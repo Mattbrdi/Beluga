@@ -1,16 +1,16 @@
 import numpy as np
 from numpy.typing import NDArray
 
-from time_frequency_mask.configuration import MAX_TDOA, SAMPLING_RATE, HOP_LENGTH
+from time_frequency_mask.configuration import MAX_TDOA, SAMPLING_RATE, HOP_LENGTH, M
 
-def set_tdoa(waveform : NDArray[np.float64], mask : NDArray[np.uint8], shift : float = 0 ) -> tuple[NDArray[np.float64], NDArray[np.uint8]]:
+def set_tdoa(waveform : NDArray[np.float64], mask : NDArray[np.uint8], shift : float = 0, sampling_rate = SAMPLING_RATE) -> tuple[NDArray[np.float64], NDArray[np.uint8]]:
     if abs(shift) > MAX_TDOA:
         raise ValueError(f"Got incorrect shift value, got {shift} but needs to be between +-{MAX_TDOA}")
     
     if shift == 0:
         return waveform, mask
     
-    shift_index = int(round(shift * SAMPLING_RATE))
+    shift_index = int(round(shift * sampling_rate))
 
     time_bin_shift = int(round(shift_index / HOP_LENGTH))
 
@@ -34,7 +34,7 @@ def set_tdoa(waveform : NDArray[np.float64], mask : NDArray[np.uint8], shift : f
 
     return shifted_waveform, shifted_mask    
 
-def set_channels_tdoas(waveforms : list[NDArray[np.float64]], masks : list[NDArray[np.uint8]], shifts : list[float] = [0, 0, 0]) -> tuple[list[NDArray[np.float64]], list[NDArray[np.uint8]]]:
+def set_channels_tdoas(waveforms : list[NDArray[np.float64]], masks : list[NDArray[np.uint8]], shifts : list[float], num_microphones = M) -> tuple[list[NDArray[np.float64]], list[NDArray[np.uint8]]]:
     """Set shifts by taking hydrophone 1 as reference and shifting hydrophone 2, 3 and 4.
 
     Parameters
@@ -46,14 +46,14 @@ def set_channels_tdoas(waveforms : list[NDArray[np.float64]], masks : list[NDArr
     shifts : list[float]
         shift values
     """
-    if len(shifts) !=3:
+    if len(shifts) !=(num_microphones - 1):
         raise ValueError(f"Need 3 shifts value but got {len(shifts)} ")
 
     for shift in shifts:
         if abs(shift) > MAX_TDOA:
             raise ValueError(f"Got incorrect shift value, got {shift} but need to be between +-{MAX_TDOA}")
         
-    if shifts == [0, 0, 0]:
+    if all(x == 0 for x in shifts):
         return waveforms, masks
     
     shifted_waveforms = [waveforms[0]]
