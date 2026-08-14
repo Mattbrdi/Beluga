@@ -1,0 +1,32 @@
+
+{
+  "generator": {
+    "fs": 384000,
+    "scene_duration": 1.2,
+    "n_sources": 2,
+    "n_mics": 4,
+    "max_delay": 77,
+    "source_placement_rate": 0.75,
+    "local_noise_placement_rate": 0.3333333333,
+    "source_gain_range": [
+      0.5,
+      0.7
+    ],
+    "local_noise_gain_range": [
+      0.7,
+      0.9
+    ],
+    "continuous_noise_gain_range": [
+      0.1,
+      0.5
+    ]
+  },
+  "scenario": "whistles_only",
+  "splits": {
+    "train": 15,
+    "validation": 1,
+    "test": 1
+  },
+  "base_seed": 470,
+  "compressed": true
+}

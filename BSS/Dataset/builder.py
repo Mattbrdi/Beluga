@@ -1,0 +1,158 @@
+from __future__ import annotations
+
+import json
+import shutil
+import subprocess
+from pathlib import Path
+
+from ..Utils.signal_generation import AudioSceneGenerator
+from .config import DatasetConfig
+from .io import FORMAT_VERSION, metadata_to_dict, save_scene, write_json
+from .scenarios import get_scenario_factory, ScenarioFactory
+
+
+def _prepare_output_dir(output_dir: Path, overwrite: bool) -> None:
+    if output_dir.exists() and any(output_dir.iterdir()):
+        if not overwrite:
+            raise FileExistsError(
+                f"Le dossier {output_dir} n'est pas vide. "
+                "Choisis un autre dossier ou utilise overwrite=True."
+            )
+        shutil.rmtree(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+
+def _git_provenance() -> dict[str, str | bool | None]:
+    """Retourne la revision du code sans rendre Git obligatoire."""
+    repository_root = Path(__file__).resolve().parents[2]
+    try:
+        commit = subprocess.run(
+            ["git", "rev-parse", "HEAD"],
+            cwd=repository_root,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout.strip()
+        status = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=normal"],
+            cwd=repository_root,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=5,
+        ).stdout
+        return {"git_commit": commit, "git_dirty": bool(status.strip())}
+    except (FileNotFoundError, subprocess.SubprocessError):
+        return {"git_commit": None, "git_dirty": None}
+
+
+def _config_snapshot(
+    config: DatasetConfig,
+    generator: AudioSceneGenerator,
+) -> dict[str, object]:
+    """Construit la configuration effective et sa provenance serialisable."""
+    snapshot: dict[str, object] = config.to_dict()
+    snapshot["registries"] = {
+        "sources": sorted(generator.source_registry),
+        "local_noises": sorted(generator.local_noise_registry),
+        "continuous_noises": sorted(generator.continuous_noise_registry),
+    }
+    snapshot["provenance"] = {
+        "format_version": FORMAT_VERSION,
+        "scenario": config.scenario,
+        **_git_provenance(),
+    }
+    return snapshot
+
+
+def build_dataset(
+    config: DatasetConfig,
+    output_dir: str | Path,
+    *,
+    overwrite: bool = False,
+) -> Path:
+    """Genere un dataset fixe; une seed unique est affectee a chaque scene.
+
+    Le scenario nomme dans la configuration est resolu via SCENARIO_FACTORIES.
+    """
+    root = Path(output_dir)
+    spec_factory = get_scenario_factory(config.scenario)
+    generator = AudioSceneGenerator(
+        **config.generator.__dict__,
+        source_registry=None,
+        local_noise_registry=None,
+        continuous_noise_registry=None,
+        seed=None,
+    )
+    config_snapshot = _config_snapshot(config, generator)
+
+    _prepare_output_dir(root, overwrite=overwrite)
+    write_json(root / "dataset_config.json", config_snapshot)
+
+    global_index = 0
+
+    for split_name, split_size in config.splits.items():
+        split_dir = root / split_name
+        split_dir.mkdir(parents=True, exist_ok=True)
+        manifest_path = split_dir / "manifest.jsonl"
+
+        with manifest_path.open("w", encoding="utf-8") as manifest:
+            for split_index in range(split_size):
+                seed = config.base_seed + global_index
+                spec = spec_factory(split_name, split_index, seed)
+                scene = generator.generate(spec=spec, seed=seed)
+                filename = f"scene_{split_index:06d}.npz"
+                save_scene(scene, split_dir / filename, compressed=config.compressed)
+
+                record = {
+                    "id": f"{split_name}_{split_index:06d}",
+                    "path": filename,
+                    "split": split_name,
+                    "seed": seed,
+                    "metadata": metadata_to_dict(scene),
+                }
+                manifest.write(json.dumps(record, ensure_ascii=False) + "\n")
+                global_index += 1
+
+    return root
+
+
+class GeneratedSceneDataset:
+    def __init__(self, config: DatasetConfig, split: str = "train"):
+        if split not in config.splits:
+            raise ValueError(f"Split inconnu: {split!r}")
+
+        self.config = config
+        self.split = split
+        self.size = config.splits[split]
+        self.split_offset = self._compute_split_offset(split)
+
+        self.spec_factory = get_scenario_factory(config.scenario)
+        self.generator = AudioSceneGenerator(
+            **config.generator.__dict__,
+            source_registry=None,
+            local_noise_registry=None,
+            continuous_noise_registry=None,
+            seed=None,
+        )
+
+    def _compute_split_offset(self, split: str) -> int:
+        offset = 0
+        for split_name, split_size in self.config.splits.items():
+            if split_name == split:
+                return offset
+            offset += split_size
+        raise ValueError(f"Split inconnu: {split!r}")
+
+    def __len__(self) -> int:
+        return self.size
+
+    def __getitem__(self, idx: int):
+        if idx < 0 or idx >= self.size:
+            raise IndexError(idx)
+
+        seed = self.config.base_seed + self.split_offset + idx
+        spec = self.spec_factory(self.split, idx, seed)
+        return self.generator.generate(spec=spec, seed=seed)
+        

@@ -1,8 +1,12 @@
-from __future__ import annotations # Permet d'utiliser Spectrogram comme type même s'il est défini plus loin
+﻿from __future__ import annotations # Permet d'utiliser Spectrogram comme type même s'il est défini plus loin
 import numpy as np 
 from scipy import signal as sp_signal 
-import matplotlib.pyplot as plt
-from matplotlib.widgets import Button
+try:
+    import matplotlib.pyplot as plt
+    from matplotlib.widgets import Button
+except ModuleNotFoundError:
+    plt = None
+    Button = None
 import io
 import threading
 import tempfile
@@ -12,7 +16,7 @@ from scipy.signal import resample
 Ce module comprend les classes : 
     -Signal : signal 1d ayant une fréquence d'échantillonage
     -Multisignal : Plusieurs signaux mis dans un tableau 
-    -Mixture : applique une transformation sous forme de matrice de filtre à un multisignal
+    -Mixture : applique une transformation sous forme de matrice de filtre à un multisignal (simule un milieu qui transforme le signal)
     -Nspectrogram : spectrogram 3D contenant les spectro de N signaux et ayant toutes les infos necessaires pour reconstitué le signal avec ca 
 
 """
@@ -22,7 +26,13 @@ class Signal:
         if data.ndim != 1: 
             raise AttributeError("Dimension des data non supportée")
         self.data = np.array(data)
-        self.freq = freq 
+        self.freq = freq #frequence d'echantillonage 
+
+    def copy(self) -> 'Signal':
+        """
+        Retourne une nouvelle instance de Signal avec une copie des données.
+        """
+        return Signal(self.data.copy(), self.freq)
         
     def __add__(self, other: 'Signal') -> 'Signal' :
         if self.freq != other.freq:
@@ -411,7 +421,7 @@ class Signal:
         padded: bool = True,
         db=False,
         magnitude_scale: str | None = None,
-        frequency_scale: str = 'linear',
+        frequency_scale: str = 'log',
         **kwargs
     ):
             """
@@ -447,9 +457,9 @@ class Signal:
                 frequency_scale=frequency_scale,
                 **kwargs
             )
-    
+from collections.abc import Sequence
 class MultiSignal:
-    def __init__(self, signals: list[Signal]):
+    def __init__(self, signals: Sequence[Signal]):
         """
         Conteneur pour un vecteur de signaux (X).
         
@@ -466,6 +476,12 @@ class MultiSignal:
         
         self.signals = signals
         self.num_signals = len(signals) #nombre de signal
+
+    def copy(self) -> 'MultiSignal':
+        """
+        Retourne une nouvelle instance de MultiSignal avec des copies des signaux.
+        """
+        return MultiSignal([signal.copy() for signal in self.signals])
 
     def _validate_compatible_multisignal(self, other: 'MultiSignal') -> np.ndarray:
         """
@@ -804,6 +820,17 @@ class Mixture:
         # - E colonnes (entrées)
         # - L profondeur (coefficients du filtre/réponse impulsionnelle)
         self.filters = np.random.randn(S, E, L)
+
+    def copy(self) -> 'Mixture':
+        """
+        Retourne une nouvelle instance de Mixture avec une copie des filtres.
+        """
+        copied = Mixture.__new__(Mixture)
+        copied.E = self.E
+        copied.S = self.S
+        copied.L = self.L
+        copied.filters = self.filters.copy()
+        return copied
         
     @classmethod
     def create_delay_mixture(cls, E: int, S: int, L: int, delay_matrix: np.ndarray|None = None) -> 'Mixture':
@@ -892,6 +919,67 @@ class Mixture:
         
         return MultiSignal(output_signals)
     
+    def is_delay_mixture(self)-> bool:
+        for i in range(self.S):
+            for j in range(self.E):
+                if np.sum(np.abs(self.filters[i,j])) != 1:
+                    return False
+        return True
+    
+    def get_delay_matrix(self):
+        assert self.is_delay_mixture(), "La mixture n'est pas une mixture de retard"
+        delay_matrix = np.argmax(self.filters, axis = 2)
+        return delay_matrix  
+
+    @staticmethod
+    def pairwise_tdoa_labels(n_mics: int) -> list[str]:
+        """
+        Retourne l'ordre canonique des paires de microphones.
+
+        Pour quatre micros, l'ordre est :
+        ["M1M2", "M1M3", "M1M4", "M2M3", "M2M4", "M3M4"].
+        """
+        if n_mics < 2:
+            raise ValueError("Il faut au moins deux microphones pour former des TDOA.")
+        return [
+            f"M{first + 1}M{second + 1}"
+            for first in range(n_mics - 1)
+            for second in range(first + 1, n_mics)
+        ]
+
+    @staticmethod
+    def delay_matrix_to_pairwise_tdoas(delay_matrix: np.ndarray) -> np.ndarray:
+        """
+        Convertit une delay_matrix (n_mics, n_sources) en TDOA pairwise.
+
+        La sortie a la forme (n_sources, n_pairs), avec l'ordre donne par
+        pairwise_tdoa_labels. La convention est :
+        M_iM_j = delay(M_j) - delay(M_i).
+        """
+        delays = np.asarray(delay_matrix)
+        if delays.ndim != 2:
+            raise ValueError(
+                "delay_matrix doit avoir la forme (n_mics, n_sources)."
+            )
+
+        n_mics, n_sources = delays.shape
+        pairwise = np.empty(
+            (n_sources, n_mics * (n_mics - 1) // 2),
+            dtype=delays.dtype,
+        )
+        pair_index = 0
+        for first in range(n_mics - 1):
+            for second in range(first + 1, n_mics):
+                pairwise[:, pair_index] = delays[second, :] - delays[first, :]
+                pair_index += 1
+        return pairwise
+
+    def get_pairwise_tdoas(self) -> np.ndarray:
+        """
+        Renvoie les TDOA pairwise de la mixture de retards, en echantillons.
+        """
+        return self.delay_matrix_to_pairwise_tdoas(self.get_delay_matrix())
+        
     def __repr__(self):
         return f"Mixture(Entrées={self.E}, Sorties={self.S}, Longueur du filtre={self.L})"
 
@@ -941,6 +1029,24 @@ class NSpectrogram:
         self.boundary = boundary
         self.padded = padded
         self.signal_lengths = signal_lengths #utile à la reconstruction quand il y a du padding, permet de récuperer la taille exacte du signal de base 
+
+    def copy(self) -> 'NSpectrogram':
+        """
+        Retourne une nouvelle instance de NSpectrogram avec des copies des tableaux.
+        """
+        return NSpectrogram(
+            f=self.f.copy(),
+            t=self.t.copy(),
+            Sxx=self.Sxx.copy(),
+            fs=self.fs,
+            window=self.window,
+            nperseg=self.nperseg,
+            noverlap=self.noverlap,
+            nfft=self.nfft,
+            boundary=self.boundary,
+            padded=self.padded,
+            signal_lengths=None if self.signal_lengths is None else self.signal_lengths.copy()
+        )
         
     @property
     def num_signals(self) -> int:
