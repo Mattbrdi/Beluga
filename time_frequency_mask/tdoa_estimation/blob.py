@@ -5,12 +5,16 @@ import cv2 as cv
 from time_frequency_mask.data_generation.models.mask import AudioMask
 from time_frequency_mask.plotter import plot_mask
  
-from time_frequency_mask.configuration import MIN_FREQ, MAX_TDOA, MAX_FREQ, SAMPLING_RATE, DURATION, N_FFT, DURATION, N_TIMES, START_FREQ_IDX, N_FREQS
+from time_frequency_mask.configuration import MIN_FREQ, MAX_TDOA, MAX_FREQ, SAMPLING_RATE, DURATION, N_FFT, DURATION, N_TIMES, START_FREQ_IDX, N_FREQS, HOP_LENGTH
 
 class Blob():
-    def __init__(self, data : NDArray[np.uint8], stats, area = N_FREQS*N_TIMES):
+    def __init__(self, data : NDArray[np.uint8], stats, area = None, max_tdoa : float = MAX_TDOA, sampling_rate : float = SAMPLING_RATE):
         self.data = data
-        self.area = area
+        n_freqs, n_times = data.shape
+        if area is None:
+            self.area = n_freqs * n_times
+        else:
+            self.area = area
         self.stats = stats
         if data is None:
             self.fmin = MIN_FREQ
@@ -23,36 +27,36 @@ class Blob():
         else:
             x, y, w, h = cv.boundingRect(self.data)
             # print(x,y,w,h)
-            if x < 0 or x >= N_TIMES:
-                raise ValueError(f"Error incorrect x start boundingRect index not between 0 and N_TIMES {N_TIMES} got {x}")
+            if x < 0 or x >= n_times:
+                raise ValueError(f"Error incorrect x start boundingRect index not between 0 and n_times {n_times} got {x}")
             
-            if y < 0 or y >= N_FREQS:
-                raise ValueError(f"Error incorrect y start boundingRect index not between 0 and N_TIMES {N_FREQS} got {y}")
+            if y < 0 or y >= n_freqs:
+                raise ValueError(f"Error incorrect y start boundingRect index not between 0 and n_freqs {n_freqs} got {y}")
 
-            if x + w <= 0 or x + w > N_TIMES:
-                raise ValueError(f"Error incorrect w boundingRect index not between 0 and N_TIMES {N_TIMES} got {x+w}")
+            if x + w <= 0 or x + w > n_times:
+                raise ValueError(f"Error incorrect w boundingRect index not between 0 and n_times {n_times} got {x+w}")
             
-            if y + h <=0 or  y + h > N_FREQS:
-                raise ValueError(f"Error incorrect h boundingRect index not between 0 and N_TIMES {N_FREQS} got {x+h}")
+            if y + h <=0 or  y + h > n_freqs:
+                raise ValueError(f"Error incorrect h boundingRect index not between 0 and n_freqs {n_freqs} got {x+h}")
 
-
+            duration = ((HOP_LENGTH*(n_times - 1)) + N_FFT) / sampling_rate  
 
             h = min(h, N_FFT - START_FREQ_IDX)
             y = y + START_FREQ_IDX
-            self.fmin = SAMPLING_RATE / N_FFT * y
-            self.fmax = SAMPLING_RATE / N_FFT * (y + h)
+            self.fmin = sampling_rate / N_FFT * y
+            self.fmax = sampling_rate / N_FFT * (y + h)
 
-            self.tmin = float(DURATION / N_TIMES * x) 
-            self.tmax = float(DURATION / N_TIMES * (x + w))
+            self.tmin = float(duration / n_times * x) 
+            self.tmax = float(duration / n_times * (x + w))
             if x == 0:
-                self.tmin += MAX_TDOA
+                self.tmin += max_tdoa
 
-            if x + w == N_TIMES:
-                self.tmax -=MAX_TDOA
+            if x + w == n_times:
+                self.tmax -=max_tdoa
 
             #TODO: Vérifier que ça, ça marche bien:
-            self.tmin_idx = max(int(np.ceil(self.tmin * SAMPLING_RATE)),0)
-            self.tmax_idx = min(int(np.floor(self.tmax * SAMPLING_RATE)), int(SAMPLING_RATE*(DURATION - MAX_TDOA)))
+            self.tmin_idx = max(int(np.ceil(self.tmin * sampling_rate)),0)
+            self.tmax_idx = min(int(np.floor(self.tmax * sampling_rate)), int(sampling_rate*(duration - max_tdoa)))
 
             # print(self.fmin, self.fmax)
             # print(self.tmin, self.tmax)
@@ -78,8 +82,8 @@ def output_blobs_from_mask(mask : AudioMask, area_thr=30) -> list[Blob]:
 
     return masks
 
-def output_mask_from_blobs(blobs : list[Blob]) -> AudioMask:
-    mask = AudioMask.create_empty_mask(SAMPLING_RATE)
+def output_mask_from_blobs(blobs : list[Blob], n_freqs = N_FREQS, n_times = N_TIMES, sampling_rate = SAMPLING_RATE) -> AudioMask:
+    mask = AudioMask.create_empty_mask(n_freqs, n_times, sampling_rate)
 
     for blob in blobs:
         mask.data = mask.data | (blob.data != 0)

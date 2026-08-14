@@ -1,6 +1,6 @@
 import numpy as np
-from librosa import frames_to_time, fft_frequencies 
-import os
+# from librosa import frames_to_time, fft_frequencies 
+# import os
 from datetime import datetime
 from pathlib import Path
 
@@ -9,7 +9,8 @@ SAMPLING_RATE = 384000
 DURATION = 1
 N = DURATION * SAMPLING_RATE 
 MAX_TDOA = 1.1 * 0.3 / 1450
-
+MAX_TDOA_IDX = int(SAMPLING_RATE*MAX_TDOA)
+M = 4 # num microphones
 ## STFT parameters
 N_FFT = 4096
 HOP_LENGTH = 2048

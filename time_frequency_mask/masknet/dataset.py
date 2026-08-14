@@ -88,11 +88,12 @@ class WhistleMaskDataset(Dataset):
             data = np.array(data.get_flattened_data(), dtype=np.uint8)
             data = data > 0
             data = data.reshape((height, width))
-            if height != N_FREQS or width != N_TIMES:
-                raise ValueError(f"incorrect shape got {data.shape} instead of {(N_FREQS, N_TIMES)}")
+            
+            if height > IMAGE_SIZE or width >= IMAGE_SIZE:
+                raise ValueError(f"incorrect shape got {data.shape} greater than {(IMAGE_SIZE, IMAGE_SIZE)}")
 
-            diffX = IMAGE_SIZE - N_TIMES 
-            diffY = IMAGE_SIZE - N_FREQS
+            diffX = IMAGE_SIZE - width 
+            diffY = IMAGE_SIZE - height
 
             if diffX < 0 or diffY < 0:
                 raise ValueError(f"D shape {data.shape} us larger than IMAGE_SIZE {IMAGE_SIZE}")
@@ -133,11 +134,19 @@ class WhistleMaskDataset(Dataset):
                     D /= np.percentile(D,99)
                     D = np.clip(D, 0, 1)
 
-                if D.shape[0] != N_FREQS or D.shape[1] != N_TIMES:
-                    raise ValueError(f"incorrect shape got {D.shape} instead of {(N_FREQS, N_TIMES)}")
+                if D.shape != data.shape:
+                    raise ValueError(
+                        "Canal and mask data are not compatible."
+                        f"Canal shape is {D.shape}."
+                        f"mask shape is {data.shape}."
+                    )
+
+                n_freqs, n_times = D.shape
+                if n_freqs > IMAGE_SIZE or n_times > IMAGE_SIZE:
+                    raise ValueError(f"incorrect shape got {D.shape} greater than {(IMAGE_SIZE, IMAGE_SIZE)}")
                 
-                diffX = IMAGE_SIZE - N_TIMES 
-                diffY = IMAGE_SIZE - N_FREQS
+                diffX = IMAGE_SIZE - n_times 
+                diffY = IMAGE_SIZE - n_freqs
 
                 if diffX < 0 or diffY < 0:
                     raise ValueError(f"D shape {D.shape} us larger than IMAGE_SIZE {IMAGE_SIZE}")

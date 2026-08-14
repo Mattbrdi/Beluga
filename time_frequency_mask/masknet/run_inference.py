@@ -29,8 +29,9 @@ from time_frequency_mask.data_generation.io.data_parser import read_wav_file
 # CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\runs\spectro_mask_net\version_16\epoch=155-step=17316.ckpt"
 # CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\best-epoch=157-val_loss=0.2527.ckpt"
 # CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\last.ckpt"
-WAV_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\input\beluga_2026_2.wav"#r"C:\Users\amine\Downloads\amine.wav"#
+WAV_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\input\beluga_2026_test_duration_1_1s.wav"#r"C:\Users\amine\Downloads\amine.wav"#
 # WAV_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\input\beluga_synth_02.wav"#r"C:\Users\amine\Downloads\amine.wav"#
+WAV_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\pipeline\test_data2026_all\data\beluga_2026_test_duration_5_4s.wav"
 is_db = False
 
 def parse_args():
@@ -72,7 +73,17 @@ def preprocess_torch(Ds : NDArray[np.float64], device):
     x = Ds.unsqueeze(0).to(device)  # shape: [1, C, H, W]
     return x 
 
-def get_mask_from_array(audio_array : list[NDArray[np.float64]], checkpoint_path = CKPT_PATH, debug=False) -> NDArray[np.uint8]:
+def load_model(checkpoint_path = CKPT_PATH):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    
+    model = SpectroMaskLightningModule.load_from_checkpoint(checkpoint_path, model=SpectroMaskNet())
+    model.to(device)
+    model.eval()
+    return model
+
+def get_mask_from_array(audio_array : list[NDArray[np.float64]], model, debug=False) -> NDArray[np.uint8]:
+    N = audio_array.shape[1]
+
     Ds = []
 
     freqs_list = []
@@ -97,14 +108,15 @@ def get_mask_from_array(audio_array : list[NDArray[np.float64]], checkpoint_path
 
         # D = np.clip(D, -1,1)
 
-        if D.shape[0] != N_FREQS or D.shape[1] != N_TIMES:
-            raise ValueError(f"incorrect shape got {D.shape} instead of {(N_FREQS, N_TIMES)}")
+        n_freqs, n_times = D.shape
+        if D.shape[0] > IMAGE_SIZE or D.shape[1] > IMAGE_SIZE:
+            raise ValueError(f"incorrect shape got {D.shape} greater or equal than {(IMAGE_SIZE, IMAGE_SIZE)}")
 
-        diffX = IMAGE_SIZE - N_TIMES 
-        diffY = IMAGE_SIZE - N_FREQS
+        diffX = IMAGE_SIZE - n_times 
+        diffY = IMAGE_SIZE - n_freqs
 
         if diffX < 0 or diffY < 0:
-            raise ValueError(f"D shape {D.shape} us larger than IMAGE_SIZE {IMAGE_SIZE}")
+            raise ValueError(f"D shape {D.shape} is larger than IMAGE_SIZE {IMAGE_SIZE}")
 
         D = np.pad(D, ((diffY // 2, diffY - diffY // 2), (diffX // 2, diffX - diffX // 2)))
 
@@ -113,13 +125,8 @@ def get_mask_from_array(audio_array : list[NDArray[np.float64]], checkpoint_path
         times_list.append(times)
 
     Ds = np.stack(Ds, axis=0)
-    
+
     device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    model = SpectroMaskLightningModule.load_from_checkpoint(checkpoint_path, model=SpectroMaskNet())
-    model.to(device)
-    model.eval()
-
     x = preprocess_torch(Ds, device)
 
     with torch.no_grad():
@@ -133,20 +140,67 @@ def get_mask_from_array(audio_array : list[NDArray[np.float64]], checkpoint_path
         print("prediction:", probs > 0.5)
 
     masks_np = masks.squeeze(1).cpu().numpy()
-    masks_np = masks.squeeze(1).cpu().numpy()
-    diffX = IMAGE_SIZE - N_TIMES 
-    diffY = IMAGE_SIZE - N_FREQS
+    diffX = IMAGE_SIZE - n_times
+    diffY = IMAGE_SIZE - n_freqs
 
     start_Y = diffY // 2
-    end_Y = IMAGE_SIZE - start_Y
+    end_Y = start_Y + n_freqs
 
     start_X = diffX // 2
-    end_X = IMAGE_SIZE - start_X
+    end_X = start_X + n_times
 
     masks_np = masks_np[:, start_Y:end_Y, start_X: end_X]
     if debug:
-        plot_spectrogram_4D(audio_array, SAMPLING_RATE, is_db=False, mask=AudioMask(masks_np[0], SAMPLING_RATE).data)
+        plot_spectrogram_4D(audio_array, SAMPLING_RATE, is_db=False, mask=AudioMask(masks_np[0], masks_np.shape[0], masks_np[1], SAMPLING_RATE).data)
     return masks_np[0]
+
+def get_mask_from_array_arbitrary_size(audio_array : list[NDArray[np.float64]], model, chunk_size = IMAGE_SIZE, chunk_overlap = IMAGE_SIZE // 2, debug=False) -> NDArray[np.uint8]:
+    N = audio_array.shape[1]
+
+    if N < N_FFT:
+        raise ValueError(f"Audio requires at least {N_FFT} samples; got {N}")
+
+    if not 1 <= chunk_size <= IMAGE_SIZE:
+        raise ValueError(
+            f"chunk_size must be between 1 and {IMAGE_SIZE}; got {chunk_size}"
+        )
+
+    if not 0 <= chunk_overlap < chunk_size:
+        raise ValueError(
+            "chunk_overlap must satisfy 0 <= chunk_overlap < chunk_size"
+        )
+    
+    n_times = int(1 + np.floor((N - N_FFT) / HOP_LENGTH))
+
+    if n_times <= chunk_size:
+        return get_mask_from_array(audio_array, model, debug=debug)
+    
+    stride_frames = chunk_size - chunk_overlap
+    chunk_samples = N_FFT + (chunk_size - 1) * HOP_LENGTH
+
+    n_chunks = int(1 + np.ceil((n_times - chunk_size) / stride_frames))
+
+    masks = None
+    for i in range(n_chunks):
+        start_frame = i*stride_frames
+        start_sample = start_frame * HOP_LENGTH
+        end_sample = min(N, start_sample + chunk_samples)
+
+        chunk = audio_array[:, start_sample:end_sample]
+        mask = get_mask_from_array(chunk, model, debug=debug)
+
+        if masks is None:
+            masks = mask
+            continue
+
+        actual_overlap = masks.shape[1] - start_frame
+
+        if actual_overlap > 0:
+            masks[:, -actual_overlap:] |= mask[:, :actual_overlap]
+            mask = mask[:, actual_overlap:]
+
+        masks = np.concatenate((masks, mask), axis=1)
+    return masks[:, :n_times]
 
 def main():
     args = parse_args()
@@ -154,8 +208,13 @@ def main():
     checkpoint_path = args.checkpoint_path
     wav_path = args.wav_path
 
+    model = load_model()
+
     audio_array, sampling_rate = read_wav_file(wav_path)
-    mask = get_mask_from_array(audio_array, checkpoint_path)
+    # N = (HOP_LENGTH*255) + N_FFT    
+    # print(N/SAMPLING_RATE)
+    # # audio_array = audio_array[:, :N]
+    mask = get_mask_from_array_arbitrary_size(audio_array, model)
     plot_mask(mask)
 
     audio_array = bandpass_filter(audio_array, SAMPLING_RATE)
@@ -163,7 +222,7 @@ def main():
     audio_array[:,:1000] = 0
     plot_waveform_4D(audio_array, SAMPLING_RATE)
 
-    plot_spectrogram_4D(audio_array, SAMPLING_RATE, is_db=False, mask=AudioMask(mask, SAMPLING_RATE).data)
+    plot_spectrogram_4D(audio_array, SAMPLING_RATE, is_db=False, mask=mask)
     plot_spectrogram_4D(audio_array, SAMPLING_RATE, is_db=True, fmin=100)
 
 def crop_audio_array(audio_array : NDArray[np.float64], current_length : int, target_length : int) -> NDArray[np.float64]:

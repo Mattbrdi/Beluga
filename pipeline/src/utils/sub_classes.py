@@ -117,6 +117,15 @@ class WTDenoiseParameters:
     energy_perc : float = 0.90
     fs : int = 0
     ff : int = 0
+
+@dataclass
+class BeamformingParameters:
+    use_bf : bool = False
+    beamformer : str = "mvdr"
+    workflow : str = "CSSM"
+    use_tf_mask : bool = False
+    mesh_size : int = 100
+    use_coarse_and_fine_search : bool = False
     
 @dataclass
 class LocationParameters:
@@ -176,7 +185,20 @@ class Parameters:
             fs=0,
             ff=0,
         )
+        self.beamforming_parameters = BeamformingParameters(
+            use_bf=data["beamforming_parameters"]["use_beamforming"],
+            beamformer=data["beamforming_parameters"]["beamformer"],
+            workflow=data["beamforming_parameters"]["workflow"],
+            use_tf_mask=data["beamforming_parameters"]["use_tf_mask"],
+            mesh_size=data["beamforming_parameters"]["mesh_size"],
+            use_coarse_and_fine_search=data["beamforming_parameters"]["use_coarse_and_fine_search"],
+        )
         self.pre_filter_parameters = PreFilterParameters(data["pre_filter_parameters"]["order"], data["pre_filter_parameters"]["filtering_method"])
+
+        if self.beamforming_parameters.use_bf and self.location_parameters.fusion_type == 'low':
+            raise ValueError(f"Incompatible parameters provided. Got use_bf as True and fusion type as 'low',"
+                              "but beamforming is only compatible with high fusion"
+                              )
 
 ########## Audio processing classes ##########
 @dataclass
