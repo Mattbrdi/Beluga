@@ -10,7 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from time_frequency_mask.configuration import SAMPLING_RATE, DEBUG_LEVEL, OUTPUT_PATH, COUNT
+from time_frequency_mask.configuration import DURATION, SAMPLING_RATE, DEBUG_LEVEL, OUTPUT_PATH, COUNT
 from time_frequency_mask.plotter import plot_mask, plot_spectrogram_1D, plot_spectrogram_4D, plot_waveform_1D, plot_waveform_4D
 from time_frequency_mask.data_generation.core.preprocess import preprocess
 from time_frequency_mask.data_generation.core.sampling import sample, sample_impulsive_noise
@@ -54,9 +54,9 @@ def main():
             if is_print_info:
                 print(f"sample {sample_idx} out of {num_samples}")
 
-            labeled_audio_sample = LabeledAudioSample.from_empty_wav()
+            labeled_audio_sample = LabeledAudioSample.from_empty_wav(duration=DURATION)
 
-            num_whistles, start_times, shifts, whistles = sample(is_augmentation = False)
+            num_whistles, start_times, shifts, whistles = sample(is_augmentation = False, duration = DURATION)
 
             impulsive_noise_samples = sample_impulsive_noise()
 
@@ -88,7 +88,7 @@ def main():
             snrs = np.array([(rd.random()-0.5)*2+snr_val, (rd.random()-0.5)*1+snr_val, (rd.random()-0.5)*2+snr_val, (rd.random()-0.5)*2+snr_val])
             snrs = rd.permutation(snrs)
             
-            tetrahedra_audio_sample.set_gaussian_noise(snrs)
+            tetrahedra_audio_sample.set_gaussian_noise(snrs, DURATION)
 
             # print("plot")
             # plot_waveform_4D(tetrahedra_audio_sample.shifted_waveforms, SAMPLING_RATE)
