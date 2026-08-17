@@ -23,7 +23,6 @@ BENCHMARK_SAWADA_EM_PARAMETERS = EMClusteringParameters(
     energy_threshold_db_above_floor=6.0,
     energy_floor_percentile=20.0,
     min_active_frames_per_frequency=3,
-    merge_centroid_distance_scale=1.0,
     source_alignment_method="ransac",
     ransac_residual_threshold=0.4,
     ransac_max_trials=300,
@@ -301,9 +300,6 @@ def run_sawada(
                 ),
                 "min_active_frames_per_frequency": (
                     sawada_em_parameters.min_active_frames_per_frequency
-                ),
-                "merge_centroid_distance_scale": (
-                    sawada_em_parameters.merge_centroid_distance_scale
                 ),
                 "source_alignment_method": sawada_em_parameters.source_alignment_method,
                 "ransac_residual_threshold": sawada_em_parameters.ransac_residual_threshold,

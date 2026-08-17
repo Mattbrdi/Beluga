@@ -27,7 +27,6 @@ class EMClusteringParameters:
     energy_threshold_db_above_floor: float | None = None
     energy_floor_percentile: float = 20.0
     min_active_frames_per_frequency: int = 2
-    merge_centroid_distance_scale: float | None = None
     source_alignment_method: str = "ransac"
     ransac_residual_threshold: float = 0.4
     ransac_max_trials: int = 1000
