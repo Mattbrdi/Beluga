@@ -118,57 +118,10 @@ par le bruit.
 
 
 
-\subsection{Selection des bins actifs par energie}
-
- la STFT multicanale brute est d'abord
-calculee. L'energie d'un bin temps-frequence est ensuite definie par :
-\[
-  E(f,t) = \sum_{m=1}^{M} |X_m(f,t)|^2.
-\]
-
-Cette energie est convertie en decibels :
-\[
-  E_{\mathrm{dB}}(f,t)
-    =
-    10 \log_{10}\left(E(f,t)+\epsilon\right).
-\]
-
-Le seuil d'activation est calcule relativement a un plancher d'energie estime
-par percentile :
-\[
-  \theta
-    =
-    \operatorname{percentile}_{p}\left(E_{\mathrm{dB}}\right)
-    +
-    \Delta_{\mathrm{dB}}.
-\]
-
-Un bin est conserve si :
-\[
-  E_{\mathrm{dB}}(f,t) \geq \theta.
-\]
-
-Dans la configuration de benchmark presente dans
-\code{BSS/Benchmark/runners.py}, les valeurs utilisees sont typiquement un
-plancher au percentile $20$, un seuil place $6$ dB au-dessus de ce plancher, et
-un minimum de $3$ trames actives consecutives par frequence.
-
-Ensuite,
-un bin actif isole ne fournit pas assez d'information locale pour stabiliser le
-clustering EM. L'implementation filtre donc les activations frequence par
-frequence en conservant seulement les groupes temporels suffisamment longs.
-Si $L_{\min}$ designe la longueur minimale, un segment actif n'est conserve que
-si :
-\[
-  \#\{t : (f,t) \text{ actif dans le segment}\} \geq L_{\min}.
-\]
-
-Ce filtrage est important pour la robustesse de la separation. En pratique, il
-evite que des fluctuations locales du bruit soient presentees a l'EM comme des
-observations fiables.
-
-On pourrait également penser à utiliser des filtres plus devellopés voir meme des CNN. Cela nous mène à la 
-seconde approche. 
+Dans la suite, le masque utilise par defaut dans l'algorithme de separation est
+decrit dans la partie consacree aux preliminaires de Sawada. On peut egalement
+penser a utiliser des filtres plus developpes, voire un CNN. Cela mene a une
+seconde approche.
 
 \subsection{Utilisation d'un réseau de neuronnes}
 Fait par AMINE 
@@ -225,7 +178,7 @@ Cette equation justifie la forme utilisee par l'algorithme : un bin est modelise
 comme un coefficient complexe scalaire, propre au contenu de la source, multiplie
 par un vecteur complexe qui encode la signature spatiale. Cette signature
 contient en particulier les retards relatifs entre microphones. De plus, comme les micros sont proches,
-on peut neglecter les differences d'amplitude entre les microphones.
+on peut negliger les differences d'amplitude entre les microphones.
  (et surtout ne pas s'appuyer dessus pour l'algorithme)
 
 \subsubsection{Normalisation des observations}
@@ -254,6 +207,55 @@ directionnelles invariantes a cette phase globale.
 On notera que l'on décide de ne pas faire de whitening sur les données. En effet, en faisant un 
 clustering directionel et en normalisant les données, l'impact du whitening est limité. Il est donc préférable 
 de conserver la structure de retard dans les données. 
+
+\subsubsection{Masque temps-frequence par defaut sans reseau de neuronne}
+
+Lorsque l'on ne dispose pas d'un masque fourni par un reseau de neurones,
+l'algorithme peut construire un masque temps-frequence par defaut a partir de
+l'energie du melange. La STFT multicanale brute est d'abord calculee, puis
+l'energie d'un bin temps-frequence est definie par :
+\[
+  E(f,t) = \sum_{m=1}^{M} |X_m(f,t)|^2.
+\]
+
+Cette energie est convertie en decibels :
+\[
+  E_{\mathrm{dB}}(f,t)
+    =
+    10 \log_{10}\left(E(f,t)+\epsilon\right).
+\]
+
+Le seuil d'activation est calcule relativement a un plancher d'energie estime
+par percentile :
+\[
+  \theta
+    =
+    \operatorname{percentile}_{p}\left(E_{\mathrm{dB}}\right)
+    +
+    \Delta_{\mathrm{dB}}.
+\]
+
+Un bin est conserve si :
+\[
+  E_{\mathrm{dB}}(f,t) \geq \theta.
+\]
+
+les valeurs utilisees sont typiquement un
+plancher au percentile $20$, un seuil place $6$ dB au-dessus de ce plancher, et
+un minimum de $3$ trames actives consecutives par frequence.
+
+Ensuite, un bin actif isole ne fournit pas assez d'information locale pour
+stabiliser le clustering EM. L'implementation filtre donc les activations
+frequence par frequence en conservant seulement les groupes temporels
+suffisamment longs. Si $L_{\min}$ designe la longueur minimale, un segment actif
+n'est conserve que si :
+\[
+  \#\{t : (f,t) \text{ actif dans le segment}\} \geq L_{\min}.
+\]
+
+Ce filtrage est important pour la robustesse de la separation. En pratique, il
+evite que des fluctuations locales du bruit soient presentees a l'EM comme des
+observations fiables.
 
 
 \subsection{Algorithme de SAWADA}
@@ -667,26 +669,18 @@ fusionnes. Pour une source $s$, le masque final est :
     \sum_{k:\, label(f,k)=s} M_k(f,t).
 \]
 
-
-\section{Calcul des TDOA a partir des bins isoles}
-
-\subsection{TDOA sur sources separees}
-
-Une premiere estimation des TDOA peut etre effectuee directement a partir des
-sources separees. Une fois les masques de sources obtenus, on reconstruit
-d'abord, pour chaque source $s$, une STFT multicanale masquee. Si
-$\mathbf{X}(f,t)$ designe la STFT du melange original et $M_s(f,t)$ le masque
-associe a la source $s$, on calcule :
+Une fois les masques de sources obtenus, on reconstruit d'abord, pour chaque
+source $s$, une STFT multicanale masquee. Si $\mathbf{X}(f,t)$ designe la STFT
+du melange original et $M_s(f,t)$ le masque associe a la source $s$, on calcule :
 \[
   \hat{\mathbf{X}}_s(f,t)
     =
     M_s(f,t)\,\mathbf{X}(f,t).
 \]
 
-Le meme masque est donc applique a tous les microphones. On conserve ainsi, pour
-la source $s$, les bins temps-frequence qui lui ont ete attribues par
-l'algorithme de separation, tout en gardant les differences de phase entre
-microphones presentes dans la STFT originale.
+Le meme masque est applique a tous les microphones. On conserve ainsi les bins
+temps-frequence attribues a la source $s$, tout en gardant les differences de
+phase entre microphones presentes dans la STFT originale.
 
 On applique ensuite une STFT inverse a chaque canal de
 $\hat{\mathbf{X}}_s(f,t)$ afin d'obtenir une reconstruction temporelle
@@ -700,12 +694,12 @@ multicanale :
     \right).
 \]
 
-Les TDOA sont alors estimes sur ces signaux temporels reconstruits.
+Les TDOA peuvent alors etre estimes sur ces signaux temporels reconstruits.
 Cette methode n'a pas de garantie theorique forte. En effet, une STFT masquee
 bin par bin ne correspond pas necessairement a la STFT exacte d'un signal
 physique reel : le masquage peut introduire des incoherences entre trames et
 entre frequences. La reconstruction par iSTFT doit donc etre vue comme un signal
-ayant une stft proche de la stft masqué du signal original, pas comme une
+ayant une STFT proche de la STFT masquee du signal original, pas comme une
 reconstruction parfaite de la source originale.
 
 Malgre cette limite, l'approche fonctionne relativement bien en pratique sur le
@@ -714,6 +708,9 @@ exploitable apres la separation. Sa qualite depend principalement de la qualite
 du masque final : une erreur de separation ou d'assignation de clusters peut
 deteriorer les signaux reconstruits, et donc les retards estimes par
 correlation.
+
+
+\section{Calcul des TDOA a partir des bins isoles}
 
 \subsection{Beamforming masque}
 Partie faite par AMINE

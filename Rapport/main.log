@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (MiKTeX 26.5) (preloaded format=pdflatex 2026.6.4)  19 AUG 2026 14:02
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (MiKTeX 26.5) (preloaded format=pdflatex 2026.6.4)  19 AUG 2026 15:35
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -484,26 +484,26 @@ LaTeX Font Info:    External font `lmex10' loaded for size
 \openout4 = `main.toc'.
 
  [2] [3{C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-mathit.enc}{C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-rm.enc}{C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-mathsy.enc}{C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-mathex.enc}] [4] [5] [6]
-LaTeX Font Info:    Trying to load font information for U+euf on input line 418.
+LaTeX Font Info:    Trying to load font information for U+euf on input line 420.
  (C:\Users\BORDERIES\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\ueuf.fd
 File: ueuf.fd 2013/01/14 v3.01 Euler Fraktur
 ) [7]
-Overfull \hbox (22.76164pt too wide) in paragraph at lines 516--519
+Overfull \hbox (22.76164pt too wide) in paragraph at lines 518--521
 \T1/lmr/m/n/10.95 mo-dulo $\OT1/lmr/m/n/10.95 2\OML/lmm/m/it/10.95 ^^Y$\T1/lmr/m/n/10.95 . Cette pro-priete est la base du RAN-SAC cir-cu-laire im-ple-mente dans \T1/lmtt/m/n/10.95 BSS/CircularRansac\T1/lmr/m/n/10.95 . 
  []
 
 
-Underfull \hbox (badness 10000) in paragraph at lines 523--524
+Underfull \hbox (badness 10000) in paragraph at lines 525--526
 
  []
 
 [8]
-Underfull \hbox (badness 10000) in paragraph at lines 634--635
+Underfull \hbox (badness 10000) in paragraph at lines 636--637
 
  []
 
 [9]
-Overfull \hbox (12.2563pt too wide) in paragraph at lines 752--760
+Overfull \hbox (12.2563pt too wide) in paragraph at lines 749--757
 []\T1/lmr/m/n/10.95 Dans l'al-go-rithme de Sa-wada, l'etape M consiste a maxi-mi-ser l'es-pe-rance de la log-vraisemblance
  []
 
@@ -513,20 +513,20 @@ LaTeX2e <2025-11-01>
 L3 programming layer <2026-04-28>
  ***********
 Package rerunfilecheck Info: File `main.out' has not changed.
-(rerunfilecheck)             Checksum: 2014C8C69F0D22B41EA9D8B97A7FB2A2;5904.
+(rerunfilecheck)             Checksum: 6F92B5CAA5FEF34D703032989C59E151;5828.
  ) 
 Here is how much of TeX's memory you used:
- 12826 strings out of 467683
- 204388 string characters out of 5412786
+ 12824 strings out of 467683
+ 204368 string characters out of 5412786
  639446 words of memory out of 5000000
- 41656 multiletter control sequences out of 15000+600000
+ 41655 multiletter control sequences out of 15000+600000
  694433 words of font info for 89 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
- 75i,9n,79p,423b,700s stack positions out of 10000i,1000n,20000p,200000b,200000s
+ 75i,9n,79p,486b,716s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/euler/eufm10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx12.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx8.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmex10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmi10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmi6.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmi8.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmib10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr12.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr17.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr6.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr8.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmri10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmsy10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmsy6.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmsy8.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmtt10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/symbols/msbm10.pfb>
-Output written on main.pdf (12 pages, 395267 bytes).
+Output written on main.pdf (12 pages, 393967 bytes).
 PDF statistics:
- 333 PDF objects out of 1000 (max. 8388607)
- 49 named destinations out of 1000 (max. 500000)
- 233 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 327 PDF objects out of 1000 (max. 8388607)
+ 48 named destinations out of 1000 (max. 500000)
+ 225 words of extra memory for PDF output out of 10000 (max. 10000000)
 
