@@ -1,0 +1,33 @@
+\babel@toc {french}{}\relax 
+\contentsline {section}{\numberline {1}Introduction}{3}{section.1}%
+\contentsline {section}{\numberline {2}Creation d'un masque temps-frequence }{3}{section.2}%
+\contentsline {subsection}{\numberline {2.1}Representation temps-frequence multicanale}{3}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}Selection des bins actifs par energie}{3}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}Utilisation d'un réseau de neuronnes}{4}{subsection.2.3}%
+\contentsline {section}{\numberline {3}Separation de sources dans le masque temps-frequence}{4}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Préliminaires}{4}{subsection.3.1}%
+\contentsline {subsubsection}{\numberline {3.1.1}Hypothese de parcimonie locale}{4}{subsubsection.3.1.1}%
+\contentsline {subsubsection}{\numberline {3.1.2}Justification de la forme des bins}{4}{subsubsection.3.1.2}%
+\contentsline {subsubsection}{\numberline {3.1.3}Normalisation et blanchiment des observations}{5}{subsubsection.3.1.3}%
+\contentsline {subsection}{\numberline {3.2}Algorithme de SAWADA}{6}{subsection.3.2}%
+\contentsline {subsubsection}{\numberline {3.2.1}Clustering EM par frequence}{6}{subsubsection.3.2.1}%
+\contentsline {subsubsection}{\numberline {3.2.2}Etape E}{6}{subsubsection.3.2.2}%
+\contentsline {subsubsection}{\numberline {3.2.3}Etape M}{6}{subsubsection.3.2.3}%
+\contentsline {subsubsection}{\numberline {3.2.4}Construction des masques de clusters}{7}{subsubsection.3.2.4}%
+\contentsline {subsection}{\numberline {3.3}Assignation des clusters à l'une des sources}{7}{subsection.3.3}%
+\contentsline {subsubsection}{\numberline {3.3.1}Motivation}{7}{subsubsection.3.3.1}%
+\contentsline {subsubsection}{\numberline {3.3.2}Alignement par correlation d'enveloppes}{7}{subsubsection.3.3.2}%
+\contentsline {subsubsection}{\numberline {3.3.3}RANSAC circulaire}{8}{subsubsection.3.3.3}%
+\contentsline {paragraph}{conversion des centroides en phase relative}{8}{section*.2}%
+\contentsline {paragraph}{Modele ajusté par RANSAC circulaire}{8}{section*.3}%
+\contentsline {paragraph}{Lien entre pente de phase et TDOA}{9}{section*.4}%
+\contentsline {subsection}{\numberline {3.4}Fusion finale des masques}{10}{subsection.3.4}%
+\contentsline {section}{\numberline {4}Calcul des TDOA a partir des bins isoles}{10}{section.4}%
+\contentsline {subsection}{\numberline {4.1}TDOA sur sources separees}{10}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}Beamforming masque}{10}{subsection.4.2}%
+\contentsline {section}{\numberline {5}Validation sur un dataset synthétique}{10}{section.5}%
+\contentsline {section}{\numberline {6}Conclusion}{10}{section.6}%
+\contentsline {section}{\numberline {A}Demonstrations des mises a jour EM}{11}{section.A}%
+\contentsline {subsection}{\numberline {A.1}Mise a jour des poids}{11}{subsection.A.1}%
+\contentsline {subsection}{\numberline {A.2}Mise a jour du centroïde}{11}{subsection.A.2}%
+\contentsline {subsection}{\numberline {A.3}Mise a jour de la variance}{12}{subsection.A.3}%

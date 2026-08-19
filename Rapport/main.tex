@@ -1,0 +1,1092 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[french]{babel}
+\usepackage{lmodern}
+\usepackage{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+\geometry{margin=2.5cm}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=blue!45!black,
+  urlcolor=blue!45!black,
+  citecolor=blue!45!black
+}
+
+\newcommand{\STFT}{\operatorname{STFT}}
+\newcommand{\argmin}{\operatorname*{arg\,min}}
+\newcommand{\argmax}{\operatorname*{arg\,max}}
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+
+\title{Rapport sur un algorithme de separation de sources acoustiques}
+\author{A completer}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+Ce rapport decrit un pipeline de traitement audio multicanal destine a isoler
+plusieurs sources acoustiques puis a estimer leurs differences de temps
+d'arrivee entre microphones. Le pipeline s'appuie d'abord sur une selection de
+bins dans le plan temps-frequence, afin de ne conserver que les zones contenant
+du signal exploitable. La partie principale du rapport porte ensuite sur
+l'algorithme de separation de sources implemente dans le module
+\code{BSS}. Cette methode modelise chaque bin actif comme un coefficient
+complexe de source multiplie par un vecteur spatial de retards, applique un
+clustering EM independant par frequence, puis resout le probleme de permutation
+entre frequences par un RANSAC circulaire sur les phases relatives des
+centroïdes. Enfin, les sources separees ou les bins isoles peuvent etre
+utilises pour estimer les TDOA, notamment via des methodes de beamforming
+masquees ou ponderees.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+\section{Introduction}
+
+L'estimation de la position ou de la direction d'une source acoustique dans un
+milieu naturel repose souvent sur l'exploitation d'un reseau de microphones. Si
+une source emet un signal, celui-ci est observe par chaque microphone avec un
+retard et une attenuation qui dependent de la geometrie de propagation. Les
+differences de temps d'arrivee, ou TDOA pour \emph{Time Difference Of Arrival},
+contiennent donc une information spatiale directement liee a la source.
+
+Dans un contexte realiste, plusieurs sources peuvent etre actives
+simultanement, et le signal observe est un melange de contributions utiles et de
+bruits. Le probleme consiste alors a isoler les composantes associees a chaque
+source avant d'estimer leurs retards respectifs. Le pipeline considere dans ce
+rapport est organise en trois etapes principales :
+
+\begin{enumerate}
+  \item construire un masque temps-frequence afin de selectionner les bins ou
+  du signal est present ;
+  \item separer les sources a l'interieur de ces bins actifs ;
+  \item calculer les TDOA a partir des bins isoles, en particulier par
+  beamforming.
+\end{enumerate}
+
+La contribution principale de ce rapport concerne la deuxieme etape. Elle
+correspond au module de separation de sources present dans \code{BSS}, et plus
+precisement a l'algorithme de type Sawada/LOST implemente dans
+\code{BSS/Algo_Separation/Sawada_separation.py}. Cette methode exploite la
+structure spatiale des coefficients de STFT multicanaux : dans une zone
+temps-frequence locale, un bin actif est souvent domine par une seule source.
+Les observations associees a une meme source forment alors des directions
+complexes coherentes dans l'espace des microphones.
+
+\section{Creation d'un masque temps-frequence }
+\subsection{Representation temps-frequence multicanale}
+
+On note $x_m[n]$ le signal temporel observe par le microphone $m$, avec
+$m \in \{1,\dots,M\}$. Pour chaque microphone, une transformee de Fourier a
+court terme est calculee :
+\[
+  X_m(f,t) = \STFT\{x_m[n]\}(f,t),
+  \]
+  ou $f$ designe l'indice de frequence et $t$ l'indice de trame temporelle.
+  
+  Les observations multicanales sont ensuite regroupees sous forme vectorielle :
+  \[
+    \mathbf{x}_{f,t}
+    =
+    \begin{bmatrix}
+      X_1(f,t) & X_2(f,t) & \cdots & X_M(f,t)
+    \end{bmatrix}^{\top}
+    \in \mathbb{C}^{M}.
+\]
+
+Cette representation est centrale pour le pipeline. L'amplitude des
+coefficients permet d'identifier les zones temps-frequence contenant de
+l'energie utile. La phase relative entre les microphones permet quant a elle
+d'exploiter la geometrie de propagation et donc de distinguer les sources.
+
+
+
+Le masque temps-frequence a pour objectif de selectionner les bins $(f,t)$ qui
+contiennent du signal utile. Cette etape reduit le nombre d'observations
+traitees par l'algorithme de separation et limite l'influence des bins domines
+par le bruit.
+
+
+
+\subsection{Selection des bins actifs par energie}
+
+ la STFT multicanale brute est d'abord
+calculee. L'energie d'un bin temps-frequence est ensuite definie par :
+\[
+  E(f,t) = \sum_{m=1}^{M} |X_m(f,t)|^2.
+\]
+
+Cette energie est convertie en decibels :
+\[
+  E_{\mathrm{dB}}(f,t)
+    =
+    10 \log_{10}\left(E(f,t)+\epsilon\right).
+\]
+
+Le seuil d'activation est calcule relativement a un plancher d'energie estime
+par percentile :
+\[
+  \theta
+    =
+    \operatorname{percentile}_{p}\left(E_{\mathrm{dB}}\right)
+    +
+    \Delta_{\mathrm{dB}}.
+\]
+
+Un bin est conserve si :
+\[
+  E_{\mathrm{dB}}(f,t) \geq \theta.
+\]
+
+Dans la configuration de benchmark presente dans
+\code{BSS/Benchmark/runners.py}, les valeurs utilisees sont typiquement un
+plancher au percentile $20$, un seuil place $6$ dB au-dessus de ce plancher, et
+un minimum de $3$ trames actives consecutives par frequence.
+
+Ensuite,
+un bin actif isole ne fournit pas assez d'information locale pour stabiliser le
+clustering EM. L'implementation filtre donc les activations frequence par
+frequence en conservant seulement les groupes temporels suffisamment longs.
+Si $L_{\min}$ designe la longueur minimale, un segment actif n'est conserve que
+si :
+\[
+  \#\{t : (f,t) \text{ actif dans le segment}\} \geq L_{\min}.
+\]
+
+Ce filtrage est important pour la robustesse de la separation. En pratique, il
+evite que des fluctuations locales du bruit soient presentees a l'EM comme des
+observations fiables.
+
+On pourrait également penser à utiliser des filtres plus devellopés voir meme des CNN. Cela nous mène à la 
+seconde approche. 
+
+\subsection{Utilisation d'un réseau de neuronnes}
+\section{Separation de sources dans le masque temps-frequence}
+
+\subsection{Préliminaires}
+\subsubsection{Hypothese de parcimonie locale}
+
+L'algorithme de separation repose sur une hypothese de parcimonie
+temps-frequence. Dans une zone locale du plan temps-frequence, un bin actif est
+souvent domine par une seule source. Pour une source $k$, on peut alors ecrire :
+\[
+  \mathbf{x}_{f,t}
+    \simeq
+    s_k(f,t)\,\mathbf{a}_k(f),
+\]
+ou $s_k(f,t) \in \mathbb{C}$ est le coefficient complexe de la source et
+$\mathbf{a}_k(f) \in \mathbb{C}^M $ est le vecteur spatial associe a cette source.
+
+Le probleme de separation devient donc un probleme de regroupement de
+directions complexes. A frequence fixee, les bins domines par la meme source
+doivent se regrouper autour d'un meme vecteur spatial.
+
+\subsubsection{Justification de la forme des bins}
+
+On suppose que la propagation d'une source $k$ vers un microphone $m$ peut etre
+approximativement decrite par un gain $\rho_{m,k}$ et un retard
+$\tau_{m,k}$. Dans le domaine frequentiel, un retard temporel se traduit par
+une phase lineaire en frequence :
+\[
+  X_m(f,t)
+    \simeq
+    \rho_{m,k}
+    e^{-j2\pi f\tau_{m,k}}
+    S_k(f,t).
+\]
+
+En empilant les observations de tous les microphones, on obtient :
+\[
+  \mathbf{x}_{f,t}
+    \simeq
+    S_k(f,t)
+    \begin{bmatrix}
+      \rho_{1,k} e^{-j2\pi f\tau_{1,k}} \\
+      \rho_{2,k} e^{-j2\pi f\tau_{2,k}} \\
+      \vdots \\
+      \rho_{M,k} e^{-j2\pi f\tau_{M,k}}
+    \end{bmatrix}
+    =
+    S_k(f,t)\,\mathbf{a}_k(f).
+\]
+
+Cette equation justifie la forme utilisee par l'algorithme : un bin est modelise
+comme un coefficient complexe scalaire, propre au contenu de la source, multiplie
+par un vecteur complexe qui encode la signature spatiale. Cette signature
+contient en particulier les retards relatifs entre microphones. De plus, comme les micros sont proches,
+on peut neglecter les differences d'amplitude entre les microphones.
+ (et surtout ne pas s'appuyer dessus pour l'algorithme)
+
+\subsubsection{Normalisation et blanchiment des observations}
+
+L'algorithme cherche principalement a separer les directions spatiales, et non
+les amplitudes. Les bins sont donc normalises individuellement :
+\[
+  \tilde{\mathbf{x}}_{f,t}
+    =
+    \frac{\mathbf{x}_{f,t}}
+         {\|\mathbf{x}_{f,t}\|_2 + \epsilon}.
+\]
+
+Apres normalisation, on obtient approximativement :
+\[
+  \tilde{\mathbf{x}}_{f,t}
+    \approx
+    e^{j\phi_{f,t}}
+    \frac{\mathbf{a}_k(f)}{\|\mathbf{a}_k(f)\|_2}.
+\]
+
+Le facteur $e^{j\phi_{f,t}}$ correspond a une phase globale. Il ne porte pas
+l'information spatiale utile, qui est contenue dans les phases relatives entre
+microphones. C'est pourquoi l'algorithme travaille sur des distances
+directionnelles invariantes a cette phase globale.
+
+Dans l'implementation, il est aussi possible d'ajouter une etape de blanchiment
+spatial apres cette premiere normalisation. Pour chaque frequence $f$, on
+considere la matrice des observations normalisees :
+\[
+  \tilde{\mathbf{X}}_f
+    =
+    \begin{bmatrix}
+      \tilde{\mathbf{x}}_{f,1} &
+      \tilde{\mathbf{x}}_{f,2} &
+      \cdots &
+      \tilde{\mathbf{x}}_{f,T}
+    \end{bmatrix}.
+\]
+
+On estime alors la matrice de correlation spatiale :
+\[
+  \mathbf{C}_f
+    =
+    \frac{1}{T}
+    \tilde{\mathbf{X}}_f
+    \tilde{\mathbf{X}}_f^{H}.
+\]
+
+Cette matrice est diagonalisee :
+\[
+  \mathbf{C}_f
+    =
+    \mathbf{U}_f
+    \mathbf{\Lambda}_f
+    \mathbf{U}_f^{H},
+\]
+ou $\mathbf{\Lambda}_f$ contient les valeurs propres et $\mathbf{U}_f$ les
+vecteurs propres. La matrice de blanchiment appliquee dans le code est :
+\[
+  \mathbf{W}_f
+    =
+    \mathbf{\Lambda}_f^{-1/2}
+    \mathbf{U}_f^{H}.
+\]
+
+Les observations blanchies sont donc :
+\[
+  \mathbf{y}_{f,t}
+    =
+    \mathbf{W}_f
+    \tilde{\mathbf{x}}_{f,t}.
+\]
+
+Apres blanchiment, les directions sont transformees dans un espace ou la
+correlation spatiale globale est normalisee :
+\[
+  \frac{1}{T}
+  \sum_t
+  \mathbf{y}_{f,t}\mathbf{y}_{f,t}^{H}
+  \approx
+  \mathbf{I}.
+\]
+
+Cette operation reduit les correlations communes entre microphones et peut
+rendre les directions des sources plus faciles a separer par l'EM. En revanche,
+les centroïdes estimes ne vivent plus directement dans l'espace physique
+original des microphones : ils sont exprimes dans l'espace blanchi. Lorsque
+l'on veut interpreter leurs phases comme des retards, il faut donc appliquer
+l'inverse du blanchiment aux centroïdes avant l'assignation spatiale ou
+l'analyse des TDOA. C'est ce que fait la propriete
+\code{all_centroids_unwhitened} : si le blanchiment est active, elle applique
+la pseudo-inverse de $\mathbf{W}_f$ aux centroïdes avant de les transmettre au
+RANSAC circulaire.
+
+Dans \code{SawadaBSS}, les observations sont renormalisees apres le blanchiment.
+Ainsi, le clustering EM travaille toujours sur des bins de norme unitaire, que
+le blanchiment soit active ou non.
+
+
+\subsection{Algorithme de SAWADA}
+\subsubsection{Clustering EM par frequence}
+
+Pour chaque frequence $f$, l'algorithme extrait les observations actives, on utilise le masque donnée par le réseau de neuronnes ou bien les bins les plus actifs:
+\[
+  \tilde{\mathbf{x}}_{f,t}, \quad t \in \mathcal{T}_f.
+  \]
+  
+  L'objectif est d'ajuster $K$ clusters, ou $K$ est le nombre de sources. Chaque
+  cluster $k$ est represente par trois parametres :
+  
+  \begin{itemize}
+    \item un centroïde complexe $\mathbf{a}_{f,k}$ ;
+    \item une variance $\sigma^2_{f,k}$, qui mesure la dispersion autour de la
+    direction ;
+    \item un poids de melange $\alpha_{f,k}$.
+  \end{itemize}
+  
+  L'initialisation est faite par K-means sur les amplitudes des observations, puis
+  les centroïdes sont normalises sur la sphere unite complexe.
+  
+  \subsubsection{Etape E}
+  
+  L'etape E calcule, pour chaque observation, la probabilite posterieure
+  d'appartenir a chaque cluster. La distance directionnelle utilisee est :
+  \[
+    d^2_{k,t}
+    =
+    1 -
+    \left|
+    \mathbf{a}_{f,k}^{H}
+    \tilde{\mathbf{x}}_{f,t}
+    \right|^2.
+\]
+
+Cette distance est faible lorsque l'observation est proche de la direction du
+centroïde, independamment d'une phase globale. La probabilite non normalisee
+associee au cluster $k$ est :
+\[
+  q_{k,t}
+    =
+    \alpha_{f,k}
+    \frac{1}
+         {\left(\pi(\sigma^2_{f,k}+\epsilon)\right)^{M-1}}
+    \exp\left(
+      -\frac{d^2_{k,t}}{\sigma^2_{f,k}+\epsilon}
+    \right).
+\]
+
+Les responsabilites EM sont ensuite obtenues par normalisation :
+\[
+  \gamma_{k,t}
+    =
+    \frac{q_{k,t}}
+         {\sum_{\ell=1}^{K} q_{\ell,t}+\epsilon}.
+\]
+
+\subsubsection{Etape M}
+
+L'etape M met a jour les parametres des clusters a partir des responsabilites.
+Les poids de melange sont mis a jour avec un prior de Dirichlet $\phi$ :
+\[
+  \alpha_{f,k}
+    =
+    \frac{\sum_t \gamma_{k,t}+\phi}
+         {N_f+K\phi},
+\]
+ou $N_f$ est le nombre d'observations actives a la frequence $f$.
+
+Le centroïde est estime comme la direction principale de la matrice de
+correlation ponderee :
+\[
+  \mathbf{R}_{f,k}
+    =
+    \sum_t
+    \gamma_{k,t}
+    \tilde{\mathbf{x}}_{f,t}
+    \tilde{\mathbf{x}}_{f,t}^{H}.
+\]
+
+Le nouveau centroïde $\mathbf{a}_{f,k}$ est le vecteur propre principal de
+$\mathbf{R}_{f,k}$. La variance est ensuite mise a jour comme la dispersion
+moyenne ponderee des observations autour de cette direction :
+\[
+  \sigma_{f,k}^2
+    =
+    \frac{
+      \sum_t \gamma_{k,t}
+      \left(
+        1-\left|\mathbf{a}_{f,k}^{H}\tilde{\mathbf{x}}_{f,t}\right|^2
+      \right)
+    }
+    {
+      (M-1)\sum_t \gamma_{k,t}
+    }.
+\]
+
+Les demonstrations detaillees de ces trois mises a jour sont donnees en
+annexe~\ref{annexe:em-mstep}.
+
+En pratique, ces deux etapes sont alternees un nombre fixe de fois. Dans
+l'implementation actuelle. Pour 20 itérations, cela fonctionne bien en pratique.
+
+\subsubsection{Construction des masques de clusters}
+
+Apres convergence de l'EM, un masque binaire est construit par decision dure.
+Pour chaque bin actif, on choisit le cluster avec le plus grand score :
+\[
+  \hat{k}(f,t)
+    =
+    \argmax_k
+    \frac{
+      \left|
+        \mathbf{a}_{f,k}^{H}
+        \tilde{\mathbf{x}}_{f,t}
+      \right|^2
+    }
+    {\sigma^2_{f,k}+\epsilon}.
+\]
+
+Le masque du cluster $k$ est alors :
+\[
+  M_k(f,t)
+    =
+    \begin{cases}
+      1 & \text{si } \hat{k}(f,t)=k,\\
+      0 & \text{sinon.}
+    \end{cases}
+\]
+
+A ce stade, les masques sont coherents localement a une frequence donnee, mais
+pas encore globalement entre frequences. Comme l'EM est lance independamment
+pour chaque frequence, le cluster numerote $0$ a une frequence peut correspondre
+a une autre source que le cluster numerote $0$ a la frequence suivante. C'est le
+probleme classique de permutation.
+
+\subsection{Assignation des clusters à l'une des sources}
+
+\subsubsection{Motivation}
+
+Pour reconstruire une source, il faut que les masques soient coherents sur
+toutes les frequences. L'implementation propose deux strategies d'alignement :
+une methode par correlation d'enveloppes, et une methode par RANSAC circulaire.
+La configuration de benchmark utilise l'alignement par RANSAC, car il exploite
+directement la structure physique des phases relatives.
+\subsubsection{Alignement par correlation d'enveloppes}
+L'assignation par correlation d'enveloppes consiste a associer, pour chaque
+frequence, les clusters locaux aux sources globales deja suivies aux frequences
+precedentes. Pour ce faire, on calcule l'enveloppe $e_k^f(t)$ du cluster $k$ a
+la frequence $f$ :
+\[
+  e_k^f(t)
+    =
+    \sum_m |X_m(f,t)|^2 M_k(f,t)
+\] 
+où $M_k(f,t)$ est le masque binaire du cluster $k$ pour la frequence $f$.
+
+On calcule ensuite pour chaque combinaison d'attribution possible 
+\[
+  \pi \in \mathfrak{S}_K
+\]
+un score de coherence entre les enveloppes du bin courant et les enveloppes de
+reference deja associees aux sources. Si $r_s^{f-1}(t)$ designe l'enveloppe de
+reference de la source $s$ construite a partir des frequences precedentes, le
+score de la permutation $\pi$ est :
+\[
+  C_f(\pi)
+    =
+    \sum_{s=1}^{K}
+    \rho\left(
+      e_{\pi(s)}^f(t),
+      r_s^{f-1}(t)
+    \right),
+\]
+ou $\rho(\cdot,\cdot)$ est la correlation de Pearson :
+\[
+  \rho(u,v)
+    =
+    \frac{
+      \sum_t
+      \left(u(t)-\bar{u}\right)
+      \left(v(t)-\bar{v}\right)
+    }
+    {
+      \sqrt{\sum_t \left(u(t)-\bar{u}\right)^2}
+      \sqrt{\sum_t \left(v(t)-\bar{v}\right)^2}
+      +
+      \epsilon
+    }.
+\]
+
+La permutation retenue est celle qui maximise cette correlation totale :
+\[
+  \pi_f^{*}
+    =
+    \argmax_{\pi \in \mathfrak{S}_K}
+    C_f(\pi).
+\]
+
+Les masques de la frequence $f$ sont ensuite reordonnes selon $\pi_f^{*}$ :
+\[
+  M_s(f,t)
+    \leftarrow
+    M_{\pi_f^{*}(s)}(f,t).
+\]
+
+L'enveloppe de reference est finalement mise a jour de facon progressive. Dans
+le mode \code{ema} utilise par l'implementation, cette mise a jour prend la
+forme :
+\[
+  r_s^{f}(t)
+    =
+    (1-\beta)r_s^{f-1}(t)
+    +
+    \beta e_{\pi_f^{*}(s)}^f(t),
+\]
+avec $\beta=0.1$ dans le code. Une frequence dont l'energie associee a une
+source est trop faible ne met pas a jour la reference, afin d'eviter qu'un bin
+peu informatif degrade l'alignement des frequences suivantes.
+
+Cette methode est simple et ne suppose pas explicitement un modele de retard.
+Elle utilise seulement la similarite temporelle des enveloppes : deux clusters
+appartenant a la meme source doivent presenter des activations temporelles
+corrélées d'une frequence a l'autre. En revanche, cette méthode ordonne les fréquences car les basses fréquences 
+servent initialement à construire l'enveloppe de réference. Aussi, beaucoup de situation, notamment lors de 
+vocalise simultané, peuvent donner lieu à des erreurs. 
+
+\subsubsection{RANSAC circulaire} 
+\paragraph{conversion des centroides en phase relative} ~\\
+Les centroïdes complexes $\mathbf{a}_{f,k}$ contiennent une phase globale
+arbitraire. Pour la supprimer, on choisit un microphone de reference, note ici
+$1$, et on calcule :
+\[
+  z^{\mathrm{rel}}_{f,k,m}
+    =
+    a_{f,k,m}
+    a^{*}_{f,k,1}.
+\]
+
+La phase relative associee est :
+\[
+  \theta_{f,k,m}
+    =
+    \arg\left(z^{\mathrm{rel}}_{f,k,m}\right).
+\]
+
+Si le centroïde correspond a une source physique dominee par des retards, alors
+on attend une relation de la forme :
+\[
+  \theta_{f,k,m}
+    \approx
+    b_m
+    -
+    2\pi f(\tau_m-\tau_1)
+    \pmod{2\pi}.
+\]
+
+Les phases relatives d'une meme source decrivent donc une droite en frequence,
+mais observee modulo $2\pi$. Cette propriete est la base du RANSAC circulaire
+implemente dans \code{BSS/CircularRansac}.
+
+\textit{Remarque : si l'on a précedemment blanchis le données, il faut penser à faire l'opération inverse
+sur les centroides au risque de faire un un ransac sur des données qui ne représente aucunement des droites}
+
+\paragraph{Modele ajusté par RANSAC circulaire} ~\\
+
+Le modele ajuste est une droite circulaire multidimensionnelle :
+\[
+  \boldsymbol{\theta}_i
+    =
+    \mathbf{b}
+    +
+    (f_i-f_{\mathrm{ref}})\mathbf{v}
+    \pmod{2\pi}.
+\]
+
+La distance d'une observation au modele est calculee apres repliement de phase :
+\[
+  d_i
+    =
+    \left\|
+      \operatorname{wrap}
+      \left(
+        \boldsymbol{\theta}_i
+        -
+        \mathbf{b}
+        -
+        (f_i-f_{\mathrm{ref}})\mathbf{v}
+      \right)
+    \right\|_2.
+\]
+
+Concretement, chaque observation donnee au RANSAC correspond a un centroïde
+disponible a une frequence donnee. Elle est decrite par sa frequence $f_i$ et
+par son vecteur de phases relatives :
+\[
+  \boldsymbol{\theta}_i
+    =
+    \begin{bmatrix}
+      \theta_{i,1} & \cdots & \theta_{i,M}
+    \end{bmatrix}^{\top}.
+\]
+
+Le RANSAC construit d'abord des hypotheses de trajectoires a partir de petits
+echantillons d'observations, typiquement deux centroïdes pris a deux frequences
+distinctes. Pour une paire $(i,j)$, la pente candidate doit verifier :
+\[
+  \boldsymbol{\theta}_j-\boldsymbol{\theta}_i
+    =
+    (f_j-f_i)\mathbf{v}
+    \pmod{2\pi}.
+\]
+
+Comme les phases sont definies modulo $2\pi$, plusieurs pentes peuvent expliquer
+la meme paire d'observations :
+\[
+  \mathbf{v}
+    =
+    \frac{
+      \boldsymbol{\theta}_j-\boldsymbol{\theta}_i
+      +
+      2\pi\mathbf{n}
+    }
+    {f_j-f_i},
+    \qquad
+    \mathbf{n}\in\mathbb{Z}^{M}.
+\]
+
+L'implementation enumere les hypotheses compatibles avec les bornes physiques
+sur la pente. Ces bornes proviennent du retard maximal possible entre
+microphones : comme $v_m=-2\pi\tau_m$, limiter les TDOA revient a limiter les
+pentes admissibles.
+
+Pour chaque hypothese $(\mathbf{b},\mathbf{v})$, l'algorithme calcule la
+distance circulaire de toutes les observations au modele. Une observation est
+consideree comme un inlier si :
+\[
+  d_i < \eta,
+\]
+ou $\eta$ est le seuil de residu circulaire. Le score utilise est de type
+MSAC : au lieu de compter seulement les inliers, on somme des residus tronques :
+\[
+  S
+    =
+    \sum_i
+    \min(d_i^2,\eta^2).
+\]
+
+Le meilleur modele est celui qui minimise ce score. Apres selection d'une bonne
+hypothese, une optimisation locale raffine la pente et l'intercept sur les
+inliers. Pour une pente fixee, l'intercept optimal est obtenu par moyenne
+circulaire des phases residuelles :
+\[
+  b_m(\mathbf{v})
+    =
+    \arg
+    \sum_{i\in\mathcal{I}}
+    \exp\left(
+      j\left(\theta_{i,m}-(f_i-f_{\mathrm{ref}})v_m\right)
+    \right),
+\]
+ou $\mathcal{I}$ designe l'ensemble des inliers.
+
+Comme il y a plusieurs sources, l'extraction est sequentielle. Le RANSAC trouve
+d'abord la trajectoire la plus coherente, associe les centroïdes compatibles a
+cette source, puis retire ou marque ces centroïdes avant de chercher la
+trajectoire suivante. Cette procedure est repetee jusqu'a obtenir $K$
+trajectoires, c'est-a-dire une trajectoire de phase par source attendue.
+
+Enfin, tous les centroïdes disponibles sont assignes a la trajectoire la plus
+proche. Les centroïdes trop eloignes de toutes les trajectoires peuvent etre
+marques comme non assignes. Les labels obtenus permettent ensuite de fusionner
+les masques de clusters en masques de sources coherents sur l'ensemble des
+frequences.
+
+\paragraph{Lien entre pente de phase et TDOA} ~\\ 
+
+La pente estimee pour le microphone $m$ a une interpretation directe :
+\[
+  v_m = -2\pi(\tau_m-\tau_{\mathrm{ref}}).
+\]
+
+Le retard relatif au microphone de reference est donc :
+\[
+  \tau_m-\tau_{\mathrm{ref}}
+    =
+    -\frac{v_m}{2\pi}.
+\]
+
+Les TDOA entre paires de microphones sont ensuite calcules par difference :
+\[
+  \Delta\tau_{i,j}
+    =
+    \tau_j-\tau_i.
+\]
+
+En revanche, les tdoas estimé à partir de la pente recupérée dans 
+le RANSAC sont souvent mauvais en comparaison des autres methodes. Cela est donc utile à améliorer la cohérence 
+des mask mais ne sert pas directement au calcul de TDOAS. Il servent principalement à verifier que l'on ne s'est
+pas totalement trompé. 
+
+\subsection{Fusion finale des masques}
+
+Une fois les centroïdes associes a des sources, les masques de clusters sont
+fusionnes. Pour une source $s$, le masque final est :
+\[
+  M_s(f,t)
+    =
+    \sum_{k:\, label(f,k)=s} M_k(f,t).
+\]
+Dans nos masques, chaque bin actif est associé à un seul cluster.
+La fusion des clusters assignés à une même source produit donc directement un masque binaire de source. 
+La reconstruction temporelle consiste ensuite à appliquer ce masque à la STFT multicanale originale,
+puis à revenir dans le domaine temporel par STFT inverse. A noter que le signal temporel reconstruit 
+ne possède pas vraiment une stft similaire à la stft que l'on obtient avec le masque car la stft masqué ne correspond 
+à aucun signal temporel réel. C'est simplement le signal temporel ayant la stft la plus proche de la stft masqué.
+Ainsi, il n'y à priori aucune raison que les TDOAS calculé soit les bons. On observe dans les faits que cela donne 
+des estimations de TDOAS suffisante. 
+
+\[
+  \hat{\mathbf{X}}_s(f,t)
+    =
+    M_s(f,t)\,\mathbf{X}(f,t),
+\]
+puis a revenir dans le domaine temporel par STFT inverse.
+
+\section{Calcul des TDOA a partir des bins isoles}
+
+\subsection{TDOA sur sources separees}
+
+Une premiere estimation des TDOA peut etre effectué apres
+reconstruction des sources par istft. Pour chaque source separee et chaque paire de
+microphones, le retard est estime par correlation temporelle. La convention
+utilisee est :
+\[
+  \Delta\tau_{i,j}
+    =
+    delay(j)-delay(i).
+\]
+
+Cette approche donne une estimation directe sur les signaux temporels
+reconstruits. Elle depend cependant de la qualite du masque final : une erreur
+de separation ou d'assignation peut deteriorer les signaux reconstruits et donc
+les TDOA calcules par correlation.
+
+\subsection{Beamforming masque}
+
+\section{Validation sur un dataset synthétique}
+
+
+\section{Conclusion}
+
+L'algorithme de separation etudie exploite la structure physique des signaux
+multicanaux dans le domaine temps-frequence. Sous l'hypothese qu'un bin actif
+est localement domine par une source, l'observation multicanale peut etre
+modelisee comme un coefficient complexe multiplie par un vecteur spatial de
+retards. Cette structure permet de transformer le probleme de separation en un
+probleme de clustering de directions complexes.
+
+Le clustering EM estime, pour chaque frequence, des centroïdes correspondant
+aux signatures spatiales locales des sources. Le RANSAC circulaire resout
+ensuite le probleme de permutation entre frequences en cherchant des
+trajectoires de phase compatibles avec des retards physiques. Les masques finaux
+permettent de reconstruire les sources et de calculer des TDOA, soit par
+correlation sur les signaux reconstruits, soit a partir des pentes de phase, soit
+encore en alimentant un beamformer masque.
+
+La validation sur dataset synthetique fournit un cadre reproductible pour
+mesurer les erreurs de TDOA et inspecter les artefacts internes de l'algorithme.
+Les prochaines etapes naturelles consistent a completer les resultats
+quantitatifs, etudier la sensibilite aux niveaux de bruit et comparer
+systematiquement l'apport du masque temps-frequence dans la qualite finale de la
+separation et des TDOA.
+
+\appendix
+
+\section{Demonstrations des mises a jour EM}
+\label{annexe:em-mstep}
+
+Dans l'algorithme de Sawada, l'etape M consiste a maximiser l'esperance de la
+log-vraisemblance complete par rapport aux parametres de chaque source. Pour une
+frequence donnee, on note
+$\mathcal{X}=\{\tilde{\mathbf{x}}_t\}_{t=1}^{T}$ l'ensemble des observations
+normalisees, avec $\|\tilde{\mathbf{x}}_t\|_2=1$. Pour une source $i$, les
+parametres sont le centroïde $\mathbf{a}_i$, contraint par
+$\|\mathbf{a}_i\|_2=1$, la variance $\sigma_i^2$ et le poids de melange
+$\alpha_i$.
+
+La quantite maximisee par l'EM est :
+\[
+  Q
+    =
+    \sum_{t=1}^{T}
+    \sum_{i=1}^{K}
+    \gamma_{i,t}
+    \left[
+      \ln(\alpha_i)
+      +
+      \ln p\left(
+        \tilde{\mathbf{x}}_t
+        \mid
+        \mathbf{a}_i,\sigma_i^2
+      \right)
+    \right].
+\]
+
+\subsection{Mise a jour des poids}
+
+Sans regularisation, la mise a jour des poids maximise :
+\[
+  \sum_{i=1}^{K}
+  \sum_{t=1}^{T}
+  \gamma_{i,t}\ln(\alpha_i)
+  \quad
+  \text{sous la contrainte}
+  \quad
+  \sum_{i=1}^{K}\alpha_i=1.
+\]
+
+En utilisant un multiplicateur de Lagrange $\lambda$, on derive :
+\[
+  \frac{\partial}{\partial \alpha_i}
+  \left(
+    \sum_{i,t}\gamma_{i,t}\ln(\alpha_i)
+    -
+    \lambda\sum_i\alpha_i
+  \right)
+  =
+  \frac{\sum_t\gamma_{i,t}}{\alpha_i}
+  -
+  \lambda
+  =
+  0.
+\]
+
+On obtient donc :
+\[
+  \alpha_i
+    =
+    \frac{\sum_t\gamma_{i,t}}{\lambda}.
+\]
+
+Puisque $\sum_i\alpha_i=1$, on a :
+\[
+  \lambda
+    =
+    \sum_i\sum_t\gamma_{i,t}
+    =
+    T.
+\]
+
+D'ou :
+\[
+  \alpha_i
+    =
+    \frac{\sum_t\gamma_{i,t}}{T}.
+\]
+
+L'ajout de $\phi$ dans le code correspond a l'introduction d'un prior de
+Dirichlet pour regulariser l'estimation. Dans ce cas, la mise a jour devient :
+\[
+  \alpha_i
+    =
+    \frac{\sum_t\gamma_{i,t}+\phi}
+         {T+K\phi}.
+\]
+
+\subsection{Mise a jour du centroïde}
+
+Le terme de la log-vraisemblance dependant du centroïde $\mathbf{a}_i$ est :
+\[
+  Q(\mathbf{a}_i)
+    =
+    \sum_{t=1}^{T}
+    \gamma_{i,t}
+    \left(
+      -
+      \frac{
+        \left\|
+          \tilde{\mathbf{x}}_t
+          -
+          \left(\mathbf{a}_i^{H}\tilde{\mathbf{x}}_t\right)\mathbf{a}_i
+        \right\|_2^2
+      }
+      {\sigma_i^2}
+    \right).
+\]
+
+Puisque $\|\tilde{\mathbf{x}}_t\|_2=1$ et $\|\mathbf{a}_i\|_2=1$, la distance a
+la projection verifie :
+\[
+  \left\|
+    \tilde{\mathbf{x}}_t
+    -
+    \left(\mathbf{a}_i^{H}\tilde{\mathbf{x}}_t\right)\mathbf{a}_i
+  \right\|_2^2
+  =
+  1
+  -
+  \left|
+    \mathbf{a}_i^{H}\tilde{\mathbf{x}}_t
+  \right|^2.
+\]
+
+Maximiser $Q(\mathbf{a}_i)$ revient donc a maximiser :
+\[
+  \mathcal{J}(\mathbf{a}_i)
+    =
+    \sum_{t=1}^{T}
+    \gamma_{i,t}
+    \left|
+      \mathbf{a}_i^{H}\tilde{\mathbf{x}}_t
+    \right|^2.
+\]
+
+Cette quantite peut s'ecrire sous forme quadratique :
+\[
+  \mathcal{J}(\mathbf{a}_i)
+    =
+    \sum_{t=1}^{T}
+    \gamma_{i,t}
+    \mathbf{a}_i^{H}
+    \tilde{\mathbf{x}}_t
+    \tilde{\mathbf{x}}_t^{H}
+    \mathbf{a}_i
+    =
+    \mathbf{a}_i^{H}
+    \left(
+      \sum_{t=1}^{T}
+      \gamma_{i,t}
+      \tilde{\mathbf{x}}_t
+      \tilde{\mathbf{x}}_t^{H}
+    \right)
+    \mathbf{a}_i.
+\]
+
+En posant :
+\[
+  \mathbf{R}_i
+    =
+    \sum_{t=1}^{T}
+    \gamma_{i,t}
+    \tilde{\mathbf{x}}_t
+    \tilde{\mathbf{x}}_t^{H},
+\]
+on cherche :
+\[
+  \max_{\mathbf{a}_i}
+  \mathbf{a}_i^{H}
+  \mathbf{R}_i
+  \mathbf{a}_i
+  \quad
+  \text{sous la contrainte}
+  \quad
+  \mathbf{a}_i^{H}\mathbf{a}_i=1.
+\]
+
+Par la methode des multiplicateurs de Lagrange, on maximise :
+\[
+  \mathcal{L}
+    =
+    \mathbf{a}_i^{H}
+    \mathbf{R}_i
+    \mathbf{a}_i
+    -
+    \lambda
+    \left(
+      \mathbf{a}_i^{H}\mathbf{a}_i
+      -
+      1
+    \right).
+\]
+
+La condition d'optimalite donne :
+\[
+  \mathbf{R}_i\mathbf{a}_i
+    =
+    \lambda \mathbf{a}_i.
+\]
+
+Le maximum est donc atteint pour le vecteur propre associe a la plus grande
+valeur propre de $\mathbf{R}_i$. C'est cette operation qui est calculee par la
+decomposition en valeurs propres dans l'implementation.
+
+\subsection{Mise a jour de la variance}
+
+La densite de probabilite sur l'hypersphere complexe de dimension $M$ est
+proportionnelle a :
+\[
+  p\left(
+    \tilde{\mathbf{x}}_t
+    \mid
+    \mathbf{a}_i,\sigma_i^2
+  \right)
+  =
+  \frac{1}
+       {(\pi\sigma_i^2)^{M-1}}
+  \exp\left(
+    -
+    \frac{
+      1-\left|\mathbf{a}_i^{H}\tilde{\mathbf{x}}_t\right|^2
+    }
+    {\sigma_i^2}
+  \right).
+\]
+
+En posant :
+\[
+  d_{i,t}^2
+    =
+    1
+    -
+    \left|
+      \mathbf{a}_i^{H}\tilde{\mathbf{x}}_t
+    \right|^2,
+\]
+le terme de $Q$ dependant de $\sigma_i^2$ s'ecrit :
+\[
+  Q(\sigma_i^2)
+    =
+    \sum_{t=1}^{T}
+    \gamma_{i,t}
+    \left[
+      -(M-1)\ln(\sigma_i^2)
+      -
+      \frac{d_{i,t}^2}{\sigma_i^2}
+    \right].
+\]
+
+On derive ensuite par rapport a $\sigma_i^2$ :
+\[
+  \frac{\partial Q}{\partial \sigma_i^2}
+    =
+    -
+    \frac{
+      (M-1)\sum_t \gamma_{i,t}
+    }
+    {\sigma_i^2}
+    +
+    \frac{
+      \sum_t \gamma_{i,t}d_{i,t}^2
+    }
+    {(\sigma_i^2)^2}.
+\]
+
+En annulant cette derivee, on obtient :
+\[
+  (M-1)\sigma_i^2\sum_t\gamma_{i,t}
+    =
+    \sum_t\gamma_{i,t}d_{i,t}^2.
+\]
+
+D'ou :
+\[
+  \sigma_i^2
+    =
+    \frac{
+      \sum_t \gamma_{i,t}d_{i,t}^2
+    }
+    {
+      (M-1)\sum_t \gamma_{i,t}
+    }.
+\]
+
+\end{document}
