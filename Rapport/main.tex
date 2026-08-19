@@ -171,6 +171,7 @@ On pourrait également penser à utiliser des filtres plus devellopés voir meme
 seconde approche. 
 
 \subsection{Utilisation d'un réseau de neuronnes}
+Fait par AMINE 
 \section{Separation de sources dans le masque temps-frequence}
 
 \subsection{Préliminaires}
@@ -227,7 +228,7 @@ contient en particulier les retards relatifs entre microphones. De plus, comme l
 on peut neglecter les differences d'amplitude entre les microphones.
  (et surtout ne pas s'appuyer dessus pour l'algorithme)
 
-\subsubsection{Normalisation et blanchiment des observations}
+\subsubsection{Normalisation des observations}
 
 L'algorithme cherche principalement a separer les directions spatiales, et non
 les amplitudes. Les bins sont donc normalises individuellement :
@@ -250,79 +251,9 @@ Le facteur $e^{j\phi_{f,t}}$ correspond a une phase globale. Il ne porte pas
 l'information spatiale utile, qui est contenue dans les phases relatives entre
 microphones. C'est pourquoi l'algorithme travaille sur des distances
 directionnelles invariantes a cette phase globale.
-
-Dans l'implementation, il est aussi possible d'ajouter une etape de blanchiment
-spatial apres cette premiere normalisation. Pour chaque frequence $f$, on
-considere la matrice des observations normalisees :
-\[
-  \tilde{\mathbf{X}}_f
-    =
-    \begin{bmatrix}
-      \tilde{\mathbf{x}}_{f,1} &
-      \tilde{\mathbf{x}}_{f,2} &
-      \cdots &
-      \tilde{\mathbf{x}}_{f,T}
-    \end{bmatrix}.
-\]
-
-On estime alors la matrice de correlation spatiale :
-\[
-  \mathbf{C}_f
-    =
-    \frac{1}{T}
-    \tilde{\mathbf{X}}_f
-    \tilde{\mathbf{X}}_f^{H}.
-\]
-
-Cette matrice est diagonalisee :
-\[
-  \mathbf{C}_f
-    =
-    \mathbf{U}_f
-    \mathbf{\Lambda}_f
-    \mathbf{U}_f^{H},
-\]
-ou $\mathbf{\Lambda}_f$ contient les valeurs propres et $\mathbf{U}_f$ les
-vecteurs propres. La matrice de blanchiment appliquee dans le code est :
-\[
-  \mathbf{W}_f
-    =
-    \mathbf{\Lambda}_f^{-1/2}
-    \mathbf{U}_f^{H}.
-\]
-
-Les observations blanchies sont donc :
-\[
-  \mathbf{y}_{f,t}
-    =
-    \mathbf{W}_f
-    \tilde{\mathbf{x}}_{f,t}.
-\]
-
-Apres blanchiment, les directions sont transformees dans un espace ou la
-correlation spatiale globale est normalisee :
-\[
-  \frac{1}{T}
-  \sum_t
-  \mathbf{y}_{f,t}\mathbf{y}_{f,t}^{H}
-  \approx
-  \mathbf{I}.
-\]
-
-Cette operation reduit les correlations communes entre microphones et peut
-rendre les directions des sources plus faciles a separer par l'EM. En revanche,
-les centroïdes estimes ne vivent plus directement dans l'espace physique
-original des microphones : ils sont exprimes dans l'espace blanchi. Lorsque
-l'on veut interpreter leurs phases comme des retards, il faut donc appliquer
-l'inverse du blanchiment aux centroïdes avant l'assignation spatiale ou
-l'analyse des TDOA. C'est ce que fait la propriete
-\code{all_centroids_unwhitened} : si le blanchiment est active, elle applique
-la pseudo-inverse de $\mathbf{W}_f$ aux centroïdes avant de les transmettre au
-RANSAC circulaire.
-
-Dans \code{SawadaBSS}, les observations sont renormalisees apres le blanchiment.
-Ainsi, le clustering EM travaille toujours sur des bins de norme unitaire, que
-le blanchiment soit active ou non.
+On notera que l'on décide de ne pas faire de whitening sur les données. En effet, en faisant un 
+clustering directionel et en normalisant les données, l'impact du whitening est limité. Il est donc préférable 
+de conserver la structure de retard dans les données. 
 
 
 \subsection{Algorithme de SAWADA}
@@ -425,8 +356,8 @@ moyenne ponderee des observations autour de cette direction :
 Les demonstrations detaillees de ces trois mises a jour sont donnees en
 annexe~\ref{annexe:em-mstep}.
 
-En pratique, ces deux etapes sont alternees un nombre fixe de fois. Dans
-l'implementation actuelle. Pour 20 itérations, cela fonctionne bien en pratique.
+En pratique, ces deux etapes sont alternees un nombre fixe de fois. Dans notre cas, 
+pour 20 itérations, cela fonctionne bien en pratique.
 
 \subsubsection{Construction des masques de clusters}
 
@@ -735,43 +666,57 @@ fusionnes. Pour une source $s$, le masque final est :
     =
     \sum_{k:\, label(f,k)=s} M_k(f,t).
 \]
-Dans nos masques, chaque bin actif est associé à un seul cluster.
-La fusion des clusters assignés à une même source produit donc directement un masque binaire de source. 
-La reconstruction temporelle consiste ensuite à appliquer ce masque à la STFT multicanale originale,
-puis à revenir dans le domaine temporel par STFT inverse. A noter que le signal temporel reconstruit 
-ne possède pas vraiment une stft similaire à la stft que l'on obtient avec le masque car la stft masqué ne correspond 
-à aucun signal temporel réel. C'est simplement le signal temporel ayant la stft la plus proche de la stft masqué.
-Ainsi, il n'y à priori aucune raison que les TDOAS calculé soit les bons. On observe dans les faits que cela donne 
-des estimations de TDOAS suffisante. 
 
-\[
-  \hat{\mathbf{X}}_s(f,t)
-    =
-    M_s(f,t)\,\mathbf{X}(f,t),
-\]
-puis a revenir dans le domaine temporel par STFT inverse.
 
 \section{Calcul des TDOA a partir des bins isoles}
 
 \subsection{TDOA sur sources separees}
 
-Une premiere estimation des TDOA peut etre effectué apres
-reconstruction des sources par istft. Pour chaque source separee et chaque paire de
-microphones, le retard est estime par correlation temporelle. La convention
-utilisee est :
+Une premiere estimation des TDOA peut etre effectuee directement a partir des
+sources separees. Une fois les masques de sources obtenus, on reconstruit
+d'abord, pour chaque source $s$, une STFT multicanale masquee. Si
+$\mathbf{X}(f,t)$ designe la STFT du melange original et $M_s(f,t)$ le masque
+associe a la source $s$, on calcule :
 \[
-  \Delta\tau_{i,j}
+  \hat{\mathbf{X}}_s(f,t)
     =
-    delay(j)-delay(i).
+    M_s(f,t)\,\mathbf{X}(f,t).
 \]
 
-Cette approche donne une estimation directe sur les signaux temporels
-reconstruits. Elle depend cependant de la qualite du masque final : une erreur
-de separation ou d'assignation peut deteriorer les signaux reconstruits et donc
-les TDOA calcules par correlation.
+Le meme masque est donc applique a tous les microphones. On conserve ainsi, pour
+la source $s$, les bins temps-frequence qui lui ont ete attribues par
+l'algorithme de separation, tout en gardant les differences de phase entre
+microphones presentes dans la STFT originale.
+
+On applique ensuite une STFT inverse a chaque canal de
+$\hat{\mathbf{X}}_s(f,t)$ afin d'obtenir une reconstruction temporelle
+multicanale :
+\[
+  \hat{\mathbf{x}}_s[n]
+    =
+    \operatorname{iSTFT}
+    \left(
+      \hat{\mathbf{X}}_s(f,t)
+    \right).
+\]
+
+Les TDOA sont alors estimes sur ces signaux temporels reconstruits.
+Cette methode n'a pas de garantie theorique forte. En effet, une STFT masquee
+bin par bin ne correspond pas necessairement a la STFT exacte d'un signal
+physique reel : le masquage peut introduire des incoherences entre trames et
+entre frequences. La reconstruction par iSTFT doit donc etre vue comme un signal
+ayant une stft proche de la stft masqué du signal original, pas comme une
+reconstruction parfaite de la source originale.
+
+Malgre cette limite, l'approche fonctionne relativement bien en pratique sur le
+benchmark. Elle fournit une premiere estimation simple des TDOA, directement
+exploitable apres la separation. Sa qualite depend principalement de la qualite
+du masque final : une erreur de separation ou d'assignation de clusters peut
+deteriorer les signaux reconstruits, et donc les retards estimes par
+correlation.
 
 \subsection{Beamforming masque}
-
+Partie faite par AMINE
 \section{Validation sur un dataset synthétique}
 
 
