@@ -23,7 +23,6 @@ BENCHMARK_SAWADA_EM_PARAMETERS = EMClusteringParameters(
     energy_threshold_db_above_floor=6.0,
     energy_floor_percentile=20.0,
     min_active_frames_per_frequency=3,
-    merge_centroid_distance_scale=1.0,
     source_alignment_method="ransac",
     ransac_residual_threshold=0.4,
     ransac_max_trials=300,
@@ -101,43 +100,6 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
         variances[frequency_index] = bin_model.variances
         weights[frequency_index] = bin_model.weights
     centroids = model.all_centroids
-    centroids_unwhitened = centroids
-    if (
-        model.whitening
-        and model.nspectro_normalized_unwhitened is not None
-        and model.eigenvalues_matrix is not None
-        and model.eigenvector_matrix is not None
-    ):
-        eigenvalues = np.asarray(model.eigenvalues_matrix)
-        eigenvectors = np.asarray(model.eigenvector_matrix)
-        if eigenvalues.ndim == 2 and eigenvectors.ndim == 3:
-            centroids_unwhitened = np.zeros_like(centroids)
-            for frequency_index in range(centroids.shape[0]):
-                inv_sqrt = 1.0 / np.sqrt(
-                    np.maximum(
-                        eigenvalues[frequency_index],
-                        model.em_clustering_parameters.eps,
-                    )
-                )
-                whitening_matrix = (
-                    np.diag(inv_sqrt) @ eigenvectors[frequency_index].conj().T
-                )
-                centroids_unwhitened[frequency_index] = (
-                    np.linalg.pinv(whitening_matrix) @ centroids[frequency_index]
-                )
-        else:
-            whitening_matrix = model.nspectro_normalized_unwhitened.compute_whitening_matrix(
-                eigenvalues,
-                eigenvectors,
-            )
-            centroids_unwhitened = np.einsum(
-                "ij,fjs->fis",
-                np.linalg.pinv(whitening_matrix),
-                centroids,
-            )
-        centroids_unwhitened /= (
-            np.linalg.norm(centroids_unwhitened, axis=1, keepdims=True) + 1e-12
-        )
 
     return {
         "sawada_model": {
@@ -165,11 +127,6 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
                 else np.ones(n_freqs, dtype=np.uint8)
             ),
             "bin_vectors": model.nspectro_preprocessed.Sxx,
-            "bin_vectors_unwhitened": (
-                np.empty((0, 0, 0))
-                if model.nspectro_normalized_unwhitened is None
-                else model.nspectro_normalized_unwhitened.Sxx
-            ),
             "tf_energy": tf_energy,
             "frequency_energy": np.mean(tf_energy, axis=1),
             "active_tf_mask": active_tf_mask.astype(np.uint8),
@@ -179,10 +136,8 @@ def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
             "frequencies": np.asarray(model.nspectro_preprocessed.f, dtype=float),
             "times": np.asarray(model.nspectro_preprocessed.t, dtype=float),
             "centroids": centroids,
-            "centroids_unwhitened": centroids_unwhitened,
             "variances": variances,
             "weights": weights,
-            "whitening": np.asarray(model.whitening),
             "source_assignment_labels": np.asarray(
                 model.source_assignment_labels
                 if model.source_assignment_labels is not None
@@ -266,7 +221,6 @@ def run_sawada(
         n_sources=scene.metadata.n_sources,
         stft_parameters=BENCHMARK_STFT_PARAMETERS,
         em_clustering_parameters=sawada_em_parameters,
-        whitening=False,
     )
     model.process_signal(scene.mixed)
     sources = model.separate_source()
@@ -301,9 +255,6 @@ def run_sawada(
                 ),
                 "min_active_frames_per_frequency": (
                     sawada_em_parameters.min_active_frames_per_frequency
-                ),
-                "merge_centroid_distance_scale": (
-                    sawada_em_parameters.merge_centroid_distance_scale
                 ),
                 "source_alignment_method": sawada_em_parameters.source_alignment_method,
                 "ransac_residual_threshold": sawada_em_parameters.ransac_residual_threshold,

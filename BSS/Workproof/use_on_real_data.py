@@ -169,7 +169,7 @@ def sawada_on_data():
         eps = 1e-12
     )
     print("demarrage BSS")
-    bss = SawadaBSS(n_sources = 2, stft_parameters= stft_params, em_clustering_parameters=em_clustering_params, whitening=True)
+    bss = SawadaBSS(n_sources = 2, stft_parameters= stft_params, em_clustering_parameters=em_clustering_params)
     
     #séparation des sources
     bss.process_signal(multi_signal= multi_signal)
