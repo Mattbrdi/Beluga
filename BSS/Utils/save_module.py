@@ -111,7 +111,6 @@ def _rebuild_sawada_parameters(raw_parameters: dict[str, Any]) -> SawadaBssParam
         em_clustering_parameters=EMClusteringParameters(
             **raw_parameters["em_clustering_parameters"]
         ),
-        whitening=raw_parameters["whitening"],
     )
 
 
@@ -277,8 +276,6 @@ def _save_sawada_model(model_dir: Path, model: Any) -> None:
 
     model_state: dict[str, Any] = {
         "has_nspectro_preprocessed": sawada_model.nspectro_preprocessed is not None,
-        "has_eigenvalues_matrix": sawada_model.eigenvalues_matrix is not None,
-        "has_eigenvector_matrix": sawada_model.eigenvector_matrix is not None,
         "has_signal": sawada_model.signal is not None,
         "bin_model_indices": sorted(int(idx) for idx in sawada_model.bin_models.keys()),
         "bin_mask_indices": sorted(int(idx) for idx in sawada_model.bin_masks.keys()),
@@ -292,12 +289,6 @@ def _save_sawada_model(model_dir: Path, model: Any) -> None:
 
     if sawada_model.signal is not None:
         save_multisignal(sawada_model.signal, model_dir / "signal.npz")
-
-    if sawada_model.eigenvalues_matrix is not None:
-        np.save(model_dir / "eigenvalues_matrix.npy", sawada_model.eigenvalues_matrix)
-
-    if sawada_model.eigenvector_matrix is not None:
-        np.save(model_dir / "eigenvector_matrix.npy", sawada_model.eigenvector_matrix)
 
     if sawada_model.bin_masks:
         sorted_mask_indices = sorted(int(idx) for idx in sawada_model.bin_masks.keys())
@@ -353,7 +344,6 @@ def _load_sawada_model(model_dir: Path, parameters: BssParameters) -> Any:
         n_sources=parameters.n_sources,
         stft_parameters=parameters.stft_parameters,
         em_clustering_parameters=parameters.em_clustering_parameters,
-        whitening=parameters.whitening,
     )
 
     if state.get("has_signal"):
@@ -362,18 +352,6 @@ def _load_sawada_model(model_dir: Path, parameters: BssParameters) -> Any:
     if state.get("has_nspectro_preprocessed"):
         sawada_model.nspectro_preprocessed = _load_nspectrogram(
             model_dir / "nspectro_preprocessed.npz"
-        )
-
-    if state.get("has_eigenvalues_matrix"):
-        sawada_model.eigenvalues_matrix = np.load(
-            model_dir / "eigenvalues_matrix.npy",
-            allow_pickle=False,
-        )
-
-    if state.get("has_eigenvector_matrix"):
-        sawada_model.eigenvector_matrix = np.load(
-            model_dir / "eigenvector_matrix.npy",
-            allow_pickle=False,
         )
 
     bin_masks_path = model_dir / "bin_masks.npz"

@@ -42,7 +42,6 @@ class SawadaBssParameters(BssParameters):
     n_sources: int
     stft_parameters: StftParameters = field(default_factory= StftParameters)
     em_clustering_parameters : EMClusteringParameters = field(default_factory= EMClusteringParameters)
-    whitening: bool = False
 
 
 @dataclass

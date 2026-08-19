@@ -51,7 +51,6 @@ def test_sawada_returns_one_multichannel_signal_per_source():
             phi=1.0,
             eps=1e-12,
         ),
-        whitening=True,
     )
 
     process_result = model.process_signal(mixture)

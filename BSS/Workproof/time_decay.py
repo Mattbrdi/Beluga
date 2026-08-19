@@ -66,7 +66,7 @@ def test_sawada_separation():
     )
     
     # Initialisation de l'algorithme (2 sources attendues)
-    bss = SawadaBSS(n_sources=2, stft_parameters=stft_params, em_clustering_parameters = em_clustering_params, whitening=True)
+    bss = SawadaBSS(n_sources=2, stft_parameters=stft_params, em_clustering_parameters = em_clustering_params)
     
     # Exécution du pipeline (STFT -> EM -> Alignement)
     print("Démarrage de la séparation (cela peut prendre quelques secondes)...")

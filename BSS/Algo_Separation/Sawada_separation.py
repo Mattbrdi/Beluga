@@ -209,8 +209,6 @@ class SawadaBSS:
     préprocess:
     - Apllique la stft pour obtenir le NSpectrogram
     - Normalise par bin le Nspectrogram
-    - Blanchiment 
-    
     algo:
     - clustering
     - alignement des cluster entre les fréquence
@@ -223,13 +221,9 @@ class SawadaBSS:
     stft_parameters: StftParameters = field(default_factory= StftParameters)
     em_clustering_parameters : EMClusteringParameters = field(default_factory= EMClusteringParameters)
     
-    # Paramètres avec valeurs par défaut
-    whitening: bool = False
-    
     # État de l'algorithme (Champs calculés plus tard)
     # On utilise default_factory pour les dictionnaires vides
     signal: Optional['MultiSignal'] = None
-    nspectro_normalized_unwhitened: Optional[NSpectrogram] = None
     nspectro_preprocessed: Optional[NSpectrogram] = None
     bin_models: Dict[int, 'EMClustering'] = field(default_factory=dict)
     bin_masks: Dict[int, np.ndarray] = field(default_factory=dict)
@@ -256,16 +250,12 @@ class SawadaBSS:
     source_assignment_selected_centroids: Optional[np.ndarray] = None
     energy_threshold_db: Optional[float] = None
     
-    eigenvalues_matrix: Optional[np.ndarray] = None
-    eigenvector_matrix: Optional[np.ndarray] = None
-    
     @property
     def parameters(self) -> SawadaBssParameters:
         return SawadaBssParameters(
             n_sources=self.n_sources,
             stft_parameters=self.stft_parameters,
             em_clustering_parameters=self.em_clustering_parameters,
-            whitening=self.whitening,
         )
 
     @staticmethod
@@ -330,48 +320,11 @@ class SawadaBSS:
         Construit le spectrogramme de travail:
         1) STFT
         2) normalisation par bin temps-fréquence
-        3) blanchiment optionnel
         """
-        spectro = self.get_spectro(input).normalize_each_bin()
-        if self.whitening:
-            spectro = self.apply_whitening(spectro)
-        return spectro
+        return self.get_spectro(input).normalize_each_bin()
     
     def get_spectro(self, input: MultiSignal) -> NSpectrogram:
         return input.stft(**asdict(self.stft_parameters))
-    
-    def apply_whitening(self, spectro: NSpectrogram) -> NSpectrogram:
-        n_micros, n_freqs, n_times = spectro.Sxx.shape
-        whitened_sxx = np.zeros_like(spectro.Sxx)
-        self.eigenvalues_matrix = np.zeros((n_freqs, n_micros), dtype=float)
-        self.eigenvector_matrix = np.zeros((n_freqs, n_micros, n_micros), dtype=complex)
-
-        for frequency_index in range(n_freqs):
-            X_f = spectro.Sxx[:, frequency_index, :]
-            spatial_correlation = (X_f @ X_f.conj().T) / max(n_times, 1)
-            eigenvalues, eigenvectors = np.linalg.eigh(spatial_correlation)
-            self.eigenvalues_matrix[frequency_index] = eigenvalues
-            self.eigenvector_matrix[frequency_index] = eigenvectors
-
-            inv_sqrt = 1.0 / np.sqrt(
-                np.maximum(eigenvalues, self.em_clustering_parameters.eps)
-            )
-            whitening_matrix = np.diag(inv_sqrt) @ eigenvectors.conj().T
-            whitened_sxx[:, frequency_index, :] = whitening_matrix @ X_f
-
-        return NSpectrogram(
-            f=spectro.f,
-            t=spectro.t,
-            Sxx=whitened_sxx,
-            fs=spectro.fs,
-            window=spectro.window,
-            nperseg=spectro.nperseg,
-            noverlap=spectro.noverlap,
-            nfft=spectro.nfft,
-            boundary=spectro.boundary,
-            padded=spectro.padded,
-            signal_lengths=spectro.signal_lengths,
-        ).normalize_each_bin()
 
     def fit_bins(
         self,
@@ -382,7 +335,7 @@ class SawadaBSS:
         Exécute le clustering EM pour chaque bin de fréquence indépendamment.
         
         Args:
-            nspectro (NSpectrogram): Le spectrogramme normalisé et blanchi.
+            nspectro (NSpectrogram): Le spectrogramme normalisé.
         """
         # Sxx shape: (n_micros, n_freqs, n_times)
         n_micros, n_freqs, n_times = nspectro.Sxx.shape
@@ -792,29 +745,24 @@ class SawadaBSS:
         
     def process_signal(self, multi_signal: MultiSignal) :
         """
-        Exécute le pipeline complet : STFT -> Normalisation -> Blanchiment -> EM -> Alignement.
+        Exécute le pipeline complet : STFT -> Normalisation -> EM -> Alignement.
         Rempli les arguments         self.bin_models et self.bin_masks
         
         Args:
             multi_signal (MultiSignal): Le signal multicanal d'entrée.
             
         Returns:
-            NSpectrogram: Le spectrogramme blanchi utilisé pour les calculs.
+            NSpectrogram: Le spectrogramme normalisé utilisé pour les calculs.
         """
         self.signal = multi_signal
-        # 1. Prétraitement (STFT + Normalisation + Blanchiment)
+        # 1. Prétraitement (STFT + Normalisation)
         raw_spectro = self.get_spectro(multi_signal)
         self.tf_energy = np.sum(np.abs(raw_spectro.Sxx) ** 2, axis=0)
         self.active_tf_mask = self._compute_active_tf_mask(self.tf_energy)
-        nspectro_normalized = raw_spectro.normalize_each_bin()
-        self.nspectro_normalized_unwhitened = nspectro_normalized
-        nspectro_preprocessed = nspectro_normalized
-        if self.whitening:
-            nspectro_preprocessed = self.apply_whitening(nspectro_preprocessed)
-        self.nspectro_preprocessed = nspectro_preprocessed
+        self.nspectro_preprocessed = raw_spectro.normalize_each_bin()
         # 2. Algo : Clustering par bin (EM)
         print("Démarrage du clustering EM par bin...")
-        self.fit_bins(nspectro_preprocessed, self.active_tf_mask)
+        self.fit_bins(self.nspectro_preprocessed, self.active_tf_mask)
         
         # 3. Algo : coherence des sources entre frequences
         alignment_method = self.em_clustering_parameters.source_alignment_method

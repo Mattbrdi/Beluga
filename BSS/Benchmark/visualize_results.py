@@ -399,12 +399,7 @@ def _normalized_mixture_stft_for_gt(
     bundle: dict[str, Any],
     sawada_model: dict[str, np.ndarray],
 ) -> np.ndarray:
-    vector_key = (
-        "bin_vectors_unwhitened"
-        if np.asarray(sawada_model.get("bin_vectors_unwhitened", [])).ndim == 3
-        else "bin_vectors"
-    )
-    bin_vectors = np.asarray(sawada_model.get(vector_key, []))
+    bin_vectors = np.asarray(sawada_model.get("bin_vectors", []))
     if bin_vectors.ndim == 3 and bin_vectors.size:
         return bin_vectors
 
@@ -1149,15 +1144,12 @@ def _sawada_energy_figure(
 def _sawada_complex_plane_figure(
     sawada_model: dict[str, np.ndarray],
     frequency_index: int | None,
-    vector_space: str = "whitened",
     coordinate_mode: str = "relative",
     color_mode: str = "source",
     show_rejected_bins: bool = False,
     gt_correctness: np.ndarray | None = None,
 ) -> go.Figure:
-    vector_key = "bin_vectors_unwhitened" if vector_space == "unwhitened" else "bin_vectors"
-    centroid_key = "centroids_unwhitened" if vector_space == "unwhitened" else "centroids"
-    bin_vectors = np.asarray(sawada_model.get(vector_key, []))
+    bin_vectors = np.asarray(sawada_model.get("bin_vectors", []))
     masks = np.asarray(sawada_model.get("masks", []), dtype=float)
     cluster_masks = np.asarray(sawada_model.get("cluster_masks", []), dtype=float)
     active_tf_mask = np.asarray(sawada_model.get("active_tf_mask", []), dtype=bool)
@@ -1167,7 +1159,7 @@ def _sawada_complex_plane_figure(
         sawada_model.get("source_assignment_labels", []),
         dtype=int,
     )
-    centroids = np.asarray(sawada_model.get(centroid_key, []))
+    centroids = np.asarray(sawada_model.get("centroids", []))
     frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
     times = np.asarray(sawada_model.get("times", []), dtype=float)
 
@@ -1186,7 +1178,7 @@ def _sawada_complex_plane_figure(
                 {
                     "text": (
                         "Relance le benchmark Sawada pour sauvegarder les vecteurs complexes "
-                        "dans ce repere."
+                        "et les centroides."
                     ),
                     "xref": "paper",
                     "yref": "paper",
@@ -1433,8 +1425,7 @@ def _sawada_complex_plane_figure(
     fig.update_layout(
         title=(
             f"Vecteurs complexes des bins - {frequency_label} "
-            f"({'non blanchi' if vector_space == 'unwhitened' else 'blanchi'}, "
-            f"{reference_text})"
+            f"({reference_text})"
         ),
         margin={"l": 58, "r": 18, "t": 64, "b": 42},
         paper_bgcolor="#f7f7f3",
@@ -1452,9 +1443,7 @@ def _sawada_centroid_phase_figure(
     frequency_min: float | None = None,
     frequency_max: float | None = None,
 ) -> go.Figure:
-    centroids = np.asarray(sawada_model.get("centroids_unwhitened", []))
-    if centroids.ndim != 3 or centroids.size == 0:
-        centroids = np.asarray(sawada_model.get("centroids", []))
+    centroids = np.asarray(sawada_model.get("centroids", []))
     frequencies = np.asarray(sawada_model.get("frequencies", []), dtype=float)
 
     if centroids.ndim != 3 or centroids.size == 0:
@@ -1751,9 +1740,7 @@ def _sawada_centroid_argument_frequency_figure(
     frequency_max: float | None = None,
     gt_centroids: np.ndarray | None = None,
 ) -> go.Figure:
-    centroids = np.asarray(sawada_model.get("centroids_unwhitened", []))
-    if centroids.ndim != 3 or centroids.size == 0:
-        centroids = np.asarray(sawada_model.get("centroids", []))
+    centroids = np.asarray(sawada_model.get("centroids", []))
     relative_phases = np.asarray(
         sawada_model.get("source_assignment_relative_phases", []),
         dtype=float,
@@ -3084,21 +3071,6 @@ def build_app(config: AppConfig) -> dash.Dash:
                                             ),
                                             html.Div(
                                                 [
-                                                    html.Label("Vecteurs"),
-                                                    dcc.Dropdown(
-                                                        id="complex-vector-space-dropdown",
-                                                        options=[
-                                                            {"label": "Blanchis", "value": "whitened"},
-                                                            {"label": "Non blanchis", "value": "unwhitened"},
-                                                        ],
-                                                        value="whitened",
-                                                        clearable=False,
-                                                    ),
-                                                ],
-                                                style={"width": "150px"},
-                                            ),
-                                            html.Div(
-                                                [
                                                     html.Label("Coord."),
                                                     dcc.Dropdown(
                                                         id="complex-coordinate-mode-dropdown",
@@ -3825,7 +3797,6 @@ def build_app(config: AppConfig) -> dash.Dash:
         Input("scene-dropdown", "value"),
         Input("algorithm-dropdown", "value"),
         Input("complex-frequency-dropdown", "value"),
-        Input("complex-vector-space-dropdown", "value"),
         Input("complex-coordinate-mode-dropdown", "value"),
         Input("complex-color-mode-dropdown", "value"),
         Input("complex-rejected-bins-dropdown", "value"),
@@ -3836,7 +3807,6 @@ def build_app(config: AppConfig) -> dash.Dash:
         scene_id: str,
         algorithm: str,
         frequency_index: int,
-        vector_space: str,
         coordinate_mode: str,
         color_mode: str,
         rejected_bins_mode: str,
@@ -3845,15 +3815,12 @@ def build_app(config: AppConfig) -> dash.Dash:
         if not split or not scene_id or algorithm != "sawada":
             return _sawada_complex_plane_figure({}, 0), "Disponible uniquement pour Sawada."
 
-        vector_space = vector_space or "whitened"
         coordinate_mode = coordinate_mode or "relative"
         color_mode = color_mode or "source"
         show_rejected_bins = (rejected_bins_mode or "hide") == "show"
         bundle = _bundle(config, split, scene_id, algorithm)
         model = bundle["sawada_model"]
-        vector_key = "bin_vectors_unwhitened" if vector_space == "unwhitened" else "bin_vectors"
-        centroid_key = "centroids_unwhitened" if vector_space == "unwhitened" else "centroids"
-        bin_vectors = np.asarray(model.get(vector_key, []))
+        bin_vectors = np.asarray(model.get("bin_vectors", []))
         masks = np.asarray(model.get("masks", []), dtype=float)
         cluster_masks = np.asarray(model.get("cluster_masks", []), dtype=float)
         active_tf_mask = np.asarray(model.get("active_tf_mask", []), dtype=bool)
@@ -3864,13 +3831,12 @@ def build_app(config: AppConfig) -> dash.Dash:
             model.get("source_assignment_labels", []),
             dtype=int,
         )
-        centroids = np.asarray(model.get(centroid_key, []))
+        centroids = np.asarray(model.get("centroids", []))
         if bin_vectors.ndim != 3 or bin_vectors.size == 0:
             return (
                 _sawada_complex_plane_figure(
                     model,
                     frequency_index,
-                    vector_space,
                     coordinate_mode,
                     color_mode,
                     show_rejected_bins,
@@ -3882,7 +3848,6 @@ def build_app(config: AppConfig) -> dash.Dash:
                 _sawada_complex_plane_figure(
                     model,
                     frequency_index,
-                    vector_space,
                     coordinate_mode,
                     color_mode,
                     show_rejected_bins,
@@ -3979,15 +3944,13 @@ def build_app(config: AppConfig) -> dash.Dash:
             f"Non utilises par l'EM: {inactive_count}. "
             f"Hors seuil energie: {rejected_count}"
             f"{' affiches' if show_rejected_bins else ' masques'}. "
-            f"Repere: {'non blanchi' if vector_space == 'unwhitened' else 'blanchi'}, "
-            f"{'M*conj(M1)' if coordinate_mode == 'relative' else 'composantes directes'}."
+            f"Repere: {'M*conj(M1)' if coordinate_mode == 'relative' else 'composantes directes'}."
             f"{gt_text}"
         )
         return (
             _sawada_complex_plane_figure(
                 model,
                 frequency_index,
-                vector_space,
                 coordinate_mode,
                 color_mode,
                 show_rejected_bins,
@@ -4033,11 +3996,7 @@ def build_app(config: AppConfig) -> dash.Dash:
 
         bundle = _bundle(config, split, scene_id, algorithm)
         model = bundle["sawada_model"]
-        centroids = np.asarray(model.get("centroids_unwhitened", []))
-        centroid_space = "non blanchi"
-        if centroids.ndim != 3 or centroids.size == 0:
-            centroids = np.asarray(model.get("centroids", []))
-            centroid_space = "blanchi"
+        centroids = np.asarray(model.get("centroids", []))
         if centroids.ndim != 3 or centroids.size == 0:
             return (
                 _sawada_centroid_phase_figure(
@@ -4109,7 +4068,7 @@ def build_app(config: AppConfig) -> dash.Dash:
             f"{point_count} centroides traces par composante"
             f"{' apres exclusion du premier bin frequentiel' if use_delta_previous else ''}. "
             f"Bande: {band_text}. "
-            f"Repere: {centroid_space}, theta = {theta_text}. "
+            f"Theta = {theta_text}. "
             "Chaque point est projete sur le cercle unite avec (cos(theta), sin(theta)). "
             f"Couleur: {color_text}."
         )
@@ -4150,11 +4109,7 @@ def build_app(config: AppConfig) -> dash.Dash:
 
         bundle = _bundle(config, split, scene_id, algorithm)
         model = bundle["sawada_model"]
-        centroids = np.asarray(model.get("centroids_unwhitened", []))
-        centroid_space = "non blanchi"
-        if centroids.ndim != 3 or centroids.size == 0:
-            centroids = np.asarray(model.get("centroids", []))
-            centroid_space = "blanchi"
+        centroids = np.asarray(model.get("centroids", []))
         relative_phases = np.asarray(
             model.get("source_assignment_relative_phases", []),
             dtype=float,
@@ -4174,7 +4129,6 @@ def build_app(config: AppConfig) -> dash.Dash:
             n_freqs, n_mics, n_sources = centroids.shape
         else:
             n_freqs, n_sources, n_mics = relative_phases.shape
-            centroid_space = "phases RANSAC sauvegardees"
         assignment_labels = np.asarray(
             model.get("source_assignment_labels", []),
             dtype=int,
@@ -4225,7 +4179,7 @@ def build_app(config: AppConfig) -> dash.Dash:
         caption = (
             f"{n_freqs} lignes frequentielles x {n_sources} sources x {n_mics} composantes. "
             f"{point_count} centroides traces par composante. "
-            f"Bande: {band_text}. Repere: {centroid_space}, "
+            f"Bande: {band_text}. "
             "arg(Cm*conj(M1)) en fonction de la frequence. "
             f"Couleur Sawada: {'source finale RANSAC' if use_final_assignment else 'cluster EM local'}. "
             f"GT: {'disponible' if gt_available else 'indisponible'}"
