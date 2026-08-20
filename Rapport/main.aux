@@ -32,30 +32,48 @@
 \@writefile{toc}{\contentsline {paragraph}{conversion des centroides en phase relative}{8}{section*.2}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Modele ajusté par RANSAC circulaire}{8}{section*.3}\protected@file@percent }
 \@writefile{toc}{\contentsline {paragraph}{Lien entre pente de phase et TDOA}{9}{section*.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Fusion finale des masques}{9}{subsection.3.4}\protected@file@percent }
-\newlabel{subsec:fusionMasque}{{3.4}{9}{Fusion finale des masques}{subsection.3.4}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {4}Calcul des TDOA a partir des bins isoles}{10}{section.4}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Beamforming masque}{10}{subsection.4.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {5}Validation sur un dataset synthétique}{10}{section.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Validation de la separation de sources}{10}{subsection.5.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.1.1}Creation des signaux synthetiques}{10}{subsubsection.5.1.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.1.2}Evaluation de la separation}{11}{subsubsection.5.1.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Résultats qualitatifs}{11}{section*.5}\protected@file@percent }
-\@writefile{toc}{\contentsline {paragraph}{Résultats quantitatifs}{11}{section*.6}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.1.3}Source d'erreurs}{11}{subsubsection.5.1.3}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Validation du beamforming}{11}{subsection.5.2}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Resultats de separation de sources dans le plan temps-frequence. à gauche la source 1 et 2, au millieu le melange et à droite la source estimé 1 et 2.}}{12}{figure.1}\protected@file@percent }
-\newlabel{fig:sawada-tf-separation}{{1}{12}{Resultats de separation de sources dans le plan temps-frequence. à gauche la source 1 et 2, au millieu le melange et à droite la source estimé 1 et 2}{figure.1}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Resultats de separation de sources dans le plan temps-frequence avec bruit. à gauche la source 1 et 2, au millieu le melange et à droite la source estimé 1 et 2.}}{13}{figure.2}\protected@file@percent }
-\newlabel{fig:sawada-tf-separation_noised}{{2}{13}{Resultats de separation de sources dans le plan temps-frequence avec bruit. à gauche la source 1 et 2, au millieu le melange et à droite la source estimé 1 et 2}{figure.2}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Analyse quantitative des TDOA estimes par correlation sur les sources separees.}}{14}{figure.3}\protected@file@percent }
-\newlabel{fig:sawada-tdoa-correlation}{{3}{14}{Analyse quantitative des TDOA estimes par correlation sur les sources separees}{figure.3}{}}
-\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Analyse quantitative des TDOA estimes par correlation sur les sources separees.}}{14}{figure.4}\protected@file@percent }
-\newlabel{fig:sawada-tdoa-correlation_noised}{{4}{14}{Analyse quantitative des TDOA estimes par correlation sur les sources separees}{figure.4}{}}
-\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion}{15}{section.6}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {A}Demonstrations des mises a jour EM}{15}{section.A}\protected@file@percent }
-\newlabel{annexe:em-mstep}{{A}{15}{Demonstrations des mises a jour EM}{section.A}{}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {A.1}Mise a jour des poids}{15}{subsection.A.1}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {A.2}Mise a jour du centroïde}{16}{subsection.A.2}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {A.3}Mise a jour de la variance}{17}{subsection.A.3}\protected@file@percent }
-\gdef \@abspage@last{17}
+\@writefile{toc}{\contentsline {paragraph}{Merge automatique de cluster}{9}{section*.5}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Argument de la composante i en fonction de la fréquence du centroide}}{10}{figure.1}\protected@file@percent }
+\newlabel{fig:droite-RANSAC}{{1}{10}{Argument de la composante i en fonction de la fréquence du centroide}{figure.1}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Merge automatique de clusters : comparaison entre l'attribution initiale des clusters et l'attribution apres RANSAC.}}{10}{figure.2}\protected@file@percent }
+\newlabel{fig:merge-cluster-1}{{2}{10}{Merge automatique de clusters : comparaison entre l'attribution initiale des clusters et l'attribution apres RANSAC}{figure.2}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Fusion finale des masques}{11}{subsection.3.4}\protected@file@percent }
+\newlabel{subsec:fusionMasque}{{3.4}{11}{Fusion finale des masques}{subsection.3.4}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Calcul des TDOA a partir des bins isoles}{11}{section.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Beamforming masque}{11}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Validation sur un dataset synthétique}{11}{section.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Validation de la separation de sources}{11}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.1.1}Creation des signaux synthetiques}{11}{subsubsection.5.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.1.2}Evaluation de la separation}{12}{subsubsection.5.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Résultats qualitatifs}{12}{section*.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Résultats quantitatifs}{12}{section*.7}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Resultats de separation de sources dans le plan temps-frequence. à gauche la source 1 et 2, au millieu le melange et à droite la source estimé 1 et 2.}}{13}{figure.3}\protected@file@percent }
+\newlabel{fig:sawada-tf-separation}{{3}{13}{Resultats de separation de sources dans le plan temps-frequence. à gauche la source 1 et 2, au millieu le melange et à droite la source estimé 1 et 2}{figure.3}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Resultats de separation de sources dans le plan temps-frequence avec bruit. à gauche la source 1 et 2, au millieu le melange et à droite la source estimé 1 et 2.}}{14}{figure.4}\protected@file@percent }
+\newlabel{fig:sawada-tf-separation_noised}{{4}{14}{Resultats de separation de sources dans le plan temps-frequence avec bruit. à gauche la source 1 et 2, au millieu le melange et à droite la source estimé 1 et 2}{figure.4}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces Analyse quantitative des TDOA estimes par correlation sur les sources separees.}}{15}{figure.5}\protected@file@percent }
+\newlabel{fig:sawada-tdoa-correlation}{{5}{15}{Analyse quantitative des TDOA estimes par correlation sur les sources separees}{figure.5}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces Analyse quantitative des TDOA estimes par correlation sur les sources separees.}}{15}{figure.6}\protected@file@percent }
+\newlabel{fig:sawada-tdoa-correlation_noised}{{6}{15}{Analyse quantitative des TDOA estimes par correlation sur les sources separees}{figure.6}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.1.3}Source d'erreurs}{16}{subsubsection.5.1.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Mauvaise estimations des bins ayant du signal quand il y a du bruit}{16}{section*.8}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Comparaison de l'estimation des bins contenant du signal par seuillage d'energie, sans bruit et avec bruit.}}{16}{figure.7}\protected@file@percent }
+\newlabel{fig:energy-bin-noise}{{7}{16}{Comparaison de l'estimation des bins contenant du signal par seuillage d'energie, sans bruit et avec bruit}{figure.7}{}}
+\@writefile{toc}{\contentsline {paragraph}{Mauvaise droite dans le RANSAC}{16}{section*.9}\protected@file@percent }
+\newlabel{fig:spectro-pts14}{{5.1.3}{16}{Mauvaise droite dans le RANSAC}{section*.9}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces Extrait 14 : melange et sources de reference.}}{16}{figure.8}\protected@file@percent }
+\newlabel{fig:pts14-signals}{{8}{16}{Extrait 14 : melange et sources de reference}{figure.8}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Validation du beamforming}{16}{subsection.5.2}\protected@file@percent }
+\newlabel{fig:cluster-pts14}{{5.1.3}{17}{Mauvaise droite dans le RANSAC}{figure.8}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces Extrait 14 : clusters avant et apres attribution.}}{17}{figure.9}\protected@file@percent }
+\newlabel{fig:pts14-cluster-attribution}{{9}{17}{Extrait 14 : clusters avant et apres attribution}{figure.9}{}}
+\newlabel{fig:RANSAC-pts14}{{5.1.3}{17}{Mauvaise droite dans le RANSAC}{figure.9}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces Extrait 14 : comparaison entre la reference et la droite estimee par RANSAC.}}{17}{figure.10}\protected@file@percent }
+\newlabel{fig:pts14-ransac-gt}{{10}{17}{Extrait 14 : comparaison entre la reference et la droite estimee par RANSAC}{figure.10}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Conclusion}{18}{section.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {A}Demonstrations des mises a jour EM}{18}{section.A}\protected@file@percent }
+\newlabel{annexe:em-mstep}{{A}{18}{Demonstrations des mises a jour EM}{section.A}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.1}Mise a jour des poids}{18}{subsection.A.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.2}Mise a jour du centroïde}{19}{subsection.A.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {A.3}Mise a jour de la variance}{20}{subsection.A.3}\protected@file@percent }
+\gdef \@abspage@last{20}

@@ -236,14 +236,35 @@ INPUT C:\Users\BORDERIES\AppData\Local\Programs\MiKTeX\fonts\tfm\public\lm\lmmib
 INPUT C:\Users\BORDERIES\AppData\Local\Programs\MiKTeX\fonts\tfm\public\lm\lmbsy10.tfm
 INPUT C:\Users\BORDERIES\AppData\Local\Programs\MiKTeX\fonts\tfm\public\lm\lmbsy10.tfm
 INPUT C:\Users\BORDERIES\AppData\Local\Programs\MiKTeX\fonts\tfm\public\lm\lmbsy7.tfm
-INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3.png
-INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3.png
-INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3.png
-INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3.png
-INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3.png
-INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3.png
-INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3.png
+INPUT .\Sawada_no_merging_v3\ransac_train_00.png
+INPUT .\Sawada_no_merging_v3\ransac_train_00.png
+INPUT .\Sawada_no_merging_v3\ransac_train_00.png
+INPUT .\Sawada_no_merging_v3\ransac_train_00.png
+INPUT .\Sawada_no_merging_v3\ransac_train_00.png
+INPUT .\Sawada_no_merging_v3\ransac_train_00.png
+INPUT .\Sawada_no_merging_v3\ransac_train_00.png
 INPUT C:\Users\BORDERIES\AppData\Local\Programs\MiKTeX\fonts\tfm\public\lm\ec-lmcsc10.tfm
+INPUT .\Sawada_no_merging_v3\plot merge cluster 1.png
+INPUT .\Sawada_no_merging_v3\plot merge cluster 1.png
+INPUT .\Sawada_no_merging_v3\plot merge cluster 1.png
+INPUT .\Sawada_no_merging_v3\plot merge cluster 1.png
+INPUT .\Sawada_no_merging_v3\plot merge cluster 1.png
+INPUT .\Sawada_no_merging_v3\plot merge cluster 1.png
+INPUT .\Sawada_no_merging_v3\plot merge cluster 1.png
+INPUT .\Sawada_no_merging_v3\plot merge cluster 2.png
+INPUT .\Sawada_no_merging_v3\plot merge cluster 2.png
+INPUT .\Sawada_no_merging_v3\plot merge cluster 2.png
+INPUT .\Sawada_no_merging_v3\plot merge cluster 2.png
+INPUT .\Sawada_no_merging_v3\plot merge cluster 2.png
+INPUT .\Sawada_no_merging_v3\plot merge cluster 2.png
+INPUT .\Sawada_no_merging_v3\plot merge cluster 2.png
+INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3.png
+INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3.png
+INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3.png
+INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3.png
+INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3.png
+INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3.png
+INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3.png
 INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3_noised.png
 INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3_noised.png
 INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3_noised.png
@@ -265,6 +286,69 @@ INPUT .\Sawada_no_merging_v3\train_sawada_tdoa_correlation_errors_noised.png
 INPUT .\Sawada_no_merging_v3\train_sawada_tdoa_correlation_errors_noised.png
 INPUT .\Sawada_no_merging_v3\train_sawada_tdoa_correlation_errors_noised.png
 INPUT .\Sawada_no_merging_v3\train_sawada_tdoa_correlation_errors_noised.png
+INPUT .\Sawada_no_merging_v3\energy_bin_complet.png
+INPUT .\Sawada_no_merging_v3\energy_bin_complet.png
+INPUT .\Sawada_no_merging_v3\energy_bin_complet.png
+INPUT .\Sawada_no_merging_v3\energy_bin_complet.png
+INPUT .\Sawada_no_merging_v3\energy_bin_complet.png
+INPUT .\Sawada_no_merging_v3\energy_bin_complet.png
+INPUT .\Sawada_no_merging_v3\energy_bin_complet.png
+INPUT .\Sawada_no_merging_v3\energy_bin_noise.png
+INPUT .\Sawada_no_merging_v3\energy_bin_noise.png
+INPUT .\Sawada_no_merging_v3\energy_bin_noise.png
+INPUT .\Sawada_no_merging_v3\energy_bin_noise.png
+INPUT .\Sawada_no_merging_v3\energy_bin_noise.png
+INPUT .\Sawada_no_merging_v3\energy_bin_noise.png
+INPUT .\Sawada_no_merging_v3\energy_bin_noise.png
+INPUT .\Sawada_no_merging_v3\pts14mel.png
+INPUT .\Sawada_no_merging_v3\pts14mel.png
+INPUT .\Sawada_no_merging_v3\pts14mel.png
+INPUT .\Sawada_no_merging_v3\pts14mel.png
+INPUT .\Sawada_no_merging_v3\pts14mel.png
+INPUT .\Sawada_no_merging_v3\pts14mel.png
+INPUT .\Sawada_no_merging_v3\pts14mel.png
+INPUT .\Sawada_no_merging_v3\pts14s1.png
+INPUT .\Sawada_no_merging_v3\pts14s1.png
+INPUT .\Sawada_no_merging_v3\pts14s1.png
+INPUT .\Sawada_no_merging_v3\pts14s1.png
+INPUT .\Sawada_no_merging_v3\pts14s1.png
+INPUT .\Sawada_no_merging_v3\pts14s1.png
+INPUT .\Sawada_no_merging_v3\pts14s1.png
+INPUT .\Sawada_no_merging_v3\pts14s2.png
+INPUT .\Sawada_no_merging_v3\pts14s2.png
+INPUT .\Sawada_no_merging_v3\pts14s2.png
+INPUT .\Sawada_no_merging_v3\pts14s2.png
+INPUT .\Sawada_no_merging_v3\pts14s2.png
+INPUT .\Sawada_no_merging_v3\pts14s2.png
+INPUT .\Sawada_no_merging_v3\pts14s2.png
+INPUT .\Sawada_no_merging_v3\pts14clusters.png
+INPUT .\Sawada_no_merging_v3\pts14clusters.png
+INPUT .\Sawada_no_merging_v3\pts14clusters.png
+INPUT .\Sawada_no_merging_v3\pts14clusters.png
+INPUT .\Sawada_no_merging_v3\pts14clusters.png
+INPUT .\Sawada_no_merging_v3\pts14clusters.png
+INPUT .\Sawada_no_merging_v3\pts14clusters.png
+INPUT .\Sawada_no_merging_v3\pts14cluster_attrib.png
+INPUT .\Sawada_no_merging_v3\pts14cluster_attrib.png
+INPUT .\Sawada_no_merging_v3\pts14cluster_attrib.png
+INPUT .\Sawada_no_merging_v3\pts14cluster_attrib.png
+INPUT .\Sawada_no_merging_v3\pts14cluster_attrib.png
+INPUT .\Sawada_no_merging_v3\pts14cluster_attrib.png
+INPUT .\Sawada_no_merging_v3\pts14cluster_attrib.png
+INPUT .\Sawada_no_merging_v3\pts 14 GT.png
+INPUT .\Sawada_no_merging_v3\pts 14 GT.png
+INPUT .\Sawada_no_merging_v3\pts 14 GT.png
+INPUT .\Sawada_no_merging_v3\pts 14 GT.png
+INPUT .\Sawada_no_merging_v3\pts 14 GT.png
+INPUT .\Sawada_no_merging_v3\pts 14 GT.png
+INPUT .\Sawada_no_merging_v3\pts 14 GT.png
+INPUT .\Sawada_no_merging_v3\pts 14 RANSAC.png
+INPUT .\Sawada_no_merging_v3\pts 14 RANSAC.png
+INPUT .\Sawada_no_merging_v3\pts 14 RANSAC.png
+INPUT .\Sawada_no_merging_v3\pts 14 RANSAC.png
+INPUT .\Sawada_no_merging_v3\pts 14 RANSAC.png
+INPUT .\Sawada_no_merging_v3\pts 14 RANSAC.png
+INPUT .\Sawada_no_merging_v3\pts 14 RANSAC.png
 INPUT main.aux
 INPUT .\main.out
 INPUT .\main.out

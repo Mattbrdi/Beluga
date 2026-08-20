@@ -21,19 +21,22 @@
 \contentsline {paragraph}{conversion des centroides en phase relative}{8}{section*.2}%
 \contentsline {paragraph}{Modele ajusté par RANSAC circulaire}{8}{section*.3}%
 \contentsline {paragraph}{Lien entre pente de phase et TDOA}{9}{section*.4}%
-\contentsline {subsection}{\numberline {3.4}Fusion finale des masques}{9}{subsection.3.4}%
-\contentsline {section}{\numberline {4}Calcul des TDOA a partir des bins isoles}{10}{section.4}%
-\contentsline {subsection}{\numberline {4.1}Beamforming masque}{10}{subsection.4.1}%
-\contentsline {section}{\numberline {5}Validation sur un dataset synthétique}{10}{section.5}%
-\contentsline {subsection}{\numberline {5.1}Validation de la separation de sources}{10}{subsection.5.1}%
-\contentsline {subsubsection}{\numberline {5.1.1}Creation des signaux synthetiques}{10}{subsubsection.5.1.1}%
-\contentsline {subsubsection}{\numberline {5.1.2}Evaluation de la separation}{11}{subsubsection.5.1.2}%
-\contentsline {paragraph}{Résultats qualitatifs}{11}{section*.5}%
-\contentsline {paragraph}{Résultats quantitatifs}{11}{section*.6}%
-\contentsline {subsubsection}{\numberline {5.1.3}Source d'erreurs}{11}{subsubsection.5.1.3}%
-\contentsline {subsection}{\numberline {5.2}Validation du beamforming}{11}{subsection.5.2}%
-\contentsline {section}{\numberline {6}Conclusion}{15}{section.6}%
-\contentsline {section}{\numberline {A}Demonstrations des mises a jour EM}{15}{section.A}%
-\contentsline {subsection}{\numberline {A.1}Mise a jour des poids}{15}{subsection.A.1}%
-\contentsline {subsection}{\numberline {A.2}Mise a jour du centroïde}{16}{subsection.A.2}%
-\contentsline {subsection}{\numberline {A.3}Mise a jour de la variance}{17}{subsection.A.3}%
+\contentsline {paragraph}{Merge automatique de cluster}{9}{section*.5}%
+\contentsline {subsection}{\numberline {3.4}Fusion finale des masques}{11}{subsection.3.4}%
+\contentsline {section}{\numberline {4}Calcul des TDOA a partir des bins isoles}{11}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Beamforming masque}{11}{subsection.4.1}%
+\contentsline {section}{\numberline {5}Validation sur un dataset synthétique}{11}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Validation de la separation de sources}{11}{subsection.5.1}%
+\contentsline {subsubsection}{\numberline {5.1.1}Creation des signaux synthetiques}{11}{subsubsection.5.1.1}%
+\contentsline {subsubsection}{\numberline {5.1.2}Evaluation de la separation}{12}{subsubsection.5.1.2}%
+\contentsline {paragraph}{Résultats qualitatifs}{12}{section*.6}%
+\contentsline {paragraph}{Résultats quantitatifs}{12}{section*.7}%
+\contentsline {subsubsection}{\numberline {5.1.3}Source d'erreurs}{16}{subsubsection.5.1.3}%
+\contentsline {paragraph}{Mauvaise estimations des bins ayant du signal quand il y a du bruit}{16}{section*.8}%
+\contentsline {paragraph}{Mauvaise droite dans le RANSAC}{16}{section*.9}%
+\contentsline {subsection}{\numberline {5.2}Validation du beamforming}{16}{subsection.5.2}%
+\contentsline {section}{\numberline {6}Conclusion}{18}{section.6}%
+\contentsline {section}{\numberline {A}Demonstrations des mises a jour EM}{18}{section.A}%
+\contentsline {subsection}{\numberline {A.1}Mise a jour des poids}{18}{subsection.A.1}%
+\contentsline {subsection}{\numberline {A.2}Mise a jour du centroïde}{19}{subsection.A.2}%
+\contentsline {subsection}{\numberline {A.3}Mise a jour de la variance}{20}{subsection.A.3}%

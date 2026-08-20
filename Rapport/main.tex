@@ -634,77 +634,114 @@ marques comme non assignes. Les labels obtenus permettent ensuite de fusionner
 les masques de clusters en masques de sources coherents sur l'ensemble des
 frequences.
 
+
 \paragraph{Lien entre pente de phase et TDOA} ~\\ 
 
 La pente estimee pour le microphone $m$ a une interpretation directe :
 \[
   v_m = -2\pi(\tau_m-\tau_{\mathrm{ref}}).
-\]
-
-Le retard relatif au microphone de reference est donc :
-\[
-  \tau_m-\tau_{\mathrm{ref}}
+  \]
+  
+  Le retard relatif au microphone de reference est donc :
+  \[
+    \tau_m-\tau_{\mathrm{ref}}
     =
     -\frac{v_m}{2\pi}.
-\]
+    \]
+    
+    Les TDOA entre paires de microphones sont ensuite calcules par difference :
+    \[
+      \Delta\tau_{i,j}
+      =
+      \tau_j-\tau_i.
+      \]
+      
+      En revanche, les tdoas estimé à partir de la pente recupérée dans 
+      le RANSAC sont souvent mauvais en comparaison des autres methodes. Cela est donc utile à améliorer la cohérence 
+      des mask mais ne sert pas directement au calcul de TDOAS. Il servent principalement à verifier que l'on ne s'est
+      pas totalement trompé. On peut visualiser l'attribution des centroides
+      et la droite trouvé par le RANSAC figure~\ref{fig:droite-RANSAC}
+        \begin{figure}[htbp]
+        \centering
+        \includegraphics[width=0.85\linewidth]{Sawada_no_merging_v3/ransac_train_00.png}
+        \caption{Argument de la composante i en fonction de la fréquence du centroide}
+        \label{fig:droite-RANSAC}
+      \end{figure}
 
-Les TDOA entre paires de microphones sont ensuite calcules par difference :
-\[
-  \Delta\tau_{i,j}
-    =
-    \tau_j-\tau_i.
-\]
+\paragraph{Merge automatique de cluster} ~\\
+      
+      Dans le cas ou une fréquence ne contient pas toute les sources, 
+      la méthode par corrélation sépare artificiellement les bins de la fréquence. 
+      La méthhode RANSAC permet quant à elle d'attribuer à plusieurs cluster d'une meme fréquence 
+      la même source. Comme montré figure~\ref{fig:merge-cluster-1}, les deux clusters collé sont finalement 
+      attribué à une seule et meme source.
+      
+      \begin{figure}[htbp]
+        \centering
+        \begin{minipage}{0.48\linewidth}
+          \centering
+          \includegraphics[width=\linewidth]{Sawada_no_merging_v3/plot merge cluster 1.png}
+          \vspace{0.1cm}
+          \small Attribution des bins par cluster.
+        \end{minipage}
+        \hfill
+        \begin{minipage}{0.48\linewidth}
+          \centering
+          \includegraphics[width=\linewidth]{Sawada_no_merging_v3/plot merge cluster 2.png}
+          \vspace{0.1cm}
+          \small Attribution apres le RANSAC.
+        \end{minipage}
+        \caption{Merge automatique de clusters : comparaison entre l'attribution initiale des clusters et l'attribution apres RANSAC.}
+        \label{fig:merge-cluster-1}
+      \end{figure}
 
-En revanche, les tdoas estimé à partir de la pente recupérée dans 
-le RANSAC sont souvent mauvais en comparaison des autres methodes. Cela est donc utile à améliorer la cohérence 
-des mask mais ne sert pas directement au calcul de TDOAS. Il servent principalement à verifier que l'on ne s'est
-pas totalement trompé. 
 
 \subsection{Fusion finale des masques} \label{subsec:fusionMasque}
-
-Une fois les centroïdes associes a des sources, les masques de clusters sont
-fusionnes. Pour une source $s$, le masque final est :
-\[
-  M_s(f,t)
-    =
-    \sum_{k:\, label(f,k)=s} M_k(f,t).
-\]
-
-Une fois les masques de sources obtenus, on reconstruit d'abord, pour chaque
-source $s$, une STFT multicanale masquee. Si $\mathbf{X}(f,t)$ designe la STFT
-du melange original et $M_s(f,t)$ le masque associe a la source $s$, on calcule :
-\[
-  \hat{\mathbf{X}}_s(f,t)
-    =
-    M_s(f,t)\,\mathbf{X}(f,t).
-\]
-
-Le meme masque est applique a tous les microphones. On conserve ainsi les bins
-temps-frequence attribues a la source $s$, tout en gardant les differences de
-phase entre microphones presentes dans la STFT originale.
-
-On applique ensuite une STFT inverse a chaque canal de
-$\hat{\mathbf{X}}_s(f,t)$ afin d'obtenir une reconstruction temporelle
-multicanale :
-\[
-  \hat{\mathbf{x}}_s[n]
-    =
-    \operatorname{iSTFT}
-    \left(
-      \hat{\mathbf{X}}_s(f,t)
-    \right).
-\]
-
-Les TDOA peuvent alors etre estimes sur ces signaux temporels reconstruits.
-Cette methode n'a pas de garantie theorique forte. En effet, une STFT masquee
-bin par bin ne correspond pas necessairement a la STFT exacte d'un signal
-physique reel : le masquage peut introduire des incoherences entre trames et
-entre frequences. La reconstruction par iSTFT doit donc etre vue comme un signal
-ayant une STFT proche de la STFT masquee du signal original, pas comme une
-reconstruction parfaite de la source originale.
-
-Malgre cette limite, l'approche fonctionne relativement bien en pratique sur le
-benchmark. Elle fournit une premiere estimation simple des TDOA, directement
+      
+      Une fois les centroïdes associes a des sources, les masques de clusters sont
+      fusionnes. Pour une source $s$, le masque final est :
+      \[
+        M_s(f,t)
+        =
+        \sum_{k:\, label(f,k)=s} M_k(f,t).
+        \]
+        
+        Une fois les masques de sources obtenus, on reconstruit d'abord, pour chaque
+        source $s$, une STFT multicanale masquee. Si $\mathbf{X}(f,t)$ designe la STFT
+        du melange original et $M_s(f,t)$ le masque associe a la source $s$, on calcule :
+        \[
+          \hat{\mathbf{X}}_s(f,t)
+          =
+          M_s(f,t)\,\mathbf{X}(f,t).
+          \]
+          
+          Le meme masque est applique a tous les microphones. On conserve ainsi les bins
+          temps-frequence attribues a la source $s$, tout en gardant les differences de
+          phase entre microphones presentes dans la STFT originale.
+          
+          On applique ensuite une STFT inverse a chaque canal de
+          $\hat{\mathbf{X}}_s(f,t)$ afin d'obtenir une reconstruction temporelle
+          multicanale :
+          
+          \[
+            \hat{\mathbf{x}}_s[n]
+            =
+            \operatorname{iSTFT}
+            \left(
+              \hat{\mathbf{X}}_s(f,t)
+              \right).
+              \]
+              
+              Les TDOA peuvent alors etre estimes sur ces signaux temporels reconstruits.
+              Cette methode n'a pas de garantie theorique forte. En effet, une STFT masquee
+              bin par bin ne correspond pas necessairement a la STFT exacte d'un signal
+              physique reel : le masquage peut introduire des incoherences entre trames et
+              entre frequences. La reconstruction par iSTFT doit donc etre vue comme un signal
+              ayant une STFT proche de la STFT masquee du signal original, pas comme une
+              reconstruction parfaite de la source originale.
+              
+              Malgre cette limite, l'approche fonctionne relativement bien en pratique sur le
+              benchmark. Elle fournit une premiere estimation simple des TDOA, directement
 exploitable apres la separation. Sa qualite depend principalement de la qualite
 du masque final : une erreur de separation ou d'assignation de clusters peut
 deteriorer les signaux reconstruits, et donc les retards estimes par
@@ -861,7 +898,112 @@ figure~\ref{fig:sawada-tdoa-correlation_noised}
 \end{figure}
 
 \subsubsection{Source d'erreurs}
-Comme nous l'avons vu, les résultats ne sont pas parfait non plus. Il y a plusieurs source d'erreurs qui
+Comme nous l'avons vu, les résultats ne sont pas parfait non plus.
+Il y a plusieurs source d'erreurs que l'on essaie d'explorer ici. 
+
+\paragraph{Mauvaise estimations des bins ayant du signal quand il y a du bruit}~\\ 
+
+On a ici utilisé la méthode décrite dans la partie~\ref{subsubsec:energieBin}. Cela fonctionne bien 
+sans bruit mais est bien trop approximatif avec bruit, comme on peut le voir 
+figure~\ref{fig:energy-bin-noise}. Cela motive donc l'utilisation 
+d'un réseau de neuronne pour cette tache qui s'apprend bien mais reste loin d'être triviale
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Sawada_no_merging_v3/energy_bin_complet.png}
+    \vspace{0.1cm}
+    \small Estimation des bins actifs sans bruit.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Sawada_no_merging_v3/energy_bin_noise.png}
+    \vspace{0.1cm}
+    \small Estimation des bins actifs avec bruit.
+  \end{minipage}
+  \caption{Comparaison de l'estimation des bins contenant du signal par seuillage d'energie, sans bruit et avec bruit.}
+  \label{fig:energy-bin-noise}
+\end{figure}
+
+\paragraph{Mauvaise droite dans le RANSAC}~\\
+Dans le cas sans bruit, l'extrait numéro 14 ne fonctionne pas. figure~\ref{fig:spectro-pts14}. 
+En regardant en details, on remarque en fait que certains bins ayant du signal ne sont 
+attribués à aucune des deux sources. Un exemple sont les bins centraux de la fréquence 2250.
+En regardant ce qui se passe au niveau du clustering figure~\ref{fig:cluster-pts14}, on 
+remarque que celui-ci se passe correctement, distinguant les points aux extremité des points 
+centraux. On regarde alors au niveau du RANSAC figure~\ref{fig:RANSAC-pts14}. En comparaison
+avec les droite "Ground Truth", les deux droites trouvés par RANSAC correspondent en réalité 
+à la meme ground truth. Ainsi, la seconde droite est totalement ignoré. Cela n'arrive pas souvent 
+que ca soit sans bruit ou avec bruit mais peut tout de meme arrivé. Augmenter le nombre d'itération 
+du RANSAC peut améliorer cela.
+
+\begin{figure}[htbp]\label{fig:spectro-pts14}
+  \centering
+  \begin{minipage}{0.32\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Sawada_no_merging_v3/pts14mel.png}
+    \vspace{0.1cm}
+    \small Melange.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.32\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Sawada_no_merging_v3/pts14s1.png}
+    \vspace{0.1cm}
+    \small Source 1.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.32\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Sawada_no_merging_v3/pts14s2.png}
+    \vspace{0.1cm}
+    \small Source 2.
+  \end{minipage}
+  \caption{Extrait 14 : melange et sources de reference.}
+  \label{fig:pts14-signals}
+\end{figure}
+
+\begin{figure}[htbp]\label{fig:cluster-pts14}
+  \centering
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Sawada_no_merging_v3/pts14clusters.png}
+    \vspace{0.1cm}
+    \small Clusters obtenus.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Sawada_no_merging_v3/pts14cluster_attrib.png}
+    \vspace{0.1cm}
+    \small Clusters attribues.
+  \end{minipage}
+  \caption{Extrait 14 : clusters avant et apres attribution.}
+  \label{fig:pts14-cluster-attribution}
+\end{figure}
+
+\begin{figure}[htbp]\label{fig:RANSAC-pts14}
+  \centering
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Sawada_no_merging_v3/pts 14 GT.png}
+    \vspace{0.1cm}
+    \small Attribution de reference.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Sawada_no_merging_v3/pts 14 RANSAC.png}
+    \vspace{0.1cm}
+    \small Droite estimee par RANSAC.
+  \end{minipage}
+  \caption{Extrait 14 : comparaison entre la reference et la droite estimee par RANSAC.}
+  \label{fig:pts14-ransac-gt}
+\end{figure}
+
+
 \subsection{Validation du beamforming}
 
 La seconde validation concerne l'utilisation des bins isoles pour le
