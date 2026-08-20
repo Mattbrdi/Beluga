@@ -8,6 +8,7 @@
 \usepackage{amsmath,amssymb}
 \usepackage{booktabs}
 \usepackage{array}
+\usepackage{graphicx}
 \usepackage{hyperref}
 \usepackage{xcolor}
 
@@ -208,7 +209,7 @@ On notera que l'on décide de ne pas faire de whitening sur les données. En eff
 clustering directionel et en normalisant les données, l'impact du whitening est limité. Il est donc préférable 
 de conserver la structure de retard dans les données. 
 
-\subsubsection{Masque temps-frequence par defaut sans reseau de neuronne}
+\subsubsection{Masque temps-frequence par defaut sans reseau de neuronne} \label{subsubsec:energieBin}
 
 Lorsque l'on ne dispose pas d'un masque fourni par un reseau de neurones,
 l'algorithme peut construire un masque temps-frequence par defaut a partir de
@@ -659,7 +660,7 @@ le RANSAC sont souvent mauvais en comparaison des autres methodes. Cela est donc
 des mask mais ne sert pas directement au calcul de TDOAS. Il servent principalement à verifier que l'on ne s'est
 pas totalement trompé. 
 
-\subsection{Fusion finale des masques}
+\subsection{Fusion finale des masques} \label{subsec:fusionMasque}
 
 Une fois les centroïdes associes a des sources, les masques de clusters sont
 fusionnes. Pour une source $s$, le masque final est :
@@ -715,6 +716,165 @@ correlation.
 \subsection{Beamforming masque}
 Partie faite par AMINE
 \section{Validation sur un dataset synthétique}
+
+\subsection{Validation de la separation de sources}
+
+\subsubsection{Creation des signaux synthetiques}
+
+La validation de la separation repose sur des scenes synthetiques pour
+lesquelles on connait les sources originales et les retards appliques sur chaque
+microphone. Une scene est construite en generant d'abord plusieurs signaux
+monophoniques representant les sources acoustiques d'interet, puis en les
+placant dans le temps avec un gain et une fenetre d'apparition. Ces sources sont
+ensuite propagees vers les microphones par un modele de melange a retards.
+
+Pour modeliser les vocalisations de belugas, on utilise un signal de type
+sifflement harmonique a frequence instantanee variable. On definit d'abord un
+contour frequentiel fondamental $f_0(t)$, obtenu a partir de quelques points de
+controle relies par une interpolation lisse. Ce contour peut monter ou descendre
+au cours du temps, avec des changements de direction aleatoires, puis un faible
+jitter temporellement correle est ajoute :
+\[
+  f_{\mathrm{inst}}(t)
+    =
+    \operatorname{clip}
+    \left(
+      f_0(t)+\eta(t),
+      f_{\min},
+      f_{\max}
+    \right).
+\]
+
+La phase instantanee du sifflement est obtenue par integration de cette
+frequence :
+\[
+  \varphi(t)
+    =
+    2\pi
+    \int_0^t
+    f_{\mathrm{inst}}(u)\,du.
+\]
+
+En temps discret, cette integration est implementee sous forme cumulative :
+\[
+  \varphi[n]
+    =
+    \frac{2\pi}{f_s}
+    \sum_{\ell=0}^{n}
+    f_{\mathrm{inst}}[\ell].
+\]
+
+Le signal de beluga est ensuite construit comme une somme d'harmoniques de cette
+phase :
+\[
+  s[n]
+    =
+    A[n]
+    \sum_{h=1}^{H}
+    a_h
+    \sin\left(
+      h\varphi[n]+\psi_h
+    \right),
+\]
+ou $a_h$ est l'amplitude de l'harmonique $h$, $\psi_h$ sa phase initiale et
+$A[n]$ une enveloppe lente. Les amplitudes harmoniques decroissent globalement
+avec l'ordre harmonique, avec une petite variation aleatoire, ce qui produit des
+sifflements spectraux plausibles sans rendre toutes les realisations identiques.
+
+
+Le melange multicanal est ensuite obtenu en appliquant un retard entier
+$d_{m,k}$ entre la source $k$ et le microphone $m$ :
+\[
+  x_m[n]
+    =
+    \sum_{k=1}^{K}
+    g_{m,k}
+    s_k[n-d_{m,k}]
+    +
+    b_m[n],
+\]
+ou $g_{m,k}$ represente un gain eventuel et $b_m[n]$ regroupe les bruits
+ajoutes au microphone $m$ qui peuvent etre gaussien ou bien impulsifs. Les retards $d_{m,k}$ etant connus, 
+les TDOA de reference sont directement disponibles :
+\[
+  \Delta\tau_{i,j,k}^{\mathrm{ref}}
+    =
+    \frac{d_{j,k}-d_{i,k}}{f_s}.
+\]
+
+Ce cadre synthetique permet donc de tester la separation dans une situation ou
+l'on connait a la fois les sources propres, le melange observe et la solution
+spatiale attendue. Aussi, la forme des signaux choisis nous permet d'avoir un signal
+ressemblant à un whistle et qui n'a pas une fréquence fixe tout en ayant une certaine 
+continuité en fréquence.
+
+\subsubsection{Evaluation de la separation}
+ \paragraph{Résultats qualitatifs}~\\
+La figure~\ref{fig:sawada-tf-separation} illustre d'abord les resultats de
+separation dans le plan temps-frequence. Elle permet de verifier visuellement
+que les bins actifs sont bien repartis entre les sources estimees et que les
+masques obtenus suivent les structures spectrales principales du melange. 
+D'un point de vue qualitatif, la séparation est relativement bonne. 
+On rajoute ensuite du bruit sur le melange pour un snr qui varie entre 0 et 10 dB. 
+La figure~\ref{fig:sawada-tf-separation_noised} illuste les resultats obtenus. 
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\linewidth]{Sawada_no_merging_v3/train_sawada_no_merging_v3.png}
+  \caption{Resultats de separation de sources dans le plan temps-frequence. à gauche 
+  la source 1 et 2, au millieu le melange et à droite la source estimé 1 et 2.}
+  \label{fig:sawada-tf-separation}
+\end{figure}
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\linewidth]{Sawada_no_merging_v3/train_sawada_no_merging_v3_noised.png}
+  \caption{Resultats de separation de sources dans le plan temps-frequence avec bruit. à gauche 
+  la source 1 et 2, au millieu le melange et à droite la source estimé 1 et 2.}
+  \label{fig:sawada-tf-separation_noised}
+\end{figure}
+
+
+\paragraph{Résultats quantitatifs}~\\
+La figure~\ref{fig:sawada-tdoa-correlation} donne ensuite une analyse plus
+quantitative, en comparant les TDOA obtenus a partir des sources reconstruites 
+(donc une méthode basique qui n'est pas supposé donner des résultats parfaits comme vu 
+sur la partie \ref{subsec:fusionMasque}). Cette visualisation permet d'evaluer 
+si la separation conserve suffisamment la coherence temporelle entre microphones pour fournir
+une premiere estimation fiable des retards. De meme, on trace les TDOA obtenus dans la situation avec bruit.
+figure~\ref{fig:sawada-tdoa-correlation_noised} 
+
+
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\linewidth]{Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors.png}
+  \caption{Analyse quantitative des TDOA estimes par correlation sur les sources separees.}
+  \label{fig:sawada-tdoa-correlation}
+\end{figure}   
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.95\linewidth]{Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors_noised.png}
+  \caption{Analyse quantitative des TDOA estimes par correlation sur les sources separees.}
+  \label{fig:sawada-tdoa-correlation_noised}
+\end{figure}
+
+\subsubsection{Source d'erreurs}
+Comme nous l'avons vu, les résultats ne sont pas parfait non plus. Il y a plusieurs source d'erreurs qui
+\subsection{Validation du beamforming}
+
+La seconde validation concerne l'utilisation des bins isoles pour le
+beamforming. L'objectif n'est plus seulement de reconstruire les sources, mais
+d'utiliser les masques temps-frequence pour guider une methode d'estimation
+spatiale. Les bins selectionnes par le masque peuvent etre utilises comme poids
+ou comme zones d'interet dans le calcul du pseudo-spectre.
+
+On compare alors les directions ou TDOA obtenus par beamforming masque aux
+valeurs de reference disponibles dans le dataset. Cette validation permet
+d'evaluer si la separation temps-frequence ameliore effectivement l'estimation
+spatiale, en reduisant l'influence des bins domines par le bruit ou par les
+autres sources.
 
 
 \section{Conclusion}
