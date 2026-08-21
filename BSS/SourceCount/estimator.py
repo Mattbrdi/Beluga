@@ -201,7 +201,7 @@ def _aggregate_source_counts(
 def estimate_num_sources(
     X: np.ndarray,
     mask: np.ndarray,
-    method: SourceCountMethod = "eigengap",
+    method: SourceCountMethod = "explained_variance",
     min_selected_frames: int = 20,
     relative_threshold: float = 0.05,
     min_eigengap_ratio: float = 3.0,
