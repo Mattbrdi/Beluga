@@ -12,6 +12,37 @@ from ..Utils.signal_class import Mixture, MultiSignal
 
 
 DEFAULT_SPLITS = ("train", "validation", "test")
+SAWADA_MODEL_NPZ_DEFAULTS = {
+    "masks": np.empty((0, 0, 0)),
+    "posteriors": np.empty((0, 0, 0)),
+    "active_clusters": np.empty((0, 0)),
+    "cluster_masks": np.empty((0, 0, 0)),
+    "cluster_posteriors": np.empty((0, 0, 0)),
+    "cluster_active": np.empty((0, 0)),
+    "active_frequency_mask": np.empty((0,)),
+    "bin_vectors": np.empty((0, 0, 0)),
+    "tf_energy": np.empty((0, 0)),
+    "frequency_energy": np.empty((0,)),
+    "active_tf_mask": np.empty((0, 0)),
+    "energy_threshold_db": np.asarray(np.nan),
+    "frequencies": np.empty((0,)),
+    "times": np.empty((0,)),
+    "centroids": np.empty((0, 0, 0)),
+    "variances": np.empty((0, 0)),
+    "weights": np.empty((0, 0)),
+    "source_assignment_labels": np.empty((0, 0)),
+    "source_assignment_distances": np.empty((0, 0)),
+    "source_assignment_relative_phases": np.empty((0, 0, 0)),
+    "source_assignment_selected_labels": np.empty((0, 0)),
+    "source_assignment_slopes": np.empty((0, 0)),
+    "source_assignment_intercepts": np.empty((0, 0)),
+    "source_assignment_scores": np.empty((0,)),
+    "source_assignment_n_inliers": np.empty((0,)),
+    "source_assignment_n_trials": np.empty((0,)),
+    "source_assignment_converged": np.empty((0,)),
+    "source_assignment_frequency_inliers": np.empty((0, 0)),
+    "source_assignment_selected_centroids": np.empty((0, 0)),
+}
 
 
 @dataclass(frozen=True)
@@ -238,6 +269,8 @@ def save_sources_npz(
 def save_sawada_model_npz(path: str | Path, result: Any) -> Path | None:
     """Sauvegarde l'etat final utile de Sawada pour la visualisation/debug."""
     payload = result.debug_artifacts.get("sawada_model", {})
+    if hasattr(payload, "to_payload"):
+        payload = payload.to_payload()
     if not payload:
         return None
 
@@ -245,63 +278,10 @@ def save_sawada_model_npz(path: str | Path, result: Any) -> Path | None:
     target.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(
         target,
-        masks=np.asarray(payload["masks"]),
-        posteriors=np.asarray(payload["posteriors"]),
-        active_clusters=np.asarray(payload.get("active_clusters", np.empty((0, 0)))),
-        cluster_masks=np.asarray(payload.get("cluster_masks", np.empty((0, 0, 0)))),
-        cluster_posteriors=np.asarray(
-            payload.get("cluster_posteriors", np.empty((0, 0, 0)))
-        ),
-        cluster_active=np.asarray(payload.get("cluster_active", np.empty((0, 0)))),
-        active_frequency_mask=np.asarray(
-            payload.get("active_frequency_mask", np.empty((0,)))
-        ),
-        bin_vectors=np.asarray(payload.get("bin_vectors", np.empty((0, 0, 0)))),
-        tf_energy=np.asarray(payload.get("tf_energy", np.empty((0, 0)))),
-        frequency_energy=np.asarray(payload.get("frequency_energy", np.empty((0,)))),
-        active_tf_mask=np.asarray(payload.get("active_tf_mask", np.empty((0, 0)))),
-        energy_threshold_db=np.asarray(payload.get("energy_threshold_db", np.nan)),
-        frequencies=np.asarray(payload["frequencies"]),
-        times=np.asarray(payload["times"]),
-        centroids=np.asarray(payload["centroids"]),
-        variances=np.asarray(payload["variances"]),
-        weights=np.asarray(payload["weights"]),
-        source_assignment_labels=np.asarray(
-            payload.get("source_assignment_labels", np.empty((0, 0)))
-        ),
-        source_assignment_distances=np.asarray(
-            payload.get("source_assignment_distances", np.empty((0, 0)))
-        ),
-        source_assignment_relative_phases=np.asarray(
-            payload.get("source_assignment_relative_phases", np.empty((0, 0, 0)))
-        ),
-        source_assignment_selected_labels=np.asarray(
-            payload.get("source_assignment_selected_labels", np.empty((0, 0)))
-        ),
-        source_assignment_slopes=np.asarray(
-            payload.get("source_assignment_slopes", np.empty((0, 0)))
-        ),
-        source_assignment_intercepts=np.asarray(
-            payload.get("source_assignment_intercepts", np.empty((0, 0)))
-        ),
-        source_assignment_scores=np.asarray(
-            payload.get("source_assignment_scores", np.empty((0,)))
-        ),
-        source_assignment_n_inliers=np.asarray(
-            payload.get("source_assignment_n_inliers", np.empty((0,)))
-        ),
-        source_assignment_n_trials=np.asarray(
-            payload.get("source_assignment_n_trials", np.empty((0,)))
-        ),
-        source_assignment_converged=np.asarray(
-            payload.get("source_assignment_converged", np.empty((0,)))
-        ),
-        source_assignment_frequency_inliers=np.asarray(
-            payload.get("source_assignment_frequency_inliers", np.empty((0, 0)))
-        ),
-        source_assignment_selected_centroids=np.asarray(
-            payload.get("source_assignment_selected_centroids", np.empty((0, 0)))
-        ),
+        **{
+            key: np.asarray(payload.get(key, default))
+            for key, default in SAWADA_MODEL_NPZ_DEFAULTS.items()
+        },
     )
     return target
 

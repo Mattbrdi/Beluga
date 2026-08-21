@@ -1,6 +1,6 @@
 import numpy as np
 
-from BSS.Algo_Separation.Sawada_separation import SawadaBSS
+from BSS.Algo_Separation.Sawada import SawadaBSS
 from BSS.Utils.associated_dataclasses import (
     EMClusteringParameters,
     StftParameters,
@@ -87,6 +87,12 @@ def test_sawada_returns_one_multichannel_signal_per_source():
         mixture.num_signals,
         model.n_sources,
     )
+
+    result = model.to_result(include_diagnostics=True)
+    assert result.masks.shape == masks.shape
+    assert result.diagnostics is not None
+    assert result.diagnostics.centroids.shape == model.all_centroids.shape
+    assert "source_assignment_slopes" in result.diagnostics.to_payload()
 
 
 def test_sawada_ignores_frequencies_without_consecutive_active_bins():

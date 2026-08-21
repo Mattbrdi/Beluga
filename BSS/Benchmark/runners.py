@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 
 from ..Algo_Separation.Frequency_ica_separation import FrequencyDomainICA
-from ..Algo_Separation.Sawada_separation import SawadaBSS
+from ..Algo_Separation.Sawada import SawadaBSS
 from ..Utils.associated_dataclasses import EMClusteringParameters, StftParameters
 from ..Utils.signal_class import MultiSignal
 
@@ -74,132 +74,6 @@ def _result(
         parameters=parameters,
         debug_artifacts={} if debug_artifacts is None else debug_artifacts,
     )
-
-
-def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
-    if model.nspectro_preprocessed is None:
-        return {}
-
-    if model.tf_energy is not None:
-        tf_energy = model.tf_energy
-    elif model.signal is not None:
-        raw_spectro = model.get_spectro(model.signal)
-        tf_energy = np.sum(np.abs(raw_spectro.Sxx) ** 2, axis=0)
-    else:
-        tf_energy = np.sum(np.abs(model.nspectro_preprocessed.Sxx) ** 2, axis=0)
-    active_tf_mask = (
-        model.active_tf_mask
-        if model.active_tf_mask is not None
-        else np.ones_like(tf_energy, dtype=bool)
-    )
-
-    n_freqs = model.nspectro_preprocessed.Sxx.shape[1]
-    variances = np.full((n_freqs, model.n_sources), np.nan, dtype=float)
-    weights = np.full((n_freqs, model.n_sources), np.nan, dtype=float)
-    for frequency_index, bin_model in model.bin_models.items():
-        variances[frequency_index] = bin_model.variances
-        weights[frequency_index] = bin_model.weights
-    centroids = model.all_centroids
-
-    return {
-        "sawada_model": {
-            "masks": model.get_final_masks().astype(np.uint8),
-            "posteriors": model.get_final_posteriors(),
-            "active_clusters": model.get_final_active_clusters().astype(np.uint8),
-            "cluster_masks": np.asarray(
-                model.cluster_masks_before_assignment
-                if model.cluster_masks_before_assignment is not None
-                else np.empty((0, 0, 0))
-            ),
-            "cluster_posteriors": np.asarray(
-                model.cluster_posteriors_before_assignment
-                if model.cluster_posteriors_before_assignment is not None
-                else np.empty((0, 0, 0))
-            ),
-            "cluster_active": np.asarray(
-                model.cluster_active_before_assignment
-                if model.cluster_active_before_assignment is not None
-                else np.empty((0, 0))
-            ),
-            "active_frequency_mask": (
-                np.asarray(model.active_frequency_mask, dtype=np.uint8)
-                if model.active_frequency_mask is not None
-                else np.ones(n_freqs, dtype=np.uint8)
-            ),
-            "bin_vectors": model.nspectro_preprocessed.Sxx,
-            "tf_energy": tf_energy,
-            "frequency_energy": np.mean(tf_energy, axis=1),
-            "active_tf_mask": active_tf_mask.astype(np.uint8),
-            "energy_threshold_db": np.asarray(
-                np.nan if model.energy_threshold_db is None else model.energy_threshold_db
-            ),
-            "frequencies": np.asarray(model.nspectro_preprocessed.f, dtype=float),
-            "times": np.asarray(model.nspectro_preprocessed.t, dtype=float),
-            "centroids": centroids,
-            "variances": variances,
-            "weights": weights,
-            "source_assignment_labels": np.asarray(
-                model.source_assignment_labels
-                if model.source_assignment_labels is not None
-                else np.empty((0, 0))
-            ),
-            "source_assignment_distances": np.asarray(
-                model.source_assignment_distances
-                if model.source_assignment_distances is not None
-                else np.empty((0, 0))
-            ),
-            "source_assignment_relative_phases": np.asarray(
-                model.source_assignment_relative_phases
-                if model.source_assignment_relative_phases is not None
-                else np.empty((0, 0, 0))
-            ),
-            "source_assignment_selected_labels": np.asarray(
-                model.source_assignment_selected_labels
-                if model.source_assignment_selected_labels is not None
-                else np.empty((0, 0))
-            ),
-            "source_assignment_slopes": np.asarray(
-                model.source_assignment_slopes
-                if model.source_assignment_slopes is not None
-                else np.empty((0, 0))
-            ),
-            "source_assignment_intercepts": np.asarray(
-                model.source_assignment_intercepts
-                if model.source_assignment_intercepts is not None
-                else np.empty((0, 0))
-            ),
-            "source_assignment_scores": np.asarray(
-                model.source_assignment_scores
-                if model.source_assignment_scores is not None
-                else np.empty((0,))
-            ),
-            "source_assignment_n_inliers": np.asarray(
-                model.source_assignment_n_inliers
-                if model.source_assignment_n_inliers is not None
-                else np.empty((0,))
-            ),
-            "source_assignment_n_trials": np.asarray(
-                model.source_assignment_n_trials
-                if model.source_assignment_n_trials is not None
-                else np.empty((0,))
-            ),
-            "source_assignment_converged": np.asarray(
-                model.source_assignment_converged
-                if model.source_assignment_converged is not None
-                else np.empty((0,))
-            ),
-            "source_assignment_frequency_inliers": np.asarray(
-                model.source_assignment_frequency_inliers
-                if model.source_assignment_frequency_inliers is not None
-                else np.empty((0, 0))
-            ),
-            "source_assignment_selected_centroids": np.asarray(
-                model.source_assignment_selected_centroids
-                if model.source_assignment_selected_centroids is not None
-                else np.empty((0, 0))
-            ),
-        }
-    }
 
 
 def run_sawada(
@@ -275,7 +149,7 @@ def run_sawada(
             "reference_microphone": reference_microphone,
             "max_lag_samples": max_lag_samples,
         },
-        debug_artifacts=_sawada_debug_artifacts(model),
+        debug_artifacts=model.to_debug_artifacts().as_benchmark_artifacts(),
     )
 
 

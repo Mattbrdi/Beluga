@@ -2,13 +2,13 @@ import itertools
 
 import numpy as np
 
-from BSS.CircularRansac.source_assignment import (
+from BSS.Algo_Separation.Sawada.source_assignment import (
     assign_centroids_to_sources,
     complex_centroids_to_relative_phases,
     fit_centroid_source_trajectories,
     labels_to_source_masks,
 )
-from BSS.CircularRansac.circular_ransac import wrap_phase
+from BSS.Algo_Separation.Sawada.circular_ransac import wrap_phase
 
 
 def _complex_centroids_from_relative_phases(relative_phases, seed=0):
