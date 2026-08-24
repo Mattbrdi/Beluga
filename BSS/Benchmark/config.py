@@ -12,6 +12,8 @@ class BenchmarkConfig:
     algorithms: tuple[str, ...] = ("sawada", "ica")
     reference_microphone: int = 0
     limit: int | None = None
+    sawada_min_frequency_hz: float | None = None
+    sawada_max_frequency_hz: float | None = None
 
     def __post_init__(self) -> None:
         if not self.algorithms:
@@ -23,3 +25,12 @@ class BenchmarkConfig:
             raise ValueError("reference_microphone doit etre positif ou nul.")
         if self.limit is not None and self.limit < 0:
             raise ValueError("limit doit etre positif ou nul.")
+        if (
+            self.sawada_min_frequency_hz is not None
+            and self.sawada_max_frequency_hz is not None
+            and self.sawada_min_frequency_hz >= self.sawada_max_frequency_hz
+        ):
+            raise ValueError(
+                "sawada_min_frequency_hz doit etre inferieur a "
+                "sawada_max_frequency_hz."
+            )

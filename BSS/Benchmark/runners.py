@@ -80,15 +80,21 @@ def run_sawada(
     record: Any,
     scene: Any,
     reference_microphone: int = 0,
+    min_frequency_hz: float | None = None,
+    max_frequency_hz: float | None = None,
 ) -> SeparationResult:
     start = time.perf_counter()
     max_lag_samples = _max_lag_samples(scene)
-    sawada_em_parameters = BENCHMARK_SAWADA_EM_PARAMETERS
+    sawada_em_parameters = replace(
+        BENCHMARK_SAWADA_EM_PARAMETERS,
+        min_frequency_hz=min_frequency_hz,
+        max_frequency_hz=max_frequency_hz,
+    )
     if max_lag_samples is not None and scene.metadata.fs:
         slope_bound = 2.0 * np.pi * float(max_lag_samples) / float(scene.metadata.fs)
         if np.isfinite(slope_bound) and slope_bound > 0.0:
             sawada_em_parameters = replace(
-                BENCHMARK_SAWADA_EM_PARAMETERS,
+                sawada_em_parameters,
                 ransac_slope_bound=1.2 * slope_bound,
             )
     model = SawadaBSS(
@@ -121,6 +127,8 @@ def run_sawada(
                 "n_iter": sawada_em_parameters.n_iter,
                 "phi": sawada_em_parameters.phi,
                 "eps": sawada_em_parameters.eps,
+                "min_frequency_hz": sawada_em_parameters.min_frequency_hz,
+                "max_frequency_hz": sawada_em_parameters.max_frequency_hz,
                 "energy_threshold_db_above_floor": (
                     sawada_em_parameters.energy_threshold_db_above_floor
                 ),
@@ -198,9 +206,17 @@ def run_algorithm(
     record: Any,
     scene: Any,
     reference_microphone: int = 0,
+    sawada_min_frequency_hz: float | None = None,
+    sawada_max_frequency_hz: float | None = None,
 ) -> SeparationResult:
     if algorithm == "sawada":
-        return run_sawada(record, scene, reference_microphone)
+        return run_sawada(
+            record,
+            scene,
+            reference_microphone,
+            min_frequency_hz=sawada_min_frequency_hz,
+            max_frequency_hz=sawada_max_frequency_hz,
+        )
     if algorithm == "ica":
         return run_ica(record, scene, reference_microphone)
     raise ValueError(f"Algorithme inconnu: {algorithm}")

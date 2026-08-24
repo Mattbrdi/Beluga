@@ -328,20 +328,44 @@ class SawadaBSS:
             )
         return filtered_mask
 
-    def _compute_active_tf_mask(self, tf_energy: np.ndarray) -> np.ndarray:
+    def _frequency_band_mask(self, frequencies: np.ndarray) -> np.ndarray:
+        frequencies = np.asarray(frequencies, dtype=float)
+        band_mask = np.ones(frequencies.shape, dtype=bool)
+        min_frequency = self.em_clustering_parameters.min_frequency_hz
+        max_frequency = self.em_clustering_parameters.max_frequency_hz
+
+        if min_frequency is not None:
+            band_mask &= frequencies >= float(min_frequency)
+        if max_frequency is not None:
+            band_mask &= frequencies <= float(max_frequency)
+        return band_mask
+
+    def _compute_active_tf_mask(
+        self,
+        tf_energy: np.ndarray,
+        frequencies: np.ndarray,
+    ) -> np.ndarray:
         threshold_margin = self.em_clustering_parameters.energy_threshold_db_above_floor
-        active_mask = np.ones_like(tf_energy, dtype=bool)
+        frequency_band = self._frequency_band_mask(frequencies)
+        active_mask = np.zeros_like(tf_energy, dtype=bool)
+        active_mask[frequency_band, :] = True
         self.energy_threshold_db = None
         if threshold_margin is None:
             return self._filter_active_tf_runs(active_mask)
 
         energy_db = 10 * np.log10(tf_energy + self.em_clustering_parameters.eps)
+        selected_energy_db = energy_db[frequency_band, :]
+        if selected_energy_db.size == 0:
+            return active_mask
+
         floor_db = np.percentile(
-            energy_db,
+            selected_energy_db,
             self.em_clustering_parameters.energy_floor_percentile,
         )
         self.energy_threshold_db = float(floor_db + threshold_margin)
-        active_mask = energy_db >= self.energy_threshold_db
+        active_mask[frequency_band, :] = (
+            energy_db[frequency_band, :] >= self.energy_threshold_db
+        )
         return self._filter_active_tf_runs(active_mask)
 
 
@@ -789,7 +813,7 @@ class SawadaBSS:
         # 1. Prétraitement (STFT + Normalisation)
         raw_spectro = self.get_spectro(multi_signal)
         self.tf_energy = np.sum(np.abs(raw_spectro.Sxx) ** 2, axis=0)
-        self.active_tf_mask = self._compute_active_tf_mask(self.tf_energy)
+        self.active_tf_mask = self._compute_active_tf_mask(self.tf_energy, raw_spectro.f)
         self.nspectro_preprocessed = raw_spectro.normalize_each_bin()
         # 2. Algo : Clustering par bin (EM)
         print("Démarrage du clustering EM par bin...")
