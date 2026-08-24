@@ -37,7 +37,7 @@ from .associated_dataclasses import (
 from .signal_class import Mixture, MultiSignal, Signal
 
 if TYPE_CHECKING:
-    from ..Algo_Separation.Sawada_separation import SawadaBSS
+    from ..Algo_Separation.Sawada import SawadaBSS
 
 
 ParameterRebuilder = Callable[[dict[str, Any]], BssParameters]
@@ -332,7 +332,7 @@ def _save_sawada_model(model_dir: Path, model: Any) -> None:
 
 
 def _load_sawada_model(model_dir: Path, parameters: BssParameters) -> Any:
-    from ..Algo_Separation.Sawada_separation import EMClustering, SawadaBSS
+    from ..Algo_Separation.Sawada import EMClustering, SawadaBSS
 
     if not isinstance(parameters, SawadaBssParameters):
         raise TypeError("Le loader Sawada attend des SawadaBssParameters.")

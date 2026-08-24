@@ -22,7 +22,6 @@ tests/**/*.py[cod]
 sandbox*.py
 !tests/**/*.py
 results*/
-results*.py 
 .vscode/*
 BSS/Dataset/generated/
 *.txt

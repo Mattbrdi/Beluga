@@ -7,7 +7,7 @@ import numpy as np
 from scipy import signal as sp_signal
 from scipy.io import wavfile
 from ..Utils.signal_class import Signal, MultiSignal, Mixture
-from ..Algo_Separation.Sawada_separation import SawadaBSS
+from ..Algo_Separation.Sawada import SawadaBSS
 from ..Utils.associated_dataclasses import StftParameters, EMClusteringParameters
 
 PATH_SIGNAL_1: str = "C:/Users/BORDERIES/Desktop/Cours/Stage canada/Beluga/BSS/test_data/8296.240729000543_son_beluga.wav"
