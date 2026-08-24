@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (MiKTeX 26.5) (preloaded format=pdflatex 2026.6.4)  24 AUG 2026 12:46
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (MiKTeX 26.5) (preloaded format=pdflatex 2026.6.4)  24 AUG 2026 15:40
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -520,7 +520,7 @@ Underfull \hbox (badness 10000) in paragraph at lines 740--741
 
  []
 
-<Sawada_no_merging_v3/ransac_train_00.png, id=240, 723.70375pt x 722.7pt>
+<Sawada_no_merging_v3/ransac_train_00.png, id=245, 723.70375pt x 722.7pt>
 File: Sawada_no_merging_v3/ransac_train_00.png Graphic file (type png)
 <use Sawada_no_merging_v3/ransac_train_00.png>
 Package pdftex.def Info: Sawada_no_merging_v3/ransac_train_00.png  used on input line 768.
@@ -530,89 +530,91 @@ Underfull \hbox (badness 10000) in paragraph at lines 773--774
 
  []
 
-<Sawada_no_merging_v3/plot merge cluster 1.png, id=243, 641.39626pt x 520.94624pt>
+<Sawada_no_merging_v3/plot merge cluster 1.png, id=248, 641.39626pt x 520.94624pt>
 File: Sawada_no_merging_v3/plot merge cluster 1.png Graphic file (type png)
 <use Sawada_no_merging_v3/plot merge cluster 1.png>
 Package pdftex.def Info: Sawada_no_merging_v3/plot merge cluster 1.png  used on input line 785.
 (pdftex.def)             Requested size: 218.51521pt x 177.47708pt.
-<Sawada_no_merging_v3/plot merge cluster 2.png, id=244, 641.39626pt x 520.94624pt>
+<Sawada_no_merging_v3/plot merge cluster 2.png, id=249, 641.39626pt x 520.94624pt>
 File: Sawada_no_merging_v3/plot merge cluster 2.png Graphic file (type png)
 <use Sawada_no_merging_v3/plot merge cluster 2.png>
 Package pdftex.def Info: Sawada_no_merging_v3/plot merge cluster 2.png  used on input line 792.
 (pdftex.def)             Requested size: 218.51521pt x 177.47708pt.
 [10] [11 <./Sawada_no_merging_v3/ransac_train_00.png> <./Sawada_no_merging_v3/plot merge cluster 1.png> <./Sawada_no_merging_v3/plot merge cluster 2.png>] [12]
-<Sawada_no_merging_v3/train_sawada_no_merging_v3.png, id=267, 1308.89pt x 1471.4975pt>
+<Sawada_no_merging_v3/train_sawada_no_merging_v3.png, id=272, 1308.89pt x 1471.4975pt>
 File: Sawada_no_merging_v3/train_sawada_no_merging_v3.png Graphic file (type png)
 <use Sawada_no_merging_v3/train_sawada_no_merging_v3.png>
 Package pdftex.def Info: Sawada_no_merging_v3/train_sawada_no_merging_v3.png  used on input line 962.
 (pdftex.def)             Requested size: 432.48051pt x 486.20192pt.
-<Sawada_no_merging_v3/train_sawada_no_merging_v3_noised.png, id=268, 1308.89pt x 1471.4975pt>
+<Sawada_no_merging_v3/train_sawada_no_merging_v3_noised.png, id=273, 1308.89pt x 1471.4975pt>
 File: Sawada_no_merging_v3/train_sawada_no_merging_v3_noised.png Graphic file (type png)
 <use Sawada_no_merging_v3/train_sawada_no_merging_v3_noised.png>
 Package pdftex.def Info: Sawada_no_merging_v3/train_sawada_no_merging_v3_noised.png  used on input line 971.
 (pdftex.def)             Requested size: 432.48051pt x 486.20192pt.
-<Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors.png, id=272, 981.6675pt x 463.331pt>
+<Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors.png, id=277, 981.6675pt x 463.331pt>
 File: Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors.png Graphic file (type png)
 <use Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors.png>
-Package pdftex.def Info: Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors.png  used on input line 991.
+Package pdftex.def Info: Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors.png  used on input line 993.
 (pdftex.def)             Requested size: 432.48051pt x 204.12077pt.
-<Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors_noised.png, id=273, 981.6675pt x 463.331pt>
+ [13] [14 <./Sawada_no_merging_v3/train_sawada_no_merging_v3.png>] [15 <./Sawada_no_merging_v3/train_sawada_no_merging_v3_noised.png>]
+<Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors_noised.png, id=298, 981.6675pt x 463.331pt>
 File: Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors_noised.png Graphic file (type png)
 <use Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors_noised.png>
-Package pdftex.def Info: Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors_noised.png  used on input line 997.
+Package pdftex.def Info: Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors_noised.png  used on input line 999.
 (pdftex.def)             Requested size: 432.48051pt x 204.12077pt.
- [13] [14 <./Sawada_no_merging_v3/train_sawada_no_merging_v3.png>] [15 <./Sawada_no_merging_v3/train_sawada_no_merging_v3_noised.png>] [16 <./Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors.png> <./Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors_noised.png>]
-Underfull \hbox (badness 10000) in paragraph at lines 1006--1007
+
+Underfull \hbox (badness 10000) in paragraph at lines 1008--1009
 
  []
 
-<Sawada_no_merging_v3/energy_bin_complet.png, id=303, 641.39626pt x 300.12125pt>
+[16 <./Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors.png> <./Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors_noised.png>]
+<Sawada_no_merging_v3/energy_bin_complet.png, id=309, 641.39626pt x 300.12125pt>
 File: Sawada_no_merging_v3/energy_bin_complet.png Graphic file (type png)
 <use Sawada_no_merging_v3/energy_bin_complet.png>
-Package pdftex.def Info: Sawada_no_merging_v3/energy_bin_complet.png  used on input line 1017.
+Package pdftex.def Info: Sawada_no_merging_v3/energy_bin_complet.png  used on input line 1022.
 (pdftex.def)             Requested size: 218.51521pt x 102.24594pt.
-<Sawada_no_merging_v3/energy_bin_noise.png, id=304, 641.39626pt x 300.12125pt>
+<Sawada_no_merging_v3/energy_bin_noise.png, id=310, 641.39626pt x 300.12125pt>
 File: Sawada_no_merging_v3/energy_bin_noise.png Graphic file (type png)
 <use Sawada_no_merging_v3/energy_bin_noise.png>
-Package pdftex.def Info: Sawada_no_merging_v3/energy_bin_noise.png  used on input line 1024.
+Package pdftex.def Info: Sawada_no_merging_v3/energy_bin_noise.png  used on input line 1029.
 (pdftex.def)             Requested size: 218.51521pt x 102.24594pt.
-<Sawada_no_merging_v3/pts14mel.png, id=308, 588.1975pt x 390.45876pt>
+<Sawada_no_merging_v3/pts14mel.png, id=314, 588.1975pt x 390.45876pt>
 File: Sawada_no_merging_v3/pts14mel.png Graphic file (type png)
 <use Sawada_no_merging_v3/pts14mel.png>
-Package pdftex.def Info: Sawada_no_merging_v3/pts14mel.png  used on input line 1048.
+Package pdftex.def Info: Sawada_no_merging_v3/pts14mel.png  used on input line 1054.
 (pdftex.def)             Requested size: 145.68144pt x 96.70288pt.
-<Sawada_no_merging_v3/pts14s1.png, id=309, 588.1975pt x 390.45876pt>
+<Sawada_no_merging_v3/pts14s1.png, id=315, 588.1975pt x 390.45876pt>
 File: Sawada_no_merging_v3/pts14s1.png Graphic file (type png)
 <use Sawada_no_merging_v3/pts14s1.png>
-Package pdftex.def Info: Sawada_no_merging_v3/pts14s1.png  used on input line 1055.
+Package pdftex.def Info: Sawada_no_merging_v3/pts14s1.png  used on input line 1061.
 (pdftex.def)             Requested size: 145.68144pt x 96.70288pt.
-<Sawada_no_merging_v3/pts14s2.png, id=310, 588.1975pt x 390.45876pt>
+<Sawada_no_merging_v3/pts14s2.png, id=316, 588.1975pt x 390.45876pt>
 File: Sawada_no_merging_v3/pts14s2.png Graphic file (type png)
 <use Sawada_no_merging_v3/pts14s2.png>
-Package pdftex.def Info: Sawada_no_merging_v3/pts14s2.png  used on input line 1062.
+Package pdftex.def Info: Sawada_no_merging_v3/pts14s2.png  used on input line 1068.
 (pdftex.def)             Requested size: 145.68144pt x 96.70288pt.
-<Sawada_no_merging_v3/pts14clusters.png, id=311, 641.39626pt x 520.94624pt>
+<Sawada_no_merging_v3/pts14clusters.png, id=317, 641.39626pt x 520.94624pt>
 File: Sawada_no_merging_v3/pts14clusters.png Graphic file (type png)
 <use Sawada_no_merging_v3/pts14clusters.png>
-Package pdftex.def Info: Sawada_no_merging_v3/pts14clusters.png  used on input line 1074.
+Package pdftex.def Info: Sawada_no_merging_v3/pts14clusters.png  used on input line 1080.
 (pdftex.def)             Requested size: 218.51521pt x 177.47708pt.
-<Sawada_no_merging_v3/pts14cluster_attrib.png, id=312, 641.39626pt x 520.94624pt>
+<Sawada_no_merging_v3/pts14cluster_attrib.png, id=318, 641.39626pt x 520.94624pt>
 File: Sawada_no_merging_v3/pts14cluster_attrib.png Graphic file (type png)
 <use Sawada_no_merging_v3/pts14cluster_attrib.png>
-Package pdftex.def Info: Sawada_no_merging_v3/pts14cluster_attrib.png  used on input line 1081.
+Package pdftex.def Info: Sawada_no_merging_v3/pts14cluster_attrib.png  used on input line 1087.
 (pdftex.def)             Requested size: 218.51521pt x 177.47708pt.
-<Sawada_no_merging_v3/pts 14 GT.png, id=313, 641.39626pt x 520.94624pt>
+<Sawada_no_merging_v3/pts 14 GT.png, id=319, 641.39626pt x 520.94624pt>
 File: Sawada_no_merging_v3/pts 14 GT.png Graphic file (type png)
 <use Sawada_no_merging_v3/pts 14 GT.png>
-Package pdftex.def Info: Sawada_no_merging_v3/pts 14 GT.png  used on input line 1093.
+Package pdftex.def Info: Sawada_no_merging_v3/pts 14 GT.png  used on input line 1101.
 (pdftex.def)             Requested size: 218.51521pt x 177.47708pt.
-<Sawada_no_merging_v3/pts 14 RANSAC.png, id=314, 641.39626pt x 721.69624pt>
+<Sawada_no_merging_v3/pts 14 RANSAC.png, id=320, 641.39626pt x 721.69624pt>
 File: Sawada_no_merging_v3/pts 14 RANSAC.png Graphic file (type png)
 <use Sawada_no_merging_v3/pts 14 RANSAC.png>
-Package pdftex.def Info: Sawada_no_merging_v3/pts 14 RANSAC.png  used on input line 1100.
+Package pdftex.def Info: Sawada_no_merging_v3/pts 14 RANSAC.png  used on input line 1108.
 (pdftex.def)             Requested size: 218.51521pt x 245.86902pt.
-[17 <./Sawada_no_merging_v3/energy_bin_complet.png> <./Sawada_no_merging_v3/energy_bin_noise.png> <./Sawada_no_merging_v3/pts14mel.png> <./Sawada_no_merging_v3/pts14s1.png> <./Sawada_no_merging_v3/pts14s2.png>] [18 <./Sawada_no_merging_v3/pts14clusters.png> <./Sawada_no_merging_v3/pts14cluster_attrib.png> <./Sawada_no_merging_v3/pts 14 GT.png> <./Sawada_no_merging_v3/pts 14 RANSAC.png>]
-Overfull \hbox (12.2563pt too wide) in paragraph at lines 1153--1161
+ [17 <./Sawada_no_merging_v3/energy_bin_complet.png> <./Sawada_no_merging_v3/energy_bin_noise.png> <./Sawada_no_merging_v3/pts14mel.png> <./Sawada_no_merging_v3/pts14s1.png> <./Sawada_no_merging_v3/pts14s2.png>] [18 <./Sawada_no_merging_v3/pts14clusters.png> <./Sawada_no_merging_v3/pts14cluster_attrib.png> <./Sawada_no_merging_v3/pts 14 GT.png> <./Sawada_no_merging_v3/pts 14 RANSAC.png>]
+Overfull \hbox (12.2563pt too wide) in paragraph at lines 1165--1173
 []\T1/lmr/m/n/10.95 Dans l'al-go-rithme de Sa-wada, l'etape M consiste a maxi-mi-ser l'es-pe-rance de la log-vraisemblance
  []
 
@@ -622,20 +624,20 @@ LaTeX2e <2025-11-01>
 L3 programming layer <2026-04-28>
  ***********
 Package rerunfilecheck Info: File `main.out' has not changed.
-(rerunfilecheck)             Checksum: 3E9FA9CD9186F5D92A700DC09290E1DB;7323.
+(rerunfilecheck)             Checksum: 7DFFED0F6C4554166660A9BD48C6DD98;7496.
  ) 
 Here is how much of TeX's memory you used:
- 13362 strings out of 467683
- 217419 string characters out of 5412786
- 649895 words of memory out of 5000000
- 42143 multiletter control sequences out of 15000+600000
+ 13364 strings out of 467683
+ 217439 string characters out of 5412786
+ 650142 words of memory out of 5000000
+ 42144 multiletter control sequences out of 15000+600000
  697228 words of font info for 90 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  75i,9n,79p,562b,716s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/euler/eufm10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx12.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx8.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmcsc10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmex10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmi10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmi6.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmi8.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmib10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr12.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr17.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr6.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr8.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmri10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmsy10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmsy6.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmsy8.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmtt10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/symbols/msbm10.pfb>
-Output written on main.pdf (21 pages, 6846845 bytes).
+Output written on main.pdf (21 pages, 6873425 bytes).
 PDF statistics:
- 466 PDF objects out of 1000 (max. 8388607)
- 78 named destinations out of 1000 (max. 500000)
- 353 words of extra memory for PDF output out of 10000 (max. 10000000)
+ 472 PDF objects out of 1000 (max. 8388607)
+ 79 named destinations out of 1000 (max. 500000)
+ 361 words of extra memory for PDF output out of 10000 (max. 10000000)
 

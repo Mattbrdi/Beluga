@@ -982,8 +982,10 @@ quantitative, en comparant les TDOA obtenus a partir des sources reconstruites
 sur la partie \ref{subsec:fusionMasque}). Cette visualisation permet d'evaluer 
 si la separation conserve suffisamment la coherence temporelle entre microphones pour fournir
 une premiere estimation fiable des retards. De meme, on trace les TDOA obtenus dans la situation avec bruit.
-figure~\ref{fig:sawada-tdoa-correlation_noised} 
+figure~\ref{fig:sawada-tdoa-correlation_noised}.
 
+On notera que les TDOAS obtenu lors des essaies en conditions réels de mai 2026 ont des variances et des ecarts 
+à la ground truth d'environ 3-4 samples. Ainsi, les résultats obtenus ici sont tout à fait satisfaisants. 
 
 
 \begin{figure}[htbp]
@@ -995,7 +997,7 @@ figure~\ref{fig:sawada-tdoa-correlation_noised}
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.95\linewidth]{Sawada_no_merging_v3/train_sawada_tdoa_correlation_errors_noised.png}
-  \caption{Analyse quantitative des TDOA estimes par correlation sur les sources separees.}
+  \caption{Analyse quantitative des TDOA estimes par correlation sur les sources separees en présence de bruit.}
   \label{fig:sawada-tdoa-correlation_noised}
 \end{figure}
 
@@ -1006,9 +1008,12 @@ Il y a plusieurs source d'erreurs que l'on essaie d'explorer ici.
 \paragraph{Mauvaise estimations des bins ayant du signal quand il y a du bruit}~\\ 
 
 On a ici utilisé la méthode décrite dans la partie~\ref{subsubsec:energieBin}. Cela fonctionne bien 
-sans bruit mais sans bruit on observe, comme on peut le voir 
+sans bruit et avec un peu de bruit mais on constate quand meme plusieurs zone considerée qui
+ne devraient pas l'être. La selection de bins peut sans doute être améliorer, comme on peut le voir 
 figure~\ref{fig:energy-bin-noise}. Cela motive donc l'utilisation 
-d'un réseau de neuronne pour cette tache qui s'apprend bien mais reste loin d'être triviale
+d'un réseau de neuronne pour cette tache qui s'apprend bien mais reste loin d'être triviale, ou encore
+de jouer avec les hyperparamètres, notamment le nombre de bins collé nécessaire pour considerer une zone 
+comme valable.
 
 \begin{figure}[htbp]
   \centering
@@ -1039,7 +1044,8 @@ centraux. On regarde alors au niveau du RANSAC figure~\ref{fig:RANSAC-pts14}. En
 avec les droite "Ground Truth", les deux droites trouvés par RANSAC correspondent en réalité 
 à la meme ground truth. Ainsi, la seconde droite est totalement ignoré. Cela n'arrive pas souvent 
 que ca soit sans bruit ou avec bruit mais peut tout de meme arrivé. Augmenter le nombre d'itération 
-du RANSAC peut améliorer cela.
+du RANSAC peut améliorer cela. A priori cela est du à la mauvaise selection de bin, ou bien si un trop gros
+nombre de bins se supperposent entre les deux sources. 
 
 \begin{figure}[htbp]\label{fig:spectro-pts14}
   \centering
@@ -1082,7 +1088,9 @@ du RANSAC peut améliorer cela.
     \vspace{0.1cm}
     \small Clusters attribues.
   \end{minipage}
-  \caption{Extrait 14 : clusters avant et apres attribution.}
+  \caption{Extrait 14 : clusters de bins temps-fréquence dans $ C^4$ pour 
+  f = 2250Hz avant et apres attribution à une source. Un cluster plutôt très propre n'a pas été conservé après 
+  le RANSAC}
   \label{fig:pts14-cluster-attribution}
 \end{figure}
 
@@ -1101,7 +1109,8 @@ du RANSAC peut améliorer cela.
     \vspace{0.1cm}
     \small Droite estimee par RANSAC.
   \end{minipage}
-  \caption{Extrait 14 : comparaison entre la reference et la droite estimee par RANSAC.}
+  \caption{Extrait 14 : comparaison entre la reference et la droite estimee par RANSAC. Une des droites est 
+  bien identifié mais la seconde n'est pas obtenue correctement}
   \label{fig:pts14-ransac-gt}
 \end{figure}
 
@@ -1119,6 +1128,9 @@ valeurs de reference disponibles dans le dataset. Cette validation permet
 d'evaluer si la separation temps-frequence ameliore effectivement l'estimation
 spatiale, en reduisant l'influence des bins domines par le bruit ou par les
 autres sources.
+
+
+\section{Analyse des donnees 2026}
 
 
 \section{Conclusion}
