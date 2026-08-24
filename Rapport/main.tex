@@ -212,6 +212,105 @@ On notera que l'on décide de ne pas faire de whitening sur les données. En eff
 clustering directionel et en normalisant les données, l'impact du whitening est limité. Il est donc préférable 
 de conserver la structure de retard dans les données. 
 
+\subsubsection{Estimation du nombre de sources}
+
+Avant de lancer la separation, il est utile d'estimer combien de sources sont
+presentes dans le bloc audio considere. Cela permet déjà de renseigner ce paramètre qui 
+est indispensable à l'algorithme de séparation de source pour le moment. Mais également de ne pas passer 
+dans la pipeline de séparation de source si ca n'est pas nécessaire. L'idee generale est d'exploiter la
+dimension spatiale occupee par les observations multicanales dans le plan
+temps-frequence. Si plusieurs sources dominent des bins differents, les vecteurs
+normalises
+\[
+  \tilde{\mathbf{x}}_{f,t}
+    =
+    \frac{\mathbf{x}_{f,t}}
+         {\|\mathbf{x}_{f,t}\|_2+\epsilon}
+\]
+ne se repartissent pas autour d'une seule direction, mais autour de plusieurs
+directions complexes. Le nombre de sources peut donc etre relie au rang effectif
+de la distribution spatiale des bins actifs.
+
+Pour une frequence $f$, on ne conserve que les trames selectionnees par le
+masque temps-frequence. On construit ensuite la matrice de covariance
+directionnelle :
+\[
+  \mathbf{R}_f
+    =
+    \frac{1}{|\mathcal{T}_f|}
+    \sum_{t\in\mathcal{T}_f}
+    \tilde{\mathbf{x}}_{f,t}
+    \tilde{\mathbf{x}}_{f,t}^{H}.
+\]
+
+Les valeurs propres de cette matrice sont triees par ordre decroissant :
+\[
+  \lambda_1(f)\geq \lambda_2(f)\geq \cdots \geq \lambda_M(f).
+\]
+
+Si une seule direction spatiale domine, seule la premiere valeur propre est
+importante. Si plusieurs directions independantes sont presentes, plusieurs
+valeurs propres restent significatives. L'estimation du nombre de sources se
+ramene donc a choisir combien de valeurs propres doivent etre considerees comme
+porteuses de signal.
+
+Une premiere methode consiste a utiliser un seuil relatif. On compte le nombre
+de valeurs propres plus grandes qu'une fraction de la plus grande valeur propre :
+\[
+  \hat{K}_f
+    =
+    \#\left\{
+      i :
+      \lambda_i(f) > \rho\,\lambda_1(f)
+    \right\}.
+\]
+Cette methode est simple et rapide, mais elle depend fortement du seuil
+$\rho$. Si une source est beaucoup plus faible qu'une autre, sa valeur propre
+peut passer sous le seuil et ne pas etre comptee.
+
+Une deuxieme methode repose sur le saut spectral, ou \emph{eigengap}. On cherche
+un fort changement d'echelle entre deux valeurs propres consecutives :
+\[
+  r_i(f)
+    =
+    \frac{\lambda_i(f)}
+         {\lambda_{i+1}(f)+\epsilon}.
+\]
+Le nombre de sources est alors associe a l'indice du plus grand saut, si ce saut
+est suffisamment marque. Cette methode est pertinente lorsque les directions
+associees aux sources se separent nettement du sous-espace de bruit, mais elle
+peut devenir instable lorsque le spectre decroit progressivement.
+
+Une troisieme methode utilise la variance expliquee. On choisit le plus petit
+nombre $\hat{K}_f$ tel que les $\hat{K}_f$ premieres valeurs propres expliquent
+une proportion fixee de l'energie spectrale totale :
+\[
+  \hat{K}_f
+    =
+    \min
+    \left\{
+      K :
+      \frac{\sum_{i=1}^{K}\lambda_i(f)}
+           {\sum_{i=1}^{M}\lambda_i(f)}
+      \geq \eta
+    \right\}.
+\]
+Cette methode interprete le nombre de sources comme une dimension effective :
+on garde assez d'axes principaux pour expliquer, par exemple, $90\%$ de la
+variance directionnelle.
+
+L'estimation est faite frequence par frequence, puis les estimations valides
+sont agregees pour obtenir un nombre global de sources sur le bloc. Les
+frequences contenant trop peu de bins actifs sont ignorees, car leur covariance
+est trop peu fiable. L'agregation peut etre faite par mediane, par mode ou par
+quantile eleve afin de rester prudente lorsque certaines frequences ne voient
+qu'une partie des sources.
+
+Pour le moment, la methode par variance expliquee semble la plus robuste dans
+nos essais. Elle evite de fixer un seuil directement sur une valeur propre
+absolue ou relative, et elle se comporte mieux lorsque l'energie des sources est
+repartie de maniere desequilibree. Cette partie pourrait toutefois etre
+approfondie : on pourrait imaginer un estimateur plus sophistique.
 \subsubsection{Masque temps-frequence par defaut sans reseau de neuronne} \label{subsubsec:energieBin}
 
 Lorsque l'on ne dispose pas d'un masque fourni par un reseau de neurones,
@@ -835,7 +934,7 @@ $d_{m,k}$ entre la source $k$ et le microphone $m$ :
 \]
 ou $g_{m,k}$ represente un gain eventuel et $b_m[n]$ regroupe les bruits
 ajoutes au microphone $m$ qui peuvent etre gaussien ou bien impulsifs. Les retards $d_{m,k}$ etant connus, 
-les TDOA de reference sont directement disponibles :
+les TDOA de reference sont directement disponibles : 
 \[
   \Delta\tau_{i,j,k}^{\mathrm{ref}}
     =
