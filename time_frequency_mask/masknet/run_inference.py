@@ -24,6 +24,7 @@ from time_frequency_mask.masknet.models.spectro_mask_net import SpectroMaskNet
 from time_frequency_mask.data_generation.models.mask import AudioMask
 from time_frequency_mask.data_generation.core.preprocess import bandpass_filter
 from time_frequency_mask.data_generation.io.data_parser import read_wav_file
+from time_frequency_mask.masknet.dataset import build_spectrogram_features, _center_pad
 
 # CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\runs\spectro_mask_net\version_12\checkpoints\epoch=111-step=3584.ckpt"
 # CKPT_PATH = r"C:\Users\amine\Desktop\Canada\Beluga\runs\spectro_mask_net\version_16\epoch=155-step=17316.ckpt"
@@ -38,7 +39,12 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Synthetic beluga mask generator")
     parser.add_argument("--checkpoint-path", help="Provide checkpoint path",default=CKPT_PATH, type=str)
     parser.add_argument("--wav-path" , help="provide wav path", default=WAV_PATH, type=str)
-
+    parser.add_argument("--phase-aware", action="store_true",
+            help=(
+                "Use 16 input channels: four magnitudes and real/imaginary IPD "
+                "features for all six microphone pairs."
+            ),
+        )
     return parser.parse_args()
 
 def preprocess_waveform(waveform : NDArray[np.float64]):
@@ -73,10 +79,10 @@ def preprocess_torch(Ds : NDArray[np.float64], device):
     x = Ds.unsqueeze(0).to(device)  # shape: [1, C, H, W]
     return x 
 
-def load_model(checkpoint_path = CKPT_PATH):
+def load_model(model, checkpoint_path = CKPT_PATH):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     
-    model = SpectroMaskLightningModule.load_from_checkpoint(checkpoint_path, model=SpectroMaskNet())
+    model = SpectroMaskLightningModule.load_from_checkpoint(checkpoint_path, model=model)
     model.to(device)
     model.eval()
     return model
@@ -84,51 +90,15 @@ def load_model(checkpoint_path = CKPT_PATH):
 def get_mask_from_array(audio_array : list[NDArray[np.float64]], model, debug=False) -> NDArray[np.uint8]:
     N = audio_array.shape[1]
 
-    Ds = []
+    is_phase_aware = model.model.n_channels == 16
 
-    freqs_list = []
+    features, frequencies, times = build_spectrogram_features(audio_array, phase_aware=is_phase_aware)
+    n_freqs, n_times = features.shape[-2:]
 
-    times_list = []
-
-    for canal in audio_array:
-        # canal = preprocess_waveform(canal)
-
-        if is_db:
-            freqs, times, D = scipy_db_spectrogram(canal)
-        else:
-            freqs, times, D = scipy_spectrogram(canal)
-        
-        freqs, D = frequency_band(freqs, D)
-
-        D = np.abs(D)
-        if np.max(np.abs(D)) > 0:
-            D = D - np.min(D)
-            D = D / np.percentile(np.abs(D),99)
-            D = np.clip(D, 0, 1)
-
-        # D = np.clip(D, -1,1)
-
-        n_freqs, n_times = D.shape
-        if D.shape[0] > IMAGE_SIZE or D.shape[1] > IMAGE_SIZE:
-            raise ValueError(f"incorrect shape got {D.shape} greater or equal than {(IMAGE_SIZE, IMAGE_SIZE)}")
-
-        diffX = IMAGE_SIZE - n_times 
-        diffY = IMAGE_SIZE - n_freqs
-
-        if diffX < 0 or diffY < 0:
-            raise ValueError(f"D shape {D.shape} is larger than IMAGE_SIZE {IMAGE_SIZE}")
-
-        D = np.pad(D, ((diffY // 2, diffY - diffY // 2), (diffX // 2, diffX - diffX // 2)))
-
-        Ds.append(D)
-        freqs_list.append(freqs)
-        times_list.append(times)
-
-    Ds = np.stack(Ds, axis=0)
+    features = _center_pad(features)
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    x = preprocess_torch(Ds, device)
-
+    x = preprocess_torch(features, device)
     with torch.no_grad():
         logits = model(x)
         probs = torch.sigmoid(logits)  # binary/multilabel
@@ -140,6 +110,8 @@ def get_mask_from_array(audio_array : list[NDArray[np.float64]], model, debug=Fa
         print("prediction:", probs > 0.5)
 
     masks_np = masks.squeeze(1).cpu().numpy()
+
+
     diffX = IMAGE_SIZE - n_times
     diffY = IMAGE_SIZE - n_freqs
 
@@ -208,7 +180,11 @@ def main():
     checkpoint_path = args.checkpoint_path
     wav_path = args.wav_path
 
-    model = load_model()
+    if args.phase_aware:
+        model = SpectroMaskNet(n_channels=16)
+    else:
+        model = SpectroMaskNet()
+    model = load_model(model, checkpoint_path)
 
     audio_array, sampling_rate = read_wav_file(wav_path)
     # N = (HOP_LENGTH*255) + N_FFT    
