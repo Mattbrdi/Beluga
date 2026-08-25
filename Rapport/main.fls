@@ -272,6 +272,20 @@ INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3_noised.png
 INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3_noised.png
 INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3_noised.png
 INPUT .\Sawada_no_merging_v3\train_sawada_no_merging_v3_noised.png
+INPUT .\Sawada_no_merging_v3\RANSAC plot centroide avec bruit.png
+INPUT .\Sawada_no_merging_v3\RANSAC plot centroide avec bruit.png
+INPUT .\Sawada_no_merging_v3\RANSAC plot centroide avec bruit.png
+INPUT .\Sawada_no_merging_v3\RANSAC plot centroide avec bruit.png
+INPUT .\Sawada_no_merging_v3\RANSAC plot centroide avec bruit.png
+INPUT .\Sawada_no_merging_v3\RANSAC plot centroide avec bruit.png
+INPUT .\Sawada_no_merging_v3\RANSAC plot centroide avec bruit.png
+INPUT .\Sawada_no_merging_v3\RANSAC plot centroid attrib.png
+INPUT .\Sawada_no_merging_v3\RANSAC plot centroid attrib.png
+INPUT .\Sawada_no_merging_v3\RANSAC plot centroid attrib.png
+INPUT .\Sawada_no_merging_v3\RANSAC plot centroid attrib.png
+INPUT .\Sawada_no_merging_v3\RANSAC plot centroid attrib.png
+INPUT .\Sawada_no_merging_v3\RANSAC plot centroid attrib.png
+INPUT .\Sawada_no_merging_v3\RANSAC plot centroid attrib.png
 INPUT .\Sawada_no_merging_v3\train_sawada_tdoa_correlation_errors.png
 INPUT .\Sawada_no_merging_v3\train_sawada_tdoa_correlation_errors.png
 INPUT .\Sawada_no_merging_v3\train_sawada_tdoa_correlation_errors.png
@@ -349,6 +363,69 @@ INPUT .\Sawada_no_merging_v3\pts 14 RANSAC.png
 INPUT .\Sawada_no_merging_v3\pts 14 RANSAC.png
 INPUT .\Sawada_no_merging_v3\pts 14 RANSAC.png
 INPUT .\Sawada_no_merging_v3\pts 14 RANSAC.png
+INPUT .\Results_2026\plan2026.png
+INPUT .\Results_2026\plan2026.png
+INPUT .\Results_2026\plan2026.png
+INPUT .\Results_2026\plan2026.png
+INPUT .\Results_2026\plan2026.png
+INPUT .\Results_2026\plan2026.png
+INPUT .\Results_2026\plan2026.png
+INPUT .\Results_2026\position_p13_HF_2D.png
+INPUT .\Results_2026\position_p13_HF_2D.png
+INPUT .\Results_2026\position_p13_HF_2D.png
+INPUT .\Results_2026\position_p13_HF_2D.png
+INPUT .\Results_2026\position_p13_HF_2D.png
+INPUT .\Results_2026\position_p13_HF_2D.png
+INPUT .\Results_2026\position_p13_HF_2D.png
+INPUT .\Results_2026\position_p13_HF_3D.png
+INPUT .\Results_2026\position_p13_HF_3D.png
+INPUT .\Results_2026\position_p13_HF_3D.png
+INPUT .\Results_2026\position_p13_HF_3D.png
+INPUT .\Results_2026\position_p13_HF_3D.png
+INPUT .\Results_2026\position_p13_HF_3D.png
+INPUT .\Results_2026\position_p13_HF_3D.png
+INPUT .\Results_2026\position_p13_LF_useh4F.png
+INPUT .\Results_2026\position_p13_LF_useh4F.png
+INPUT .\Results_2026\position_p13_LF_useh4F.png
+INPUT .\Results_2026\position_p13_LF_useh4F.png
+INPUT .\Results_2026\position_p13_LF_useh4F.png
+INPUT .\Results_2026\position_p13_LF_useh4F.png
+INPUT .\Results_2026\position_p13_LF_useh4F.png
+INPUT .\Results_2026\position_p13_LF_useh4T.png
+INPUT .\Results_2026\position_p13_LF_useh4T.png
+INPUT .\Results_2026\position_p13_LF_useh4T.png
+INPUT .\Results_2026\position_p13_LF_useh4T.png
+INPUT .\Results_2026\position_p13_LF_useh4T.png
+INPUT .\Results_2026\position_p13_LF_useh4T.png
+INPUT .\Results_2026\position_p13_LF_useh4T.png
+INPUT .\Results_2026\position_p12_HF_2D.png
+INPUT .\Results_2026\position_p12_HF_2D.png
+INPUT .\Results_2026\position_p12_HF_2D.png
+INPUT .\Results_2026\position_p12_HF_2D.png
+INPUT .\Results_2026\position_p12_HF_2D.png
+INPUT .\Results_2026\position_p12_HF_2D.png
+INPUT .\Results_2026\position_p12_HF_2D.png
+INPUT .\Results_2026\position_p12_HF_3D.png
+INPUT .\Results_2026\position_p12_HF_3D.png
+INPUT .\Results_2026\position_p12_HF_3D.png
+INPUT .\Results_2026\position_p12_HF_3D.png
+INPUT .\Results_2026\position_p12_HF_3D.png
+INPUT .\Results_2026\position_p12_HF_3D.png
+INPUT .\Results_2026\position_p12_HF_3D.png
+INPUT .\Results_2026\position_p12_LF_useh4F.png
+INPUT .\Results_2026\position_p12_LF_useh4F.png
+INPUT .\Results_2026\position_p12_LF_useh4F.png
+INPUT .\Results_2026\position_p12_LF_useh4F.png
+INPUT .\Results_2026\position_p12_LF_useh4F.png
+INPUT .\Results_2026\position_p12_LF_useh4F.png
+INPUT .\Results_2026\position_p12_LF_useh4F.png
+INPUT .\Results_2026\position_p12_LF_useh4T.png
+INPUT .\Results_2026\position_p12_LF_useh4T.png
+INPUT .\Results_2026\position_p12_LF_useh4T.png
+INPUT .\Results_2026\position_p12_LF_useh4T.png
+INPUT .\Results_2026\position_p12_LF_useh4T.png
+INPUT .\Results_2026\position_p12_LF_useh4T.png
+INPUT .\Results_2026\position_p12_LF_useh4T.png
 INPUT main.aux
 INPUT .\main.out
 INPUT .\main.out

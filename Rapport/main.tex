@@ -760,8 +760,7 @@ La pente estimee pour le microphone $m$ a une interpretation directe :
       
       En revanche, les tdoas estimé à partir de la pente recupérée dans 
       le RANSAC sont souvent mauvais en comparaison des autres methodes. Cela est donc utile à améliorer la cohérence 
-      des mask mais ne sert pas directement au calcul de TDOAS. Il servent principalement à verifier que l'on ne s'est
-      pas totalement trompé. On peut visualiser l'attribution des centroides
+      des mask mais ne sert pas directement au calcul de TDOAS. On peut visualiser l'attribution des centroides
       et la droite trouvé par le RANSAC figure~\ref{fig:droite-RANSAC}
         \begin{figure}[htbp]
         \centering
@@ -956,6 +955,12 @@ masques obtenus suivent les structures spectrales principales du melange.
 D'un point de vue qualitatif, la séparation est relativement bonne. 
 On rajoute ensuite du bruit sur le melange pour un snr qui varie entre 0 et 10 dB. 
 La figure~\ref{fig:sawada-tf-separation_noised} illuste les resultats obtenus. 
+La figure~\ref{fig:ransac-centroid-noised} quant à elle montre l'attribution des centroïdes
+dans le cas bruité. Contrairement au cas sans bruit, les droites de phase sont
+tres difficiles a percevoir a l'oeil nu : le bruit rend les trajectoires moins
+nettes et les points semblent beaucoup moins organises. L'algorithme RANSAC
+parvient toutefois a separer systematiquement les clusters appartenant a la
+bonne source, ce qui n'etait pas evident visuellement.
 
 \begin{figure}[htbp]
   \centering
@@ -965,13 +970,34 @@ La figure~\ref{fig:sawada-tf-separation_noised} illuste les resultats obtenus.
   \label{fig:sawada-tf-separation}
 \end{figure}
 
-
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.95\linewidth]{Sawada_no_merging_v3/train_sawada_no_merging_v3_noised.png}
   \caption{Resultats de separation de sources dans le plan temps-frequence avec bruit. à gauche 
   la source 1 et 2, au millieu le melange et à droite la source estimé 1 et 2.}
   \label{fig:sawada-tf-separation_noised}
+\end{figure}
+
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Sawada_no_merging_v3/RANSAC plot centroide avec bruit.png}
+    \vspace{0.1cm}
+    \small Centroïdes en presence de bruit.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Sawada_no_merging_v3/RANSAC plot centroid attrib.png}
+    \vspace{0.1cm}
+    \small Droite obtenue après l'attribution obtenue par RANSAC.
+  \end{minipage}
+  \caption{L'attribution est correct, pourtant elle est loin d'etre evidente à la main.
+  Cela fonctionne notamment car il n'y a pas trop de bin qui ne représente pas de signal grace à la 
+  préselection des bins que l'on fait dans l'algorithme.}
+  \label{fig:ransac-centroid-noised}
 \end{figure}
 
 
@@ -1131,6 +1157,85 @@ autres sources.
 
 
 \section{Analyse des donnees 2026}
+
+\subsection{Introduction}
+
+\begin{figure}[htbp]
+  \centering
+  \includegraphics[width=0.9\linewidth]{Results_2026/plan2026.png}
+  \caption{Plan des donnees 2026.}
+  \label{fig:plan-2026}
+\end{figure}
+
+\subsection{Comparaison des differentes methodes}
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}{0.24\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/position_p13_HF_2D.png}
+    \vspace{0.1cm}
+    \small HF 2D.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.24\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/position_p13_HF_3D.png}
+    \vspace{0.1cm}
+    \small HF 3D.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.24\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/position_p13_LF_useh4F.png}
+    \vspace{0.1cm}
+    \small LF use H4 faux.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.24\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/position_p13_LF_useh4T.png}
+    \vspace{0.1cm}
+    \small LF use H4 vrai.
+  \end{minipage}
+  \caption{Comparaison des differentes methodes pour la position p13.}
+  \label{fig:position-p13-methods}
+\end{figure}
+
+\begin{figure}[htbp]
+  \centering
+  \begin{minipage}{0.24\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/position_p12_HF_2D.png}
+    \vspace{0.1cm}
+    \small HF 2D.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.24\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/position_p12_HF_3D.png}
+    \vspace{0.1cm}
+    \small HF 3D.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.24\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/position_p12_LF_useh4F.png}
+    \vspace{0.1cm}
+    \small LF use H4 faux.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.24\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/position_p12_LF_useh4T.png}
+    \vspace{0.1cm}
+    \small LF use H4 vrai.
+  \end{minipage}
+  \caption{Comparaison des differentes methodes pour la position p12.}
+  \label{fig:position-p12-methods}
+\end{figure}
+
+\subsection{Point ne fonctionnant pas bien}
 
 
 \section{Conclusion}
