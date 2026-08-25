@@ -11,7 +11,8 @@
 \usepackage{graphicx}
 \usepackage{hyperref}
 \usepackage{xcolor}
-
+\usepackage{float}
+\usepackage{graphicx}
 \geometry{margin=2.5cm}
 \hypersetup{
   colorlinks=true,
@@ -1162,20 +1163,86 @@ autres sources.
 On regarde à présent les résultats de la pipeline précedente sur les données de 2026 (cf protocole pour voir 
 comment ont été obtenus ces données). Ces données ne permettent pas vraiment de tester la séparation de source 
 mais permettent, dans le cas ou l'on a une source dont on connais la localisation de verifier si la pipeline de
-detection trouve la bonne position. On a des données pour les point 7 à 20 selon la plan donné par
+detection trouve la bonne position. On a des données pour les point 7 à 20 selon la plan donné par 
 \ref{fig:plan-2026}. 
-\begin{figure}[htbp]
+Chaque point est caracterisé par deux enregistrement de 100 secondes (un pour chaque tétrahèdre) que l'on a synchronisé
+à la main. Ainsi, la problématique de différence de temps d'arrivé entre les deux tétrahèdre n'est absolument pas 
+traité ici. 
+\begin{figure}[H]
   \centering
   \includegraphics[width=0.9\linewidth]{Results_2026/plan2026.png}
   \caption{Plan des donnees 2026.}
   \label{fig:plan-2026}
 \end{figure}
 
-\paragraph{1ers résultats}
+\paragraph{1ers résultats }~\\
 
-\subsection{Comparaison des differentes methodes}
+L'estimation de la position du bateau varie en fonction de la position du bateau. Ainsi, parmis toutes
+nos positions testées, on obtient des résultats satisfaisant pour les positions 7,9,10,11,12,13. 
+On a une estimation totalement cassé à cause du bruit d'un second bateau pour le point 8 et nous avons des
+estimations biaisé sur les points du début d'après-midi 14,15,16,17,18,19,20. Le meilleur point est le point
+numéro 7 tandis que le plus mauvais sur lesquels l'algorithme fonctionne correctement est le point 11. Pour se faire 
+une idée, on montre figure \ref{fig:directions-p7-p11} l'allure des résultats. Aussi, attention a ne pas interpreter
+l'entiereté de
+la dispersion des directions pour de la variance, sur le point 7 par exemple. Le bateau dérive donc la Ground 
+Truth bouge également. Ainsi, on visualise figure \ref{fig:directions-temp-p7-p11} les directions donnée colorées
+en fonction du temps. Ainsi on estime mieux la variance lié à l'algorithme. Enfin, certaines directions semble 
+totalement raté : il faut garder à l'esprit que le début et la fin de chaque extrait audio ne contient pas nécessairement
+du signal. Nous l'avons tout de meme conservé sur les plots afin de pouvoir visualiser la direction d'une potentiel 
+seconde source de bruit pouvant nous servir dans l'interprétation de certaines obserevations. 
 
-\begin{figure}[htbp]
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.48\linewidth]{Results_2026/synthese_high_fusion_2D.png}
+  \caption{Synthese des premiers resultats avec la high fusion, on visualise la distance mediane à la ground truth}
+  \label{fig:synthese-high-fusion-2026}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/direction_p7_HF_2D.png}
+    \vspace{0.1cm}
+    \small Direction estimee pour p7.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/direction_p11_HF_2D.png}
+    \vspace{0.1cm}
+    \small Direction estimee pour p11.
+  \end{minipage}
+  \caption{Comparaison des directions estimees pour les points p7 (meilleur estimation) 
+  et p11 (pire estimations) en high fusion}
+  \label{fig:directions-p7-p11}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/direction_temp_p7_HF_2D.png}
+    \vspace{0.1cm}
+    \small Evolution temporelle de la direction pour p7.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/direction_temp_p11_HF_2D.png}
+    \vspace{0.1cm}
+    \small Evolution temporelle de la direction pour p11.
+  \end{minipage}
+  \caption{Evolution temporelle des directions estimees pour les points p7 et p11.}
+  \label{fig:directions-temp-p7-p11}
+\end{figure}
+
+\subsection{Comparaison des differentes methodes d'estimation de position}
+Il ya globalement 4 méthodes implementées qui permettent d'estimer la positions des belugas à partir des TDOA
+mesuré. La High Fusion 3D et 2D (c'est à dire en projetant ou non sur le plan du sol) 
+et la low fusion en utilsant h4 (le 4e microphone situé en haut du tétrahèdre) ou non. 
+
+\begin{figure}[htbp]\label{position p-13}
   \centering
   \begin{minipage}{0.24\linewidth}
     \centering
@@ -1184,7 +1251,7 @@ detection trouve la bonne position. On a des données pour les point 7 à 20 sel
     \small HF 2D.
   \end{minipage}
   \hfill
-  \begin{minipage}{0.24\linewidth}
+  \begin{minipage}{0.24\linewidth}\label{position-p12}
     \centering
     \includegraphics[width=\linewidth]{Results_2026/position_p13_HF_3D.png}
     \vspace{0.1cm}
