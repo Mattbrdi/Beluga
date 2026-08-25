@@ -40,12 +40,11 @@ plusieurs sources acoustiques puis a estimer leurs differences de temps
 d'arrivee entre microphones. Le pipeline s'appuie d'abord sur une selection de
 bins dans le plan temps-frequence, afin de ne conserver que les zones contenant
 du signal exploitable. La partie principale du rapport porte ensuite sur
-l'algorithme de separation de sources implemente dans le module
-\code{BSS}. Cette methode modelise chaque bin actif comme un coefficient
-complexe de source multiplie par un vecteur spatial de retards, applique un
-clustering EM independant par frequence, puis resout le probleme de permutation
-entre frequences par un RANSAC circulaire sur les phases relatives des
-centroïdes. Enfin, les sources separees ou les bins isoles peuvent etre
+l'algorithme de separation de sources. Cette methode modelise chaque bin actif
+comme un coefficient complexe de source multiplie par un vecteur spatial de
+retards, applique un clustering EM independant par frequence, puis resout le
+probleme de permutation entre frequences par un RANSAC circulaire sur les phases
+relatives des centroïdes. Enfin, les sources separees ou les bins isoles peuvent etre
 utilises pour estimer les TDOA, notamment via des methodes de beamforming
 masquees ou ponderees.
 \end{abstract}
@@ -76,16 +75,15 @@ rapport est organise en trois etapes principales :
   beamforming.
 \end{enumerate}
 
-La contribution principale de ce rapport concerne la deuxieme etape. Elle
-correspond au module de separation de sources present dans \code{BSS}, et plus
-precisement a l'algorithme de type Sawada/LOST implemente dans
-\code{BSS/Algo_Separation/Sawada_separation.py}. Cette methode exploite la
-structure spatiale des coefficients de STFT multicanaux : dans une zone
-temps-frequence locale, un bin actif est souvent domine par une seule source.
-Les observations associees a une meme source forment alors des directions
-complexes coherentes dans l'espace des microphones.
+La contribution principale de ce rapport concerne la deuxieme etape, c'est-a-dire
+la separation de sources dans le plan temps-frequence. La methode etudiee
+s'inspire des approches de type Sawada/LOST et exploite la structure spatiale
+des coefficients de STFT multicanaux : dans une zone temps-frequence locale, un
+bin actif est souvent domine par une seule source. Les observations associees a
+une meme source forment alors des directions complexes coherentes dans l'espace
+des microphones.
 
-\section{Creation d'un masque temps-frequence }
+\section{Creation d'un masque temps-frequence}
 \subsection{Representation temps-frequence multicanale}
 
 On note $x_m[n]$ le signal temporel observe par le microphone $m$, avec
@@ -125,10 +123,11 @@ decrit dans la partie consacree aux preliminaires de Sawada. On peut egalement
 penser a utiliser des filtres plus developpes, voire un CNN. Cela mene a une
 seconde approche.
 
-\subsection{Utilisation d'un réseau de neuronnes pour la selection de bins pertinents}
+\subsection{Utilisation d'un reseau de neurones pour la selection de bins pertinents}
 Fait par AMINE
-Cette approche noous permet de nous limiter aux bins contenant du signal de Beluga, 
-enlevant ainsi du bruits ainsi que les bins du signal d'un bateau par exemple. 
+Cette approche nous permet de nous limiter aux bins contenant du signal de
+beluga, en supprimant une partie du bruit ainsi que certains bins correspondant,
+par exemple, au signal d'un bateau.
  
 \section{Separation de sources dans le masque temps-frequence}
 
@@ -182,9 +181,9 @@ En empilant les observations de tous les microphones, on obtient :
 Cette equation justifie la forme utilisee par l'algorithme : un bin est modelise
 comme un coefficient complexe scalaire, propre au contenu de la source, multiplie
 par un vecteur complexe qui encode la signature spatiale. Cette signature
-contient en particulier les retards relatifs entre microphones. De plus, comme les micros sont proches,
-on peut negliger les differences d'amplitude entre les microphones.
- (et surtout ne pas s'appuyer dessus pour l'algorithme)
+contient en particulier les retards relatifs entre microphones. De plus, comme
+les microphones sont proches, on peut negliger les differences d'amplitude entre
+les canaux et privilegier l'information de phase.
 
 \subsubsection{Normalisation des observations}
 
@@ -209,16 +208,18 @@ Le facteur $e^{j\phi_{f,t}}$ correspond a une phase globale. Il ne porte pas
 l'information spatiale utile, qui est contenue dans les phases relatives entre
 microphones. C'est pourquoi l'algorithme travaille sur des distances
 directionnelles invariantes a cette phase globale.
-On notera que l'on décide de ne pas faire de whitening sur les données. En effet, en faisant un 
-clustering directionel et en normalisant les données, l'impact du whitening est limité. Il est donc préférable 
-de conserver la structure de retard dans les données. 
+On choisit ici de ne pas blanchir les donnees. En effet, le clustering est
+directionnel et les observations sont deja normalisees ; l'apport du
+blanchiment est donc limite dans ce cadre. Il est preferable de conserver la
+structure de retard presente dans les observations.
 
 \subsubsection{Estimation du nombre de sources}
 
 Avant de lancer la separation, il est utile d'estimer combien de sources sont
-presentes dans le bloc audio considere. Cela permet déjà de renseigner ce paramètre qui 
-est indispensable à l'algorithme de séparation de source pour le moment. Mais également de ne pas passer 
-dans la pipeline de séparation de source si ca n'est pas nécessaire. L'idee generale est d'exploiter la
+presentes dans le bloc audio considere. Cette estimation fournit un parametre
+important pour la separation et permet aussi d'eviter de lancer inutilement le
+pipeline lorsque le bloc ne contient pas de situation de melange. L'idee
+generale est d'exploiter la
 dimension spatiale occupee par les observations multicanales dans le plan
 temps-frequence. Si plusieurs sources dominent des bins differents, les vecteurs
 normalises
@@ -312,7 +313,7 @@ nos essais. Elle evite de fixer un seuil directement sur une valeur propre
 absolue ou relative, et elle se comporte mieux lorsque l'energie des sources est
 repartie de maniere desequilibree. Cette partie pourrait toutefois etre
 approfondie : on pourrait imaginer un estimateur plus sophistique.
-\subsubsection{Masque temps-frequence par defaut sans reseau de neuronne} \label{subsubsec:energieBin}
+\subsubsection{Masque temps-frequence par defaut sans reseau de neurones} \label{subsubsec:energieBin}
 
 Lorsque l'on ne dispose pas d'un masque fourni par un reseau de neurones,
 l'algorithme peut construire un masque temps-frequence par defaut a partir de
@@ -344,12 +345,12 @@ Un bin est conserve si :
   E_{\mathrm{dB}}(f,t) \geq \theta.
 \]
 
-les valeurs utilisees sont typiquement un
+Les valeurs utilisees sont typiquement un
 plancher au percentile $20$, un seuil place $6$ dB au-dessus de ce plancher, et
 un minimum de $3$ trames actives consecutives par frequence.
 
 Ensuite, un bin actif isole ne fournit pas assez d'information locale pour
-stabiliser le clustering EM. L'implementation filtre donc les activations
+stabiliser le clustering EM. On filtre donc les activations
 frequence par frequence en conservant seulement les groupes temporels
 suffisamment longs. Si $L_{\min}$ designe la longueur minimale, un segment actif
 n'est conserve que si :
@@ -365,7 +366,9 @@ observations fiables.
 \subsection{Algorithme de SAWADA}
 \subsubsection{Clustering EM par frequence}
 
-Pour chaque frequence $f$, l'algorithme extrait les observations actives, on utilise le masque donnée par le réseau de neuronnes ou bien les bins les plus actifs:
+Pour chaque frequence $f$, l'algorithme extrait les observations actives. Celles-ci
+sont obtenues soit a partir d'un masque fourni par un reseau de neurones, soit a
+partir du masque par energie decrit precedemment :
 \[
   \tilde{\mathbf{x}}_{f,t}, \quad t \in \mathcal{T}_f.
   \]
@@ -462,8 +465,8 @@ moyenne ponderee des observations autour de cette direction :
 Les demonstrations detaillees de ces trois mises a jour sont donnees en
 annexe~\ref{annexe:em-mstep}.
 
-En pratique, ces deux etapes sont alternees un nombre fixe de fois. Dans notre cas, 
-pour 20 itérations, cela fonctionne bien en pratique.
+En pratique, ces deux etapes sont alternees un nombre fixe de fois. Dans notre
+cas, vingt iterations donnent deja un comportement satisfaisant.
 
 \subsubsection{Construction des masques de clusters}
 
@@ -503,9 +506,9 @@ probleme classique de permutation.
 \subsubsection{Motivation}
 
 Pour reconstruire une source, il faut que les masques soient coherents sur
-toutes les frequences. L'implementation propose deux strategies d'alignement :
-une methode par correlation d'enveloppes, et une methode par RANSAC circulaire.
-La configuration de benchmark utilise l'alignement par RANSAC, car il exploite
+toutes les frequences. Deux strategies d'alignement sont considerees : une
+methode par correlation d'enveloppes et une methode par RANSAC circulaire. La
+validation utilise principalement l'alignement par RANSAC, car il exploite
 directement la structure physique des phases relatives.
 \subsubsection{Alignement par correlation d'enveloppes}
 L'assignation par correlation d'enveloppes consiste a associer, pour chaque
@@ -569,8 +572,7 @@ Les masques de la frequence $f$ sont ensuite reordonnes selon $\pi_f^{*}$ :
 \]
 
 L'enveloppe de reference est finalement mise a jour de facon progressive. Dans
-le mode \code{ema} utilise par l'implementation, cette mise a jour prend la
-forme :
+une version lissee exponentiellement, cette mise a jour prend la forme :
 \[
   r_s^{f}(t)
     =
@@ -578,19 +580,21 @@ forme :
     +
     \beta e_{\pi_f^{*}(s)}^f(t),
 \]
-avec $\beta=0.1$ dans le code. Une frequence dont l'energie associee a une
+avec $\beta=0.1$ dans nos essais. Une frequence dont l'energie associee a une
 source est trop faible ne met pas a jour la reference, afin d'eviter qu'un bin
 peu informatif degrade l'alignement des frequences suivantes.
 
 Cette methode est simple et ne suppose pas explicitement un modele de retard.
 Elle utilise seulement la similarite temporelle des enveloppes : deux clusters
 appartenant a la meme source doivent presenter des activations temporelles
-corrélées d'une frequence a l'autre. En revanche, cette méthode ordonne les fréquences car les basses fréquences 
-servent initialement à construire l'enveloppe de réference. Aussi, beaucoup de situation, notamment lors de 
-vocalise simultané, peuvent donner lieu à des erreurs. 
+corrélées d'une frequence a l'autre. En revanche, cette methode depend de
+l'ordre de parcours des frequences, car les basses frequences servent
+initialement a construire l'enveloppe de reference. Plusieurs situations,
+notamment les vocalisations simultanees, peuvent alors donner lieu a des
+erreurs.
 
 \subsubsection{RANSAC circulaire} 
-\paragraph{conversion des centroides en phase relative} ~\\
+\paragraph{Conversion des centroides en phase relative} ~\\
 Les centroïdes complexes $\mathbf{a}_{f,k}$ contiennent une phase globale
 arbitraire. Pour la supprimer, on choisit un microphone de reference, note ici
 $1$, et on calcule :
@@ -620,11 +624,11 @@ on attend une relation de la forme :
 \]
 
 Les phases relatives d'une meme source decrivent donc une droite en frequence,
-mais observee modulo $2\pi$. Cette propriete est la base du RANSAC circulaire
-implemente dans \code{BSS/CircularRansac}.
+mais observee modulo $2\pi$. Cette propriete est la base du RANSAC circulaire.
 
-\textit{Remarque : si l'on a précedemment blanchis le données, il faut penser à faire l'opération inverse
-sur les centroides au risque de faire un un ransac sur des données qui ne représente aucunement des droites}
+\textit{Remarque : si les donnees ont ete blanchies en amont, il faut appliquer
+l'operation inverse aux centroïdes avant le RANSAC. Sinon, les phases traitees ne
+representent plus directement les droites de retard attendues.}
 
 \paragraph{Modele ajusté par RANSAC circulaire} ~\\
 
@@ -690,7 +694,7 @@ la meme paire d'observations :
     \mathbf{n}\in\mathbb{Z}^{M}.
 \]
 
-L'implementation enumere les hypotheses compatibles avec les bornes physiques
+On enumere les hypotheses compatibles avec les bornes physiques
 sur la pente. Ces bornes proviennent du retard maximal possible entre
 microphones : comme $v_m=-2\pi\tau_m$, limiter les TDOA revient a limiter les
 pentes admissibles.
@@ -759,24 +763,27 @@ La pente estimee pour le microphone $m$ a une interpretation directe :
       \tau_j-\tau_i.
       \]
       
-      En revanche, les tdoas estimé à partir de la pente recupérée dans 
-      le RANSAC sont souvent mauvais en comparaison des autres methodes. Cela est donc utile à améliorer la cohérence 
-      des mask mais ne sert pas directement au calcul de TDOAS. On peut visualiser l'attribution des centroides
-      et la droite trouvé par le RANSAC figure~\ref{fig:droite-RANSAC}
+      En revanche, les TDOA estimes a partir de la pente recuperee par le
+      RANSAC sont souvent moins fiables que ceux obtenus par les autres
+      methodes. Cette information reste utile pour ameliorer la coherence des
+      masques, mais elle n'est pas utilisee directement pour calculer les TDOA
+      finaux. La figure~\ref{fig:droite-RANSAC} illustre l'attribution des
+      centroïdes et la droite trouvee par le RANSAC.
         \begin{figure}[htbp]
         \centering
         \includegraphics[width=0.85\linewidth]{Sawada_no_merging_v3/ransac_train_00.png}
-        \caption{Argument de la composante i en fonction de la fréquence du centroide}
+        \caption{Argument de la composante $i$ en fonction de la frequence du centroïde.}
         \label{fig:droite-RANSAC}
       \end{figure}
 
-\paragraph{Merge automatique de cluster} ~\\
+\paragraph{Merge automatique de clusters} ~\\
       
-      Dans le cas ou une fréquence ne contient pas toute les sources, 
-      la méthode par corrélation sépare artificiellement les bins de la fréquence. 
-      La méthhode RANSAC permet quant à elle d'attribuer à plusieurs cluster d'une meme fréquence 
-      la même source. Comme montré figure~\ref{fig:merge-cluster-1}, les deux clusters collé sont finalement 
-      attribué à une seule et meme source.
+      Dans le cas ou une frequence ne contient pas toutes les sources, la
+      methode par correlation peut separer artificiellement les bins de cette
+      frequence. La methode RANSAC permet au contraire d'attribuer plusieurs
+      clusters d'une meme frequence a la meme source. Comme le montre la
+      figure~\ref{fig:merge-cluster-1}, deux clusters proches peuvent finalement
+      etre attribues a une seule et meme source.
       
       \begin{figure}[htbp]
         \centering
@@ -832,29 +839,30 @@ La pente estimee pour le microphone $m$ a une interpretation directe :
             \left(
               \hat{\mathbf{X}}_s(f,t)
               \right).
-              \]
+            \]
               
-              Les TDOA peuvent alors etre estimes sur ces signaux temporels reconstruits.
-              Cette methode n'a pas de garantie theorique forte. En effet, une STFT masquee
-              bin par bin ne correspond pas necessairement a la STFT exacte d'un signal
-              physique reel : le masquage peut introduire des incoherences entre trames et
-              entre frequences. La reconstruction par iSTFT doit donc etre vue comme un signal
-              ayant une STFT proche de la STFT masquee du signal original, pas comme une
-              reconstruction parfaite de la source originale.
+          Les TDOA peuvent alors etre estimes sur ces signaux temporels
+          reconstruits. Cette methode n'a pas de garantie theorique forte. En
+          effet, une STFT masquee bin par bin ne correspond pas necessairement a
+          la STFT exacte d'un signal physique reel : le masquage peut introduire
+          des incoherences entre trames et entre frequences. La reconstruction
+          par iSTFT doit donc etre vue comme un signal ayant une STFT proche de
+          la STFT masquee du signal original, et non comme une reconstruction
+          parfaite de la source originale.
               
-              Malgre cette limite, l'approche fonctionne relativement bien en pratique sur le
-              benchmark. Elle fournit une premiere estimation simple des TDOA, directement
-exploitable apres la separation. Sa qualite depend principalement de la qualite
-du masque final : une erreur de separation ou d'assignation de clusters peut
-deteriorer les signaux reconstruits, et donc les retards estimes par
-correlation.
+          Malgre cette limite, l'approche fonctionne relativement bien en
+          pratique sur le benchmark. Elle fournit une premiere estimation simple
+          des TDOA, directement exploitable apres la separation. Sa qualite
+          depend principalement de la qualite du masque final : une erreur de
+          separation ou d'assignation de clusters peut deteriorer les signaux
+          reconstruits, et donc les retards estimes par correlation.
 
 
 \section{Calcul des TDOA a partir des bins isoles}
 
 \subsection{Beamforming masque}
 Partie faite par AMINE
-\section{Validation sur un dataset synthétique}
+\section{Validation sur un dataset synthetique}
 
 \subsection{Validation de la separation de sources}
 
@@ -894,7 +902,7 @@ frequence :
     f_{\mathrm{inst}}(u)\,du.
 \]
 
-En temps discret, cette integration est implementee sous forme cumulative :
+En temps discret, cette integration s'ecrit sous forme cumulative :
 \[
   \varphi[n]
     =
@@ -933,7 +941,7 @@ $d_{m,k}$ entre la source $k$ et le microphone $m$ :
     b_m[n],
 \]
 ou $g_{m,k}$ represente un gain eventuel et $b_m[n]$ regroupe les bruits
-ajoutes au microphone $m$ qui peuvent etre gaussien ou bien impulsifs. Les retards $d_{m,k}$ etant connus, 
+ajoutes au microphone $m$, qui peuvent etre gaussiens ou impulsifs. Les retards $d_{m,k}$ etant connus, 
 les TDOA de reference sont directement disponibles : 
 \[
   \Delta\tau_{i,j,k}^{\mathrm{ref}}
@@ -943,19 +951,19 @@ les TDOA de reference sont directement disponibles :
 
 Ce cadre synthetique permet donc de tester la separation dans une situation ou
 l'on connait a la fois les sources propres, le melange observe et la solution
-spatiale attendue. Aussi, la forme des signaux choisis nous permet d'avoir un signal
-ressemblant à un whistle et qui n'a pas une fréquence fixe tout en ayant une certaine 
-continuité en fréquence.
+spatiale attendue. La forme des signaux choisis permet d'obtenir des signaux
+proches de sifflements, avec une frequence variable et une certaine continuite
+frequentielle.
 
 \subsubsection{Evaluation de la separation}
- \paragraph{Résultats qualitatifs}~\\
+ \paragraph{Resultats qualitatifs}~\\
 La figure~\ref{fig:sawada-tf-separation} illustre d'abord les resultats de
 separation dans le plan temps-frequence. Elle permet de verifier visuellement
 que les bins actifs sont bien repartis entre les sources estimees et que les
 masques obtenus suivent les structures spectrales principales du melange. 
-D'un point de vue qualitatif, la séparation est relativement bonne. 
-On rajoute ensuite du bruit sur le melange pour un snr qui varie entre 0 et 10 dB. 
-La figure~\ref{fig:sawada-tf-separation_noised} illuste les resultats obtenus. 
+D'un point de vue qualitatif, la separation est relativement bonne. 
+On ajoute ensuite du bruit au melange, avec un SNR qui varie entre $0$ et $10$ dB. 
+La figure~\ref{fig:sawada-tf-separation_noised} illustre les resultats obtenus. 
 La figure~\ref{fig:ransac-centroid-noised} quant à elle montre l'attribution des centroïdes
 dans le cas bruité. Contrairement au cas sans bruit, les droites de phase sont
 tres difficiles a percevoir a l'oeil nu : le bruit rend les trajectoires moins
@@ -966,16 +974,16 @@ bonne source, ce qui n'etait pas evident visuellement.
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.95\linewidth]{Sawada_no_merging_v3/train_sawada_no_merging_v3.png}
-  \caption{Resultats de separation de sources dans le plan temps-frequence. à gauche 
-  la source 1 et 2, au millieu le melange et à droite la source estimé 1 et 2.}
+  \caption{Resultats de separation de sources dans le plan temps-frequence. A gauche,
+  les sources 1 et 2 ; au milieu, le melange ; a droite, les sources estimees 1 et 2.}
   \label{fig:sawada-tf-separation}
 \end{figure}
 
 \begin{figure}[htbp]
   \centering
   \includegraphics[width=0.95\linewidth]{Sawada_no_merging_v3/train_sawada_no_merging_v3_noised.png}
-  \caption{Resultats de separation de sources dans le plan temps-frequence avec bruit. à gauche 
-  la source 1 et 2, au millieu le melange et à droite la source estimé 1 et 2.}
+  \caption{Resultats de separation de sources dans le plan temps-frequence avec bruit. A gauche,
+  les sources 1 et 2 ; au milieu, le melange ; a droite, les sources estimees 1 et 2.}
   \label{fig:sawada-tf-separation_noised}
 \end{figure}
 
@@ -993,26 +1001,29 @@ bonne source, ce qui n'etait pas evident visuellement.
     \centering
     \includegraphics[width=\linewidth]{Sawada_no_merging_v3/RANSAC plot centroid attrib.png}
     \vspace{0.1cm}
-    \small Droite obtenue après l'attribution obtenue par RANSAC.
+    \small Droite obtenue apres l'attribution par RANSAC.
   \end{minipage}
-  \caption{L'attribution est correct, pourtant elle est loin d'etre evidente à la main.
-  Cela fonctionne notamment car il n'y a pas trop de bin qui ne représente pas de signal grace à la 
-  préselection des bins que l'on fait dans l'algorithme.}
+  \caption{L'attribution est correcte, alors qu'elle est loin d'etre evidente a
+  la main. Cela fonctionne notamment parce que la preselection des bins limite
+  le nombre de bins ne representant pas de signal utile.}
   \label{fig:ransac-centroid-noised}
 \end{figure}
 
 
-\paragraph{Résultats quantitatifs}~\\
+\paragraph{Resultats quantitatifs}~\\
 La figure~\ref{fig:sawada-tdoa-correlation} donne ensuite une analyse plus
 quantitative, en comparant les TDOA obtenus a partir des sources reconstruites 
-(donc une méthode basique qui n'est pas supposé donner des résultats parfaits comme vu 
-sur la partie \ref{subsec:fusionMasque}). Cette visualisation permet d'evaluer 
+(c'est-a-dire une methode simple qui n'est pas supposee donner des resultats
+parfaits, comme discute dans la partie~\ref{subsec:fusionMasque}). Cette
+visualisation permet d'evaluer 
 si la separation conserve suffisamment la coherence temporelle entre microphones pour fournir
-une premiere estimation fiable des retards. De meme, on trace les TDOA obtenus dans la situation avec bruit.
-figure~\ref{fig:sawada-tdoa-correlation_noised}.
+une premiere estimation fiable des retards. De meme, la
+figure~\ref{fig:sawada-tdoa-correlation_noised} presente les TDOA obtenus dans
+la situation bruitee.
 
-On notera que les TDOAS obtenu lors des essaies en conditions réels de mai 2026 ont des variances et des ecarts 
-à la ground truth d'environ 3-4 samples. Ainsi, les résultats obtenus ici sont tout à fait satisfaisants. 
+On notera que les TDOA obtenus lors des essais en conditions reelles de mai 2026
+presentent des variances et des ecarts a la ground truth d'environ $3$ a $4$
+echantillons. Les resultats obtenus ici sont donc tout a fait satisfaisants.
 
 
 \begin{figure}[htbp]
@@ -1029,18 +1040,20 @@ On notera que les TDOAS obtenu lors des essaies en conditions réels de mai 2026
 \end{figure}
 
 \subsubsection{Source d'erreurs}
-Comme nous l'avons vu, les résultats ne sont pas parfait non plus.
-Il y a plusieurs source d'erreurs que l'on essaie d'explorer ici. 
+Comme nous l'avons vu, les resultats ne sont pas parfaits.
+Il existe plusieurs sources d'erreurs que l'on essaie d'explorer ici.
 
-\paragraph{Mauvaise estimations des bins ayant du signal quand il y a du bruit}~\\ 
+\paragraph{Mauvaise estimation des bins contenant du signal en presence de bruit}~\\ 
 
-On a ici utilisé la méthode décrite dans la partie~\ref{subsubsec:energieBin}. Cela fonctionne bien 
-sans bruit et avec un peu de bruit mais on constate quand meme plusieurs zone considerée qui
-ne devraient pas l'être. La selection de bins peut sans doute être améliorer, comme on peut le voir 
-figure~\ref{fig:energy-bin-noise}. Cela motive donc l'utilisation 
-d'un réseau de neuronne pour cette tache qui s'apprend bien mais reste loin d'être triviale, ou encore
-de jouer avec les hyperparamètres, notamment le nombre de bins collé nécessaire pour considerer une zone 
-comme valable.
+On utilise ici la methode decrite dans la partie~\ref{subsubsec:energieBin}.
+Elle fonctionne bien sans bruit et avec un bruit modere, mais on constate tout
+de meme que plusieurs zones sont considerees comme actives alors qu'elles ne
+devraient pas l'etre. La selection de bins peut sans doute etre amelioree, comme
+on peut le voir sur la figure~\ref{fig:energy-bin-noise}. Cela motive
+l'utilisation d'un reseau de neurones pour cette tache, qui s'apprend bien mais
+reste loin d'etre triviale. Une autre possibilite consiste a ajuster les
+hyperparametres, notamment le nombre de bins adjacents necessaire pour
+considerer une zone comme valide.
 
 \begin{figure}[htbp]
   \centering
@@ -1063,18 +1076,21 @@ comme valable.
 
 \paragraph{Mauvaise droite dans le RANSAC}~\\
 Dans le cas sans bruit, l'extrait numéro 14 ne fonctionne pas. figure~\ref{fig:spectro-pts14}. 
-En regardant en details, on remarque en fait que certains bins ayant du signal ne sont 
-attribués à aucune des deux sources. Un exemple sont les bins centraux de la fréquence 2250.
-En regardant ce qui se passe au niveau du clustering figure~\ref{fig:cluster-pts14}, on 
-remarque que celui-ci se passe correctement, distinguant les points aux extremité des points 
-centraux. On regarde alors au niveau du RANSAC figure~\ref{fig:RANSAC-pts14}. En comparaison
-avec les droite "Ground Truth", les deux droites trouvés par RANSAC correspondent en réalité 
-à la meme ground truth. Ainsi, la seconde droite est totalement ignoré. Cela n'arrive pas souvent 
-que ca soit sans bruit ou avec bruit mais peut tout de meme arrivé. Augmenter le nombre d'itération 
-du RANSAC peut améliorer cela. A priori cela est du à la mauvaise selection de bin, ou bien si un trop gros
-nombre de bins se supperposent entre les deux sources. 
+En regardant plus en detail, on remarque que certains bins contenant du signal ne
+sont attribues a aucune des deux sources. C'est le cas, par exemple, des bins
+centraux de la frequence $2250$ Hz. Au niveau du clustering
+(figure~\ref{fig:cluster-pts14}), la separation locale semble pourtant correcte :
+les points situes aux extremites sont bien distingues des points centraux. Le
+probleme apparait ensuite au niveau du RANSAC
+(figure~\ref{fig:RANSAC-pts14}). En comparaison avec les droites de ground
+truth, les deux droites trouvees par RANSAC correspondent en realite a la meme
+source. La seconde droite est donc totalement ignoree. Ce cas reste rare, avec
+ou sans bruit, mais peut tout de meme se produire. Augmenter le nombre
+d'iterations du RANSAC peut ameliorer cette situation. A priori, ce probleme est
+du a une mauvaise selection des bins ou a un recouvrement trop important entre
+les deux sources.
 
-\begin{figure}[htbp]\label{fig:spectro-pts14}
+\begin{figure}[htbp]
   \centering
   \begin{minipage}{0.32\linewidth}
     \centering
@@ -1097,10 +1113,10 @@ nombre de bins se supperposent entre les deux sources.
     \small Source 2.
   \end{minipage}
   \caption{Extrait 14 : melange et sources de reference.}
-  \label{fig:pts14-signals}
+  \label{fig:spectro-pts14}
 \end{figure}
 
-\begin{figure}[htbp]\label{fig:cluster-pts14}
+\begin{figure}[htbp]
   \centering
   \begin{minipage}{0.48\linewidth}
     \centering
@@ -1115,13 +1131,13 @@ nombre de bins se supperposent entre les deux sources.
     \vspace{0.1cm}
     \small Clusters attribues.
   \end{minipage}
-  \caption{Extrait 14 : clusters de bins temps-fréquence dans $ C^4$ pour 
-  f = 2250Hz avant et apres attribution à une source. Un cluster plutôt très propre n'a pas été conservé après 
-  le RANSAC}
-  \label{fig:pts14-cluster-attribution}
+  \caption{Extrait 14 : clusters de bins temps-frequence dans $\mathbb{C}^4$
+  pour $f=2250$ Hz, avant et apres attribution a une source. Un cluster pourtant
+  propre n'a pas ete conserve apres le RANSAC.}
+  \label{fig:cluster-pts14}
 \end{figure}
 
-\begin{figure}[htbp]\label{fig:RANSAC-pts14}
+\begin{figure}[htbp]
   \centering
   \begin{minipage}{0.48\linewidth}
     \centering
@@ -1136,9 +1152,10 @@ nombre de bins se supperposent entre les deux sources.
     \vspace{0.1cm}
     \small Droite estimee par RANSAC.
   \end{minipage}
-  \caption{Extrait 14 : comparaison entre la reference et la droite estimee par RANSAC. Une des droites est 
-  bien identifié mais la seconde n'est pas obtenue correctement}
-  \label{fig:pts14-ransac-gt}
+  \caption{Extrait 14 : comparaison entre la reference et la droite estimee par
+  RANSAC. Une des droites est bien identifiee, mais la seconde n'est pas obtenue
+  correctement.}
+  \label{fig:RANSAC-pts14}
 \end{figure}
 
 
@@ -1194,7 +1211,7 @@ seconde source de bruit pouvant nous servir dans l'interprétation de certaines 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.48\linewidth]{Results_2026/synthese_high_fusion_2D.png}
-  \caption{Synthese des premiers resultats avec la high fusion, on visualise la distance mediane à la ground truth}
+  \caption{Synthese des premiers resultats avec la high fusion 2D, on visualise la distance mediane à la ground truth}
   \label{fig:synthese-high-fusion-2026}
 \end{figure}
 
@@ -1209,12 +1226,51 @@ seconde source de bruit pouvant nous servir dans l'interprétation de certaines 
   \hfill
   \begin{minipage}{0.48\linewidth}
     \centering
+    \includegraphics[width=\linewidth]{Results_2026/direction_p9_HF_2D.png}
+    \vspace{0.1cm}
+    \small Direction estimee pour p9.
+  \end{minipage}
+
+  \vspace{0.3cm}
+
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/direction_p10_HF_2D.png}
+    \vspace{0.1cm}
+    \small Direction estimee pour p10.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\linewidth}
+    \centering
     \includegraphics[width=\linewidth]{Results_2026/direction_p11_HF_2D.png}
     \vspace{0.1cm}
     \small Direction estimee pour p11.
   \end{minipage}
-  \caption{Comparaison des directions estimees pour les points p7 (meilleur estimation) 
-  et p11 (pire estimations) en high fusion}
+
+  \vspace{0.3cm}
+
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \IfFileExists{Results_2026/direction_p12_HF_2D.png}{%
+      \includegraphics[width=\linewidth]{Results_2026/direction_p12_HF_2D.png}%
+    }{%
+      \fbox{\parbox[c][0.28\linewidth][c]{0.9\linewidth}{\centering Image p12 manquante}}%
+    }
+    \vspace{0.1cm}
+    \small Direction estimee pour p12.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \IfFileExists{Results_2026/direction_p13_HF_2D.png}{%
+      \includegraphics[width=\linewidth]{Results_2026/direction_p13_HF_2D.png}%
+    }{%
+      \fbox{\parbox[c][0.28\linewidth][c]{0.9\linewidth}{\centering Image p13 manquante}}%
+    }
+    \vspace{0.1cm}
+    \small Direction estimee pour p13.
+  \end{minipage}
+  \caption{Comparaison des directions estimees pour les points p7, p9, p10, p11, p12 et p13}
   \label{fig:directions-p7-p11}
 \end{figure}
 
@@ -1330,6 +1386,140 @@ permet tout de meme de mesurer 3 TDOA supplémentaire comme vu figure \ref{fig:d
 \end{figure}
 
 \subsection{Point ne fonctionnant pas bien}
+
+\subsubsection{POINT numéro 8 : Bateau}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=0.75\linewidth]{Results_2026/direction_p8_HF_2D.png}
+  \caption{Directions estimees pour le point 8 en high fusion 2D.}
+  \label{fig:direction-p8-hf-2d}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \IfFileExists{Results_2026/spectrogramme_p7.png}{%
+      \includegraphics[width=\linewidth]{Results_2026/spectrogramme_p7.png}%
+    }{%
+      \fbox{\parbox[c][0.28\linewidth][c]{0.9\linewidth}{\centering Spectrogramme p7 manquant}}%
+    }
+    \vspace{0.1cm}
+    \small Spectrogramme du point 7.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/spectrogramme_p8.png}
+    \vspace{0.1cm}
+    \small Spectrogramme du point 8.
+  \end{minipage}
+  \caption{Comparaison des spectrogrammes des points 7 et 8.}
+  \label{fig:spectrogrammes-p7-p8}
+\end{figure}
+
+
+\subsubsection{Point 14 à 20 : biais apparent}
+Pour les points 14 à 20 que l'on présente ci-dessous, les directions estimés présente un biais mais n'ont en 
+revanche pas plus de variance que d'habitude. Nous n'avons aucune certitude quant à la cause de ces résultats. 
+\paragraph{}
+Une première hypothèse pourrait de penser qu'une seconde source domine par rapport au bateau. Cependant nous 
+avons vu que cela, meme avec une source beaucoup plus forte, mène aux résultats du point 8 (grosse variance)
+. De plus, regarder les 
+prédictions sur les instants sans le son de notre source n'a pas permis d'identifier une seule direction précise. 
+Ainsi, l'hypothèse d'un bruit proche des microphones biaisant nos résultats est peu probable. 
+\paragraph{}
+Une seconde hypothèse serait de penser que les microphones ont tourné durant l'experimentation. (il s'est 
+écoulé environ 2 heures entre la mesure du point 7 et la mesure du  point 20). Ces derniers pèsent plusieurs 
+tonne mais sont posés sur du sable qui peut potentiellement bouger. Toutefois, en regardant les 
+résultats, il ne semble pas y avoir une seule rotation constante.
+\paragraph{}
+Enfin une dernière hypothèse pourrait être de considerer une désynchronisation de certains microphones. On a tracé
+figure \ref{fig:retard-micro-simulation} l'impacte de la desynchronisation du microphone en position Sud-EST 
+du tetrahèdre sur la direction estimé. On voit alors que certaines directions sont correctement prédites là ou 
+d'autres sont decalés avec notamment une erreur qui augmente dès que l'on s'éloigne de l'axe Nord-Ouest Sud-est.
+Toutefois, à nouveau les points 18 et 19 font contre-exemple car les directions attendus sont quasiment les memes, 
+pourtant le biais est différends.
+
+Ainsi, nous n'avons finalement pas de réponse clair sur ce qu'il s'est passé. Cepandant, le fait d'avoir une faible 
+variance sur la direction estimée reste bon signe. l'algorithme ne produit pas quelque chose d'aléatoire, il y 
+simplement un élemement biaisant les résultats dont nous n'avons pas identifié la source.  
+\begin{figure}[H]
+  \centering
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/direction_p14_HF_2D.png}
+    \vspace{0.1cm}
+    \small Direction estimee pour p14.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/direction_p15_HF_2D.png}
+    \vspace{0.1cm}
+    \small Direction estimee pour p15.
+  \end{minipage}
+  \caption{Directions estimees en high fusion 2D pour les points 14 et 15.}
+  \label{fig:directions-p14-p15}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/direction_p16_HF_2D.png}
+    \vspace{0.1cm}
+    \small Direction estimee pour p16.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/direction_p17_HF_2D.png}
+    \vspace{0.1cm}
+    \small Direction estimee pour p17.
+  \end{minipage}
+  \caption{Directions estimees en high fusion 2D pour les points 16 et 17.}
+  \label{fig:directions-p16-p17}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/direction_p18_HF_2D.png}
+    \vspace{0.1cm}
+    \small Direction estimee pour p18.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/direction_p19_HF_2D.png}
+    \vspace{0.1cm}
+    \small Direction estimee pour p19.
+  \end{minipage}
+  \caption{Directions estimees en high fusion 2D pour les points 18 et 19.}
+  \label{fig:directions-p18-p19}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/direction_p20_HF_2D.png}
+    \vspace{0.1cm}
+    \small Direction estimee pour p20.
+  \end{minipage}
+  \caption{Direction estimee en high fusion 2D pour le point 20.}
+  \label{fig:direction-p20}
+\end{figure}
+
+\begin{figure}[H] \label{}
+  \centering
+  \includegraphics[width=0.85\linewidth]{Results_2026/retard_micro_simulation.png}
+  \caption{Simulation des retards microphones.}
+  \label{fig:retard-micro-simulation}
+\end{figure}
 
 
 \section{Conclusion}

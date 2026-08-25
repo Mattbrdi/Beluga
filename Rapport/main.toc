@@ -39,12 +39,17 @@
 \contentsline {section}{\numberline {6}Analyse des donnees 2026}{19}{section.6}%
 \contentsline {subsection}{\numberline {6.1}Introduction}{19}{subsection.6.1}%
 \contentsline {paragraph}{1ers résultats }{20}{section*.10}%
-\contentsline {subsection}{\numberline {6.2}Comparaison des differentes methodes d'estimation de position}{22}{subsection.6.2}%
-\contentsline {paragraph}{}{22}{section*.11}%
-\contentsline {paragraph}{}{22}{section*.12}%
-\contentsline {subsection}{\numberline {6.3}Point ne fonctionnant pas bien}{23}{subsection.6.3}%
-\contentsline {section}{\numberline {7}Conclusion}{23}{section.7}%
-\contentsline {section}{\numberline {A}Demonstrations des mises a jour EM}{24}{section.A}%
-\contentsline {subsection}{\numberline {A.1}Mise a jour des poids}{24}{subsection.A.1}%
-\contentsline {subsection}{\numberline {A.2}Mise a jour du centroïde}{24}{subsection.A.2}%
-\contentsline {subsection}{\numberline {A.3}Mise a jour de la variance}{25}{subsection.A.3}%
+\contentsline {subsection}{\numberline {6.2}Comparaison des differentes methodes d'estimation de position}{23}{subsection.6.2}%
+\contentsline {paragraph}{}{23}{section*.11}%
+\contentsline {paragraph}{}{23}{section*.12}%
+\contentsline {subsection}{\numberline {6.3}Point ne fonctionnant pas bien}{25}{subsection.6.3}%
+\contentsline {subsubsection}{\numberline {6.3.1}POINT numéro 8 : Bateau}{25}{subsubsection.6.3.1}%
+\contentsline {subsubsection}{\numberline {6.3.2}Point 14 à 20 : biais apparent}{25}{subsubsection.6.3.2}%
+\contentsline {paragraph}{}{26}{section*.13}%
+\contentsline {paragraph}{}{26}{section*.14}%
+\contentsline {paragraph}{}{26}{section*.15}%
+\contentsline {section}{\numberline {7}Conclusion}{28}{section.7}%
+\contentsline {section}{\numberline {A}Demonstrations des mises a jour EM}{29}{section.A}%
+\contentsline {subsection}{\numberline {A.1}Mise a jour des poids}{29}{subsection.A.1}%
+\contentsline {subsection}{\numberline {A.2}Mise a jour du centroïde}{29}{subsection.A.2}%
+\contentsline {subsection}{\numberline {A.3}Mise a jour de la variance}{30}{subsection.A.3}%
