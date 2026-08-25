@@ -24,6 +24,8 @@ class EMClusteringParameters:
     n_iter: int = 20
     phi: float = 1.0  # Prior de Dirichlet pour les proportions de mélange
     eps: float = 1e-12
+    min_frequency_hz: float | None = None
+    max_frequency_hz: float | None = None
     energy_threshold_db_above_floor: float | None = None
     energy_floor_percentile: float = 20.0
     min_active_frames_per_frequency: int = 2

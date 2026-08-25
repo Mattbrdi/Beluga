@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy import signal as sp_signal
 from ..Utils.signal_class import Signal, MultiSignal, Mixture
-from ..Algo_Separation.Sawada_separation import SawadaBSS
+from ..Algo_Separation.Sawada import SawadaBSS
 from ..Utils.associated_dataclasses import StftParameters, EMClusteringParameters
 from ..Utils.save_module import save_sawada_result
 from datetime import datetime

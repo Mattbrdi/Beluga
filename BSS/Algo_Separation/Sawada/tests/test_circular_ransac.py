@@ -2,7 +2,7 @@ import itertools
 
 import numpy as np
 
-from BSS.CircularRansac.circular_ransac import (
+from BSS.Algo_Separation.Sawada.circular_ransac import (
     CircularLineRANSAC,
     delay_to_slope,
     sequential_centroid_circular_ransac,

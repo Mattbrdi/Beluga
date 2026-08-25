@@ -72,10 +72,23 @@ def parse_args() -> argparse.Namespace:
         type=int,
         help="Nombre maximal de scenes a traiter, utile pour verifier rapidement.",
     )
+    parser.add_argument(
+        "--sawada-min-frequency",
+        default=None,
+        type=float,
+        help="Frequence minimale en Hz utilisee par l'EM/RANSAC Sawada.",
+    )
+    parser.add_argument(
+        "--sawada-max-frequency",
+        default=None,
+        type=float,
+        help="Frequence maximale en Hz utilisee par l'EM/RANSAC Sawada.",
+    )
     return parser.parse_args()
 
 
 def _success_summary_row(
+    config: BenchmarkConfig,
     record: Any,
     algorithm: str,
     metrics: dict[str, float],
@@ -91,6 +104,8 @@ def _success_summary_row(
         "algorithm": algorithm,
         "runtime_seconds": runtime_seconds,
         "source_permutation": list(permutation),
+        "sawada_min_frequency_hz": config.sawada_min_frequency_hz,
+        "sawada_max_frequency_hz": config.sawada_max_frequency_hz,
         **metrics,
         **{f"ransac_{key}": value for key, value in ransac_metrics.items()},
     }
@@ -121,6 +136,8 @@ def _run_one_algorithm(
         record=record,
         scene=scene,
         reference_microphone=config.reference_microphone,
+        sawada_min_frequency_hz=config.sawada_min_frequency_hz,
+        sawada_max_frequency_hz=config.sawada_max_frequency_hz,
     )
 
     fs = scene.metadata.fs
@@ -186,6 +203,10 @@ def _run_one_algorithm(
         "n_mics": scene.metadata.n_mics,
         "reference_microphone": config.reference_microphone,
         "max_lag_samples": scene.metadata.max_delay,
+        "sawada_frequency_band_hz": {
+            "min": config.sawada_min_frequency_hz,
+            "max": config.sawada_max_frequency_hz,
+        },
         "pairwise_labels": labels,
         "source_permutation": alignment.permutation,
         "alignment_metric": alignment.metric,
@@ -231,6 +252,7 @@ def _run_one_algorithm(
     }
     write_json(output_dir / f"{algorithm}_metrics.json", metrics_payload)
     return _success_summary_row(
+        config=config,
         record=record,
         algorithm=algorithm,
         metrics=metrics,
@@ -281,6 +303,8 @@ def main() -> None:
         algorithms=tuple(args.algorithms),
         reference_microphone=args.reference_microphone,
         limit=args.limit,
+        sawada_min_frequency_hz=args.sawada_min_frequency,
+        sawada_max_frequency_hz=args.sawada_max_frequency,
     )
     run_benchmark(config)
     print(f"Resume ecrit dans {(config.output / 'summary.csv').resolve()}")

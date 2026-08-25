@@ -7,7 +7,7 @@ from typing import Any
 import numpy as np
 
 from ..Algo_Separation.Frequency_ica_separation import FrequencyDomainICA
-from ..Algo_Separation.Sawada_separation import SawadaBSS
+from ..Algo_Separation.Sawada import SawadaBSS
 from ..Utils.associated_dataclasses import EMClusteringParameters, StftParameters
 from ..Utils.signal_class import MultiSignal
 
@@ -76,145 +76,25 @@ def _result(
     )
 
 
-def _sawada_debug_artifacts(model: SawadaBSS) -> dict[str, Any]:
-    if model.nspectro_preprocessed is None:
-        return {}
-
-    if model.tf_energy is not None:
-        tf_energy = model.tf_energy
-    elif model.signal is not None:
-        raw_spectro = model.get_spectro(model.signal)
-        tf_energy = np.sum(np.abs(raw_spectro.Sxx) ** 2, axis=0)
-    else:
-        tf_energy = np.sum(np.abs(model.nspectro_preprocessed.Sxx) ** 2, axis=0)
-    active_tf_mask = (
-        model.active_tf_mask
-        if model.active_tf_mask is not None
-        else np.ones_like(tf_energy, dtype=bool)
-    )
-
-    n_freqs = model.nspectro_preprocessed.Sxx.shape[1]
-    variances = np.full((n_freqs, model.n_sources), np.nan, dtype=float)
-    weights = np.full((n_freqs, model.n_sources), np.nan, dtype=float)
-    for frequency_index, bin_model in model.bin_models.items():
-        variances[frequency_index] = bin_model.variances
-        weights[frequency_index] = bin_model.weights
-    centroids = model.all_centroids
-
-    return {
-        "sawada_model": {
-            "masks": model.get_final_masks().astype(np.uint8),
-            "posteriors": model.get_final_posteriors(),
-            "active_clusters": model.get_final_active_clusters().astype(np.uint8),
-            "cluster_masks": np.asarray(
-                model.cluster_masks_before_assignment
-                if model.cluster_masks_before_assignment is not None
-                else np.empty((0, 0, 0))
-            ),
-            "cluster_posteriors": np.asarray(
-                model.cluster_posteriors_before_assignment
-                if model.cluster_posteriors_before_assignment is not None
-                else np.empty((0, 0, 0))
-            ),
-            "cluster_active": np.asarray(
-                model.cluster_active_before_assignment
-                if model.cluster_active_before_assignment is not None
-                else np.empty((0, 0))
-            ),
-            "active_frequency_mask": (
-                np.asarray(model.active_frequency_mask, dtype=np.uint8)
-                if model.active_frequency_mask is not None
-                else np.ones(n_freqs, dtype=np.uint8)
-            ),
-            "bin_vectors": model.nspectro_preprocessed.Sxx,
-            "tf_energy": tf_energy,
-            "frequency_energy": np.mean(tf_energy, axis=1),
-            "active_tf_mask": active_tf_mask.astype(np.uint8),
-            "energy_threshold_db": np.asarray(
-                np.nan if model.energy_threshold_db is None else model.energy_threshold_db
-            ),
-            "frequencies": np.asarray(model.nspectro_preprocessed.f, dtype=float),
-            "times": np.asarray(model.nspectro_preprocessed.t, dtype=float),
-            "centroids": centroids,
-            "variances": variances,
-            "weights": weights,
-            "source_assignment_labels": np.asarray(
-                model.source_assignment_labels
-                if model.source_assignment_labels is not None
-                else np.empty((0, 0))
-            ),
-            "source_assignment_distances": np.asarray(
-                model.source_assignment_distances
-                if model.source_assignment_distances is not None
-                else np.empty((0, 0))
-            ),
-            "source_assignment_relative_phases": np.asarray(
-                model.source_assignment_relative_phases
-                if model.source_assignment_relative_phases is not None
-                else np.empty((0, 0, 0))
-            ),
-            "source_assignment_selected_labels": np.asarray(
-                model.source_assignment_selected_labels
-                if model.source_assignment_selected_labels is not None
-                else np.empty((0, 0))
-            ),
-            "source_assignment_slopes": np.asarray(
-                model.source_assignment_slopes
-                if model.source_assignment_slopes is not None
-                else np.empty((0, 0))
-            ),
-            "source_assignment_intercepts": np.asarray(
-                model.source_assignment_intercepts
-                if model.source_assignment_intercepts is not None
-                else np.empty((0, 0))
-            ),
-            "source_assignment_scores": np.asarray(
-                model.source_assignment_scores
-                if model.source_assignment_scores is not None
-                else np.empty((0,))
-            ),
-            "source_assignment_n_inliers": np.asarray(
-                model.source_assignment_n_inliers
-                if model.source_assignment_n_inliers is not None
-                else np.empty((0,))
-            ),
-            "source_assignment_n_trials": np.asarray(
-                model.source_assignment_n_trials
-                if model.source_assignment_n_trials is not None
-                else np.empty((0,))
-            ),
-            "source_assignment_converged": np.asarray(
-                model.source_assignment_converged
-                if model.source_assignment_converged is not None
-                else np.empty((0,))
-            ),
-            "source_assignment_frequency_inliers": np.asarray(
-                model.source_assignment_frequency_inliers
-                if model.source_assignment_frequency_inliers is not None
-                else np.empty((0, 0))
-            ),
-            "source_assignment_selected_centroids": np.asarray(
-                model.source_assignment_selected_centroids
-                if model.source_assignment_selected_centroids is not None
-                else np.empty((0, 0))
-            ),
-        }
-    }
-
-
 def run_sawada(
     record: Any,
     scene: Any,
     reference_microphone: int = 0,
+    min_frequency_hz: float | None = None,
+    max_frequency_hz: float | None = None,
 ) -> SeparationResult:
     start = time.perf_counter()
     max_lag_samples = _max_lag_samples(scene)
-    sawada_em_parameters = BENCHMARK_SAWADA_EM_PARAMETERS
+    sawada_em_parameters = replace(
+        BENCHMARK_SAWADA_EM_PARAMETERS,
+        min_frequency_hz=min_frequency_hz,
+        max_frequency_hz=max_frequency_hz,
+    )
     if max_lag_samples is not None and scene.metadata.fs:
         slope_bound = 2.0 * np.pi * float(max_lag_samples) / float(scene.metadata.fs)
         if np.isfinite(slope_bound) and slope_bound > 0.0:
             sawada_em_parameters = replace(
-                BENCHMARK_SAWADA_EM_PARAMETERS,
+                sawada_em_parameters,
                 ransac_slope_bound=1.2 * slope_bound,
             )
     model = SawadaBSS(
@@ -247,6 +127,8 @@ def run_sawada(
                 "n_iter": sawada_em_parameters.n_iter,
                 "phi": sawada_em_parameters.phi,
                 "eps": sawada_em_parameters.eps,
+                "min_frequency_hz": sawada_em_parameters.min_frequency_hz,
+                "max_frequency_hz": sawada_em_parameters.max_frequency_hz,
                 "energy_threshold_db_above_floor": (
                     sawada_em_parameters.energy_threshold_db_above_floor
                 ),
@@ -275,7 +157,7 @@ def run_sawada(
             "reference_microphone": reference_microphone,
             "max_lag_samples": max_lag_samples,
         },
-        debug_artifacts=_sawada_debug_artifacts(model),
+        debug_artifacts=model.to_debug_artifacts().as_benchmark_artifacts(),
     )
 
 
@@ -324,9 +206,17 @@ def run_algorithm(
     record: Any,
     scene: Any,
     reference_microphone: int = 0,
+    sawada_min_frequency_hz: float | None = None,
+    sawada_max_frequency_hz: float | None = None,
 ) -> SeparationResult:
     if algorithm == "sawada":
-        return run_sawada(record, scene, reference_microphone)
+        return run_sawada(
+            record,
+            scene,
+            reference_microphone,
+            min_frequency_hz=sawada_min_frequency_hz,
+            max_frequency_hz=sawada_max_frequency_hz,
+        )
     if algorithm == "ica":
         return run_ica(record, scene, reference_microphone)
     raise ValueError(f"Algorithme inconnu: {algorithm}")
