@@ -24,8 +24,6 @@
 \newcommand{\STFT}{\operatorname{STFT}}
 \newcommand{\argmin}{\operatorname*{arg\,min}}
 \newcommand{\argmax}{\operatorname*{arg\,max}}
-\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
-
 \title{Rapport sur un algorithme de separation de sources acoustiques}
 \author{A completer}
 \date{\today}
@@ -124,7 +122,7 @@ penser a utiliser des filtres plus developpes, voire un CNN. Cela mene a une
 seconde approche.
 
 \subsection{Utilisation d'un reseau de neurones pour la selection de bins pertinents}
-Fait par AMINE
+Cette partie est traitee separement.
 Cette approche nous permet de nous limiter aux bins contenant du signal de
 beluga, en supprimant une partie du bruit ainsi que certains bins correspondant,
 par exemple, au signal d'un bateau.
@@ -861,7 +859,7 @@ La pente estimee pour le microphone $m$ a une interpretation directe :
 \section{Calcul des TDOA a partir des bins isoles}
 
 \subsection{Beamforming masque}
-Partie faite par AMINE
+Cette partie est traitee separement.
 \section{Validation sur un dataset synthetique}
 
 \subsection{Validation de la separation de sources}
@@ -1041,7 +1039,7 @@ echantillons. Les resultats obtenus ici sont donc tout a fait satisfaisants.
 
 \subsubsection{Source d'erreurs}
 Comme nous l'avons vu, les resultats ne sont pas parfaits.
-Il existe plusieurs sources d'erreurs que l'on essaie d'explorer ici.
+Il existe plusieurs sources d'erreurs que l'on essaie d'explorer ici. 
 
 \paragraph{Mauvaise estimation des bins contenant du signal en presence de bruit}~\\ 
 
@@ -1054,6 +1052,7 @@ l'utilisation d'un reseau de neurones pour cette tache, qui s'apprend bien mais
 reste loin d'etre triviale. Une autre possibilite consiste a ajuster les
 hyperparametres, notamment le nombre de bins adjacents necessaire pour
 considerer une zone comme valide.
+
 
 \begin{figure}[htbp]
   \centering
@@ -1075,7 +1074,8 @@ considerer une zone comme valide.
 \end{figure}
 
 \paragraph{Mauvaise droite dans le RANSAC}~\\
-Dans le cas sans bruit, l'extrait numéro 14 ne fonctionne pas. figure~\ref{fig:spectro-pts14}. 
+Dans le cas sans bruit, l'extrait numero 14 ne fonctionne pas correctement
+(figure~\ref{fig:spectro-pts14}).
 En regardant plus en detail, on remarque que certains bins contenant du signal ne
 sont attribues a aucune des deux sources. C'est le cas, par exemple, des bins
 centraux de la frequence $2250$ Hz. Au niveau du clustering
@@ -1177,14 +1177,14 @@ autres sources.
 \section{Analyse des donnees 2026}
 
 \subsection{Introduction}
-On regarde à présent les résultats de la pipeline précedente sur les données de 2026 (cf protocole pour voir 
-comment ont été obtenus ces données). Ces données ne permettent pas vraiment de tester la séparation de source 
-mais permettent, dans le cas ou l'on a une source dont on connais la localisation de verifier si la pipeline de
-detection trouve la bonne position. On a des données pour les point 7 à 20 selon la plan donné par 
-\ref{fig:plan-2026}. 
-Chaque point est caracterisé par deux enregistrement de 100 secondes (un pour chaque tétrahèdre) que l'on a synchronisé
-à la main. Ainsi, la problématique de différence de temps d'arrivé entre les deux tétrahèdre n'est absolument pas 
-traité ici. 
+On etudie a present les resultats obtenus sur les donnees de 2026. Ces donnees
+ne permettent pas vraiment de tester la separation de sources, mais elles
+permettent, lorsqu'une source de localisation connue est disponible, de verifier
+si le pipeline de detection retrouve une position coherente. Les points analyses
+vont de 7 a 20, selon le plan presente figure~\ref{fig:plan-2026}.
+Chaque point est caracterise par deux enregistrements de 100 secondes, un pour
+chaque tetraedre, synchronises manuellement. La difference de temps d'arrivee
+entre les deux tetraedres n'est donc pas traitee ici.
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.9\linewidth]{Results_2026/plan2026.png}
@@ -1192,26 +1192,29 @@ traité ici.
   \label{fig:plan-2026}
 \end{figure}
 
-\paragraph{1ers résultats }~\\
+\paragraph{Premiers resultats}~\\
 
-L'estimation de la position du bateau varie en fonction de la position du bateau. Ainsi, parmis toutes
-nos positions testées, on obtient des résultats satisfaisant pour les positions 7,9,10,11,12,13. 
-On a une estimation totalement cassé à cause du bruit d'un second bateau pour le point 8 et nous avons des
-estimations biaisé sur les points du début d'après-midi 14,15,16,17,18,19,20. Le meilleur point est le point
-numéro 7 tandis que le plus mauvais sur lesquels l'algorithme fonctionne correctement est le point 11. Pour se faire 
-une idée, on montre figure \ref{fig:directions-p7-p11} l'allure des résultats. Aussi, attention a ne pas interpreter
-l'entiereté de
-la dispersion des directions pour de la variance, sur le point 7 par exemple. Le bateau dérive donc la Ground 
-Truth bouge également. Ainsi, on visualise figure \ref{fig:directions-temp-p7-p11} les directions donnée colorées
-en fonction du temps. Ainsi on estime mieux la variance lié à l'algorithme. Enfin, certaines directions semble 
-totalement raté : il faut garder à l'esprit que le début et la fin de chaque extrait audio ne contient pas nécessairement
-du signal. Nous l'avons tout de meme conservé sur les plots afin de pouvoir visualiser la direction d'une potentiel 
-seconde source de bruit pouvant nous servir dans l'interprétation de certaines obserevations. 
+La qualite de l'estimation depend fortement de la position du bateau. Parmi les
+positions testees, les resultats sont satisfaisants pour les points 7, 9, 10,
+11, 12 et 13. L'estimation du point 8 est fortement degradee par le bruit d'un
+second bateau, tandis que les points du debut d'apres-midi, de 14 a 20,
+presentent un biais apparent. Le meilleur resultat est obtenu pour le point 7 ;
+le point 11 est le cas le plus difficile parmi ceux pour lesquels l'algorithme
+reste exploitable. La figure~\ref{fig:directions-p7-p11} donne un apercu des
+directions estimees. Il faut toutefois eviter d'interpreter toute la dispersion
+des directions comme de la variance algorithmique. Sur le point 7, par exemple,
+le bateau derive et la ground truth se deplace egalement. La
+figure~\ref{fig:directions-temp-p7-p11}, ou les directions sont colorees en
+fonction du temps, permet de mieux distinguer cette derive de la variance propre
+a l'algorithme. Enfin, certaines directions semblent totalement erronees : le
+debut et la fin de chaque extrait audio ne contiennent pas necessairement le
+signal d'interet. Ces instants ont tout de meme ete conserves sur les figures
+afin de visualiser d'eventuelles sources de bruit utiles pour l'interpretation.
 
 \begin{figure}[H]
   \centering
   \includegraphics[width=0.48\linewidth]{Results_2026/synthese_high_fusion_2D.png}
-  \caption{Synthese des premiers resultats avec la high fusion 2D, on visualise la distance mediane à la ground truth}
+  \caption{Synthese des premiers resultats avec la high fusion 2D : distance mediane a la ground truth.}
   \label{fig:synthese-high-fusion-2026}
 \end{figure}
 
@@ -1270,7 +1273,7 @@ seconde source de bruit pouvant nous servir dans l'interprétation de certaines 
     \vspace{0.1cm}
     \small Direction estimee pour p13.
   \end{minipage}
-  \caption{Comparaison des directions estimees pour les points p7, p9, p10, p11, p12 et p13}
+  \caption{Comparaison des directions estimees pour les points p7, p9, p10, p11, p12 et p13.}
   \label{fig:directions-p7-p11}
 \end{figure}
 
@@ -1294,24 +1297,28 @@ seconde source de bruit pouvant nous servir dans l'interprétation de certaines 
 \end{figure}
 
 \subsection{Comparaison des differentes methodes d'estimation de position}
-Il ya globalement 3 méthodes implementées qui permettent d'estimer la positions des belugas à partir des TDOA
-mesuré. La High Fusion 3D et 2D (c'est à dire en projetant ou non sur le plan du sol) 
-et la low fusion. On montre donc
-figure \ref{fig:position-p12} et \ref{fig:position-p13} les résultats obtenus qui permettent de mieux comprendre les difference de résultats
-entre les algorithmes. 
+Trois methodes permettent d'estimer la position des belugas a partir des TDOA
+mesures : la high fusion 3D, la high fusion 2D, c'est-a-dire avec projection sur
+le plan du sol, et la low fusion. Les figures~\ref{fig:position-p12}
+et~\ref{fig:position-p13} presentent les resultats obtenus et permettent de
+mieux comprendre les differences entre ces approches.
 \paragraph{}
-Tout d'abord, entre le mode high fusion 3D et low fusion: les résultats sont relativement identiques
-sur l'ensemble des positions testés, avec un petit avantage pour le high fusion en plus de permettre une 
-meilleure interprétabilité au niveau des directions estimées par chaque tétrahèdre. 
+Tout d'abord, les modes high fusion 3D et low fusion donnent des resultats
+relativement proches sur l'ensemble des positions testees. La high fusion
+presente toutefois un leger avantage, en plus de fournir une meilleure
+interpretabilite des directions estimees par chaque tetraedre.
 
 
 \paragraph{}
-Ensuite pour ce qui est de la comparaison 3D-2D. La projection 2D permet en moyenne de faire de meilleurs estimations 
-de positions. Cela est en fait conséquence du fait que la source et les deux tétrahèdres sont tous à peu près 
-à la meme hauteur. (en réalité il faudrait plutôt projeter dans le plan SOURCE, tetra1, tetra2) En revanche,
-l'utilisation de h4 reste nécessaire. En effet, si l'on estime les directions estimés par les TDOA obtenus avec
-et sans h4 on obtiens des résultats bien plus mauvais sans. Ce microphones supplémentaire 
-permet tout de meme de mesurer 3 TDOA supplémentaire comme vu figure \ref{fig:direction-h4}.
+Concernant la comparaison entre les estimations 3D et 2D, la projection 2D
+donne en moyenne de meilleures estimations de position. Cela s'explique par le
+fait que la source et les deux tetraedres sont approximativement a la meme
+hauteur. En realite, il serait probablement preferable de projeter dans le plan
+defini par la source et les deux tetraedres. En revanche, l'utilisation de
+$h_4$ reste necessaire. Les directions estimees a partir des TDOA obtenus avec
+et sans $h_4$ montrent que les resultats se degradent fortement sans ce
+microphone supplementaire. Celui-ci apporte trois TDOA supplementaires, comme le
+montre la figure~\ref{fig:direction-h4}.
 
 
 \begin{figure}[H]
@@ -1387,7 +1394,7 @@ permet tout de meme de mesurer 3 TDOA supplémentaire comme vu figure \ref{fig:d
 
 \subsection{Point ne fonctionnant pas bien}
 
-\subsubsection{POINT numéro 8 : Bateau}
+\subsubsection{Point numero 8 : bateau}
 
 \begin{figure}[H]
   \centering
@@ -1421,30 +1428,35 @@ permet tout de meme de mesurer 3 TDOA supplémentaire comme vu figure \ref{fig:d
 
 
 \subsubsection{Point 14 à 20 : biais apparent}
-Pour les points 14 à 20 que l'on présente ci-dessous, les directions estimés présente un biais mais n'ont en 
-revanche pas plus de variance que d'habitude. Nous n'avons aucune certitude quant à la cause de ces résultats. 
+Pour les points 14 a 20 presentes ci-dessous, les directions estimees presentent
+un biais, mais pas davantage de variance que d'habitude. Nous n'avons aucune
+certitude quant a la cause de ces resultats.
 \paragraph{}
-Une première hypothèse pourrait de penser qu'une seconde source domine par rapport au bateau. Cependant nous 
-avons vu que cela, meme avec une source beaucoup plus forte, mène aux résultats du point 8 (grosse variance)
-. De plus, regarder les 
-prédictions sur les instants sans le son de notre source n'a pas permis d'identifier une seule direction précise. 
-Ainsi, l'hypothèse d'un bruit proche des microphones biaisant nos résultats est peu probable. 
+Une premiere hypothese serait qu'une seconde source domine le signal du bateau.
+Cependant, le point 8 montre qu'une source parasite forte conduit plutot a une
+forte variance. De plus, l'analyse des instants sans signal d'interet n'a pas
+permis d'identifier une direction parasite unique. L'hypothese d'un bruit proche
+des microphones qui biaiserait les resultats semble donc peu probable.
 \paragraph{}
-Une seconde hypothèse serait de penser que les microphones ont tourné durant l'experimentation. (il s'est 
-écoulé environ 2 heures entre la mesure du point 7 et la mesure du  point 20). Ces derniers pèsent plusieurs 
-tonne mais sont posés sur du sable qui peut potentiellement bouger. Toutefois, en regardant les 
-résultats, il ne semble pas y avoir une seule rotation constante.
+Une seconde hypothese serait une rotation des microphones pendant
+l'experimentation. Environ deux heures se sont ecoulees entre la mesure du point
+7 et celle du point 20. Les tetraedres pesent plusieurs tonnes, mais ils sont
+poses sur du sable, qui peut potentiellement bouger. Toutefois, les resultats ne
+semblent pas compatibles avec une rotation constante unique.
 \paragraph{}
-Enfin une dernière hypothèse pourrait être de considerer une désynchronisation de certains microphones. On a tracé
-figure \ref{fig:retard-micro-simulation} l'impacte de la desynchronisation du microphone en position Sud-EST 
-du tetrahèdre sur la direction estimé. On voit alors que certaines directions sont correctement prédites là ou 
-d'autres sont decalés avec notamment une erreur qui augmente dès que l'on s'éloigne de l'axe Nord-Ouest Sud-est.
-Toutefois, à nouveau les points 18 et 19 font contre-exemple car les directions attendus sont quasiment les memes, 
-pourtant le biais est différends.
+Enfin, une derniere hypothese serait une desynchronisation de certains
+microphones. La figure~\ref{fig:retard-micro-simulation} montre l'impact de la
+desynchronisation du microphone situe au sud-est du tetraedre sur la direction
+estimee. Certaines directions sont alors correctement predites, tandis que
+d'autres sont decalees, avec une erreur qui augmente notamment lorsque l'on
+s'eloigne de l'axe nord-ouest/sud-est. Toutefois, les points 18 et 19 constituent
+un contre-exemple : les directions attendues sont quasiment les memes, alors que
+les biais observes sont differents.
 
-Ainsi, nous n'avons finalement pas de réponse clair sur ce qu'il s'est passé. Cepandant, le fait d'avoir une faible 
-variance sur la direction estimée reste bon signe. l'algorithme ne produit pas quelque chose d'aléatoire, il y 
-simplement un élemement biaisant les résultats dont nous n'avons pas identifié la source.  
+Ainsi, nous n'avons pas de reponse claire sur l'origine exacte du probleme.
+Cependant, la faible variance des directions estimees reste encourageante :
+l'algorithme ne produit pas un resultat aleatoire, mais semble affecte par un
+element biaisant dont la source n'a pas encore ete identifiee.
 \begin{figure}[H]
   \centering
   \begin{minipage}{0.48\linewidth}
@@ -1514,7 +1526,7 @@ simplement un élemement biaisant les résultats dont nous n'avons pas identifi�
   \label{fig:direction-p20}
 \end{figure}
 
-\begin{figure}[H] \label{}
+\begin{figure}[H]
   \centering
   \includegraphics[width=0.85\linewidth]{Results_2026/retard_micro_simulation.png}
   \caption{Simulation des retards microphones.}
@@ -1539,12 +1551,15 @@ permettent de reconstruire les sources et de calculer des TDOA, soit par
 correlation sur les signaux reconstruits, soit a partir des pentes de phase, soit
 encore en alimentant un beamformer masque.
 
-La validation sur dataset synthetique fournit un cadre reproductible pour
+La validation sur un dataset synthetique fournit un cadre reproductible pour
 mesurer les erreurs de TDOA et inspecter les artefacts internes de l'algorithme.
 Les prochaines etapes naturelles consistent a completer les resultats
 quantitatifs, etudier la sensibilite aux niveaux de bruit et comparer
 systematiquement l'apport du masque temps-frequence dans la qualite finale de la
-separation et des TDOA.
+separation et des TDOA. Aussi, une comparaison des TDOA obtenus VS TDOA attendu a montrer que si désynchronisation
+il y a eu, celle-ci a eu lieu plusieurs fois et sur plusieurs microphone car aucune paire de microphone ne donnait 
+une TDOA valide sur l'ensemble des points et aucune paire de tdoa ne donnait une erreur constante sur l'ensemble 
+des points. 
 
 \appendix
 
@@ -1630,8 +1645,8 @@ D'ou :
     \frac{\sum_t\gamma_{i,t}}{T}.
 \]
 
-L'ajout de $\phi$ dans le code correspond a l'introduction d'un prior de
-Dirichlet pour regulariser l'estimation. Dans ce cas, la mise a jour devient :
+L'ajout de $\phi$ correspond a l'introduction d'un prior de Dirichlet pour
+regulariser l'estimation. Dans ce cas, la mise a jour devient :
 \[
   \alpha_i
     =
@@ -1753,8 +1768,8 @@ La condition d'optimalite donne :
 \]
 
 Le maximum est donc atteint pour le vecteur propre associe a la plus grande
-valeur propre de $\mathbf{R}_i$. C'est cette operation qui est calculee par la
-decomposition en valeurs propres dans l'implementation.
+valeur propre de $\mathbf{R}_i$. Cette mise a jour revient donc a effectuer une
+decomposition en valeurs propres de la matrice de correlation ponderee.
 
 \subsection{Mise a jour de la variance}
 
