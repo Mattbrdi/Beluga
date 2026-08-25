@@ -1238,91 +1238,95 @@ seconde source de bruit pouvant nous servir dans l'interprétation de certaines 
 \end{figure}
 
 \subsection{Comparaison des differentes methodes d'estimation de position}
-Il ya globalement 4 méthodes implementées qui permettent d'estimer la positions des belugas à partir des TDOA
+Il ya globalement 3 méthodes implementées qui permettent d'estimer la positions des belugas à partir des TDOA
 mesuré. La High Fusion 3D et 2D (c'est à dire en projetant ou non sur le plan du sol) 
-et la low fusion en utilsant h4 (le 4e microphone situé en haut du tétrahèdre) ou non. On montre donc
+et la low fusion. On montre donc
 figure \ref{fig:position-p12} et \ref{fig:position-p13} les résultats obtenus qui permettent de mieux comprendre les difference de résultats
 entre les algorithmes. 
 \paragraph{}
-Tout d'abord, entre le mode high fusion 3D et low fusion use h4 true : les résultats sont relativement identiques
-sur l'ensemble des positions testé, avec un petit avantage pour le high fusion en plus de permettre une 
-meilleure interprétabilité au niveau des directions estimées par chaque tétrahèdre.  
+Tout d'abord, entre le mode high fusion 3D et low fusion: les résultats sont relativement identiques
+sur l'ensemble des positions testés, avec un petit avantage pour le high fusion en plus de permettre une 
+meilleure interprétabilité au niveau des directions estimées par chaque tétrahèdre. 
+
 
 \paragraph{}
 Ensuite pour ce qui est de la comparaison 3D-2D. La projection 2D permet en moyenne de faire de meilleurs estimations 
-de positions. En effet, il semble qu'estimer la positions en essaynt d'intersecter des droites 3D donne tendance 
-à rapprocher la position estimé de la source. Cela s'explique du fait que la composante de hauteur de la source
-par rapport au tétrahèdres est petites comparativement aux composantes sur le plan du sol. Ainsi, pour une 
-meme difference de positions, 
+de positions. Cela est en fait conséquence du fait que la source et les deux tétrahèdres sont tous à peu près 
+à la meme hauteur. (en réalité il faudrait plutôt projeter dans le plan SOURCE, tetra1, tetra2) En revanche,
+l'utilisation de h4 reste nécessaire. En effet, si l'on estime les directions estimés par les TDOA obtenus avec
+et sans h4 on obtiens des résultats bien plus mauvais sans. Ce microphones supplémentaire 
+permet tout de meme de mesurer 3 TDOA supplémentaire comme vu figure \ref{fig:direction-h4}.
 
-\begin{figure}[H]\label{fig:position-p13}
+
+\begin{figure}[H]
   \centering
-  \begin{minipage}{0.48\linewidth}
+  \begin{minipage}{0.31\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Results_2026/position_p13_HF_2D.png}
     \vspace{0.1cm}
     \small HF 2D.
   \end{minipage}
   \hfill
-  \begin{minipage}{0.48\linewidth}
+  \begin{minipage}{0.31\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Results_2026/position_p13_HF_3D.png}
     \vspace{0.1cm}
     \small HF 3D.
   \end{minipage}
-
-  \vspace{0.3cm}
-
-  \begin{minipage}{0.48\linewidth}
-    \centering
-    \includegraphics[width=\linewidth]{Results_2026/position_p13_LF_useh4F.png}
-    \vspace{0.1cm}
-    \small LF use H4 faux.
-  \end{minipage}
   \hfill
-  \begin{minipage}{0.48\linewidth}
+  \begin{minipage}{0.31\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Results_2026/position_p13_LF_useh4T.png}
     \vspace{0.1cm}
     \small LF use H4 vrai.
   \end{minipage}
   \caption{Comparaison des differentes methodes pour la position p13.}
-  \label{fig:position-p13-methods}
+  \label{fig:position-p13}
 \end{figure}
 
-\begin{figure}[H]\label{fig:position-p12}
+\begin{figure}[H]
   \centering
-  \begin{minipage}{0.48\linewidth}
+  \begin{minipage}{0.31\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Results_2026/position_p12_HF_2D.png}
     \vspace{0.1cm}
     \small HF 2D.
   \end{minipage}
   \hfill
-  \begin{minipage}{0.48\linewidth}
+  \begin{minipage}{0.31\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Results_2026/position_p12_HF_3D.png}
     \vspace{0.1cm}
     \small HF 3D.
   \end{minipage}
-
-  \vspace{0.3cm}
-
-  \begin{minipage}{0.48\linewidth}
-    \centering
-    \includegraphics[width=\linewidth]{Results_2026/position_p12_LF_useh4F.png}
-    \vspace{0.1cm}
-    \small LF use H4 faux.
-  \end{minipage}
   \hfill
-  \begin{minipage}{0.48\linewidth}
+  \begin{minipage}{0.31\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Results_2026/position_p12_LF_useh4T.png}
     \vspace{0.1cm}
     \small LF use H4 vrai.
   \end{minipage}
   \caption{Comparaison des differentes methodes pour la position p12.}
-  \label{fig:position-p12-methods}
+  \label{fig:position-p12}
+\end{figure}
+
+\begin{figure}[H]
+  \centering
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/direction_p13_useh4F.png}
+    \vspace{0.1cm}
+    \small Sans $h_4$.
+  \end{minipage}
+  \hfill
+  \begin{minipage}{0.48\linewidth}
+    \centering
+    \includegraphics[width=\linewidth]{Results_2026/direction_p13_useh4T.png}
+    \vspace{0.1cm}
+    \small Avec $h_4$.
+  \end{minipage}
+  \caption{Comparaison des directions estimees pour la position p13 avec et sans $h_4$.}
+  \label{fig:direction-h4}
 \end{figure}
 
 \subsection{Point ne fonctionnant pas bien}
