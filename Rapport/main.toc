@@ -36,11 +36,12 @@
 \contentsline {paragraph}{Mauvaise estimations des bins ayant du signal quand il y a du bruit}{17}{section*.8}%
 \contentsline {paragraph}{Mauvaise droite dans le RANSAC}{17}{section*.9}%
 \contentsline {subsection}{\numberline {5.2}Validation du beamforming}{18}{subsection.5.2}%
-\contentsline {section}{\numberline {6}Analyse des donnees 2026}{20}{section.6}%
-\contentsline {subsection}{\numberline {6.1}Introduction}{20}{subsection.6.1}%
-\contentsline {subsection}{\numberline {6.2}Comparaison des differentes methodes}{20}{subsection.6.2}%
-\contentsline {subsection}{\numberline {6.3}Point ne fonctionnant pas bien}{20}{subsection.6.3}%
-\contentsline {section}{\numberline {7}Conclusion}{20}{section.7}%
+\contentsline {section}{\numberline {6}Analyse des donnees 2026}{19}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Introduction}{19}{subsection.6.1}%
+\contentsline {paragraph}{1ers résultats}{19}{section*.10}%
+\contentsline {subsection}{\numberline {6.2}Comparaison des differentes methodes}{19}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}Point ne fonctionnant pas bien}{19}{subsection.6.3}%
+\contentsline {section}{\numberline {7}Conclusion}{19}{section.7}%
 \contentsline {section}{\numberline {A}Demonstrations des mises a jour EM}{21}{section.A}%
 \contentsline {subsection}{\numberline {A.1}Mise a jour des poids}{21}{subsection.A.1}%
 \contentsline {subsection}{\numberline {A.2}Mise a jour du centroïde}{21}{subsection.A.2}%

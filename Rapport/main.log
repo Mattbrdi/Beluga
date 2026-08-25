@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (MiKTeX 26.5) (preloaded format=pdflatex 2026.6.4)  24 AUG 2026 20:28
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (MiKTeX 26.5) (preloaded format=pdflatex 2026.6.4)  24 AUG 2026 20:43
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -622,58 +622,58 @@ File: Sawada_no_merging_v3/pts 14 RANSAC.png Graphic file (type png)
 <use Sawada_no_merging_v3/pts 14 RANSAC.png>
 Package pdftex.def Info: Sawada_no_merging_v3/pts 14 RANSAC.png  used on input line 1134.
 (pdftex.def)             Requested size: 218.51521pt x 245.86902pt.
-<Results_2026/plan2026.png, id=351, 488.32437pt x 420.57124pt>
+<Results_2026/plan2026.png, id=352, 488.32437pt x 420.57124pt>
 File: Results_2026/plan2026.png Graphic file (type png)
 <use Results_2026/plan2026.png>
-Package pdftex.def Info: Results_2026/plan2026.png  used on input line 1165.
+Package pdftex.def Info: Results_2026/plan2026.png  used on input line 1169.
 (pdftex.def)             Requested size: 409.71692pt x 352.87314pt.
-<Results_2026/position_p13_HF_2D.png, id=352, 279.0425pt x 268.00125pt>
+ [18 <./Sawada_no_merging_v3/pts14mel.png> <./Sawada_no_merging_v3/pts14s1.png> <./Sawada_no_merging_v3/pts14s2.png> <./Sawada_no_merging_v3/pts14clusters.png> <./Sawada_no_merging_v3/pts14cluster_attrib.png>]
+<Results_2026/position_p13_HF_2D.png, id=363, 279.0425pt x 268.00125pt>
 File: Results_2026/position_p13_HF_2D.png Graphic file (type png)
 <use Results_2026/position_p13_HF_2D.png>
-Package pdftex.def Info: Results_2026/position_p13_HF_2D.png  used on input line 1176.
+Package pdftex.def Info: Results_2026/position_p13_HF_2D.png  used on input line 1182.
 (pdftex.def)             Requested size: 109.26108pt x 104.93716pt.
-<Results_2026/position_p13_HF_3D.png, id=353, 265.49188pt x 268.50313pt>
+<Results_2026/position_p13_HF_3D.png, id=364, 265.49188pt x 268.50313pt>
 File: Results_2026/position_p13_HF_3D.png Graphic file (type png)
 <use Results_2026/position_p13_HF_3D.png>
-Package pdftex.def Info: Results_2026/position_p13_HF_3D.png  used on input line 1183.
+Package pdftex.def Info: Results_2026/position_p13_HF_3D.png  used on input line 1189.
 (pdftex.def)             Requested size: 109.26108pt x 110.50078pt.
-<Results_2026/position_p13_LF_useh4F.png, id=354, 278.54062pt x 270.00874pt>
+<Results_2026/position_p13_LF_useh4F.png, id=365, 278.54062pt x 270.00874pt>
 File: Results_2026/position_p13_LF_useh4F.png Graphic file (type png)
 <use Results_2026/position_p13_LF_useh4F.png>
-Package pdftex.def Info: Results_2026/position_p13_LF_useh4F.png  used on input line 1190.
+Package pdftex.def Info: Results_2026/position_p13_LF_useh4F.png  used on input line 1196.
 (pdftex.def)             Requested size: 109.26108pt x 105.91273pt.
-<Results_2026/position_p13_LF_useh4T.png, id=355, 279.0425pt x 266.49562pt>
+<Results_2026/position_p13_LF_useh4T.png, id=366, 279.0425pt x 266.49562pt>
 File: Results_2026/position_p13_LF_useh4T.png Graphic file (type png)
 <use Results_2026/position_p13_LF_useh4T.png>
-Package pdftex.def Info: Results_2026/position_p13_LF_useh4T.png  used on input line 1197.
+Package pdftex.def Info: Results_2026/position_p13_LF_useh4T.png  used on input line 1203.
 (pdftex.def)             Requested size: 109.26108pt x 104.34764pt.
- [18 <./Sawada_no_merging_v3/pts14mel.png> <./Sawada_no_merging_v3/pts14s1.png> <./Sawada_no_merging_v3/pts14s2.png> <./Sawada_no_merging_v3/pts14clusters.png> <./Sawada_no_merging_v3/pts14cluster_attrib.png>] [19 <./Sawada_no_merging_v3/pts 14 GT.png> <./Sawada_no_merging_v3/pts 14 RANSAC.png> <./Results_2026/plan2026.png>]
-<Results_2026/position_p12_HF_2D.png, id=376, 271.0125pt x 268.00125pt>
+<Results_2026/position_p12_HF_2D.png, id=367, 271.0125pt x 268.00125pt>
 File: Results_2026/position_p12_HF_2D.png Graphic file (type png)
 <use Results_2026/position_p12_HF_2D.png>
-Package pdftex.def Info: Results_2026/position_p12_HF_2D.png  used on input line 1209.
+Package pdftex.def Info: Results_2026/position_p12_HF_2D.png  used on input line 1215.
 (pdftex.def)             Requested size: 109.26108pt x 108.04509pt.
-<Results_2026/position_p12_HF_3D.png, id=377, 278.54062pt x 268.50313pt>
+<Results_2026/position_p12_HF_3D.png, id=368, 278.54062pt x 268.50313pt>
 File: Results_2026/position_p12_HF_3D.png Graphic file (type png)
 <use Results_2026/position_p12_HF_3D.png>
-Package pdftex.def Info: Results_2026/position_p12_HF_3D.png  used on input line 1216.
+Package pdftex.def Info: Results_2026/position_p12_HF_3D.png  used on input line 1222.
 (pdftex.def)             Requested size: 109.26108pt x 105.32214pt.
-<Results_2026/position_p12_LF_useh4F.png, id=378, 276.03125pt x 271.0125pt>
+<Results_2026/position_p12_LF_useh4F.png, id=369, 276.03125pt x 271.0125pt>
 File: Results_2026/position_p12_LF_useh4F.png Graphic file (type png)
 <use Results_2026/position_p12_LF_useh4F.png>
-Package pdftex.def Info: Results_2026/position_p12_LF_useh4F.png  used on input line 1223.
+Package pdftex.def Info: Results_2026/position_p12_LF_useh4F.png  used on input line 1229.
 (pdftex.def)             Requested size: 109.26108pt x 107.27412pt.
-<Results_2026/position_p12_LF_useh4T.png, id=379, 271.0125pt x 265.49188pt>
+<Results_2026/position_p12_LF_useh4T.png, id=370, 271.0125pt x 265.49188pt>
 File: Results_2026/position_p12_LF_useh4T.png Graphic file (type png)
 <use Results_2026/position_p12_LF_useh4T.png>
-Package pdftex.def Info: Results_2026/position_p12_LF_useh4T.png  used on input line 1230.
+Package pdftex.def Info: Results_2026/position_p12_LF_useh4T.png  used on input line 1236.
 (pdftex.def)             Requested size: 109.26108pt x 107.03343pt.
-
-Overfull \hbox (12.2563pt too wide) in paragraph at lines 1270--1278
+ [19 <./Sawada_no_merging_v3/pts 14 GT.png> <./Sawada_no_merging_v3/pts 14 RANSAC.png>] [20 <./Results_2026/plan2026.png> <./Results_2026/position_p13_HF_2D.png> <./Results_2026/position_p13_HF_3D.png> <./Results_2026/position_p13_LF_useh4F.png> <./Results_2026/position_p13_LF_useh4T.png> <./Results_2026/position_p12_HF_2D.png> <./Results_2026/position_p12_HF_3D.png> <./Results_2026/position_p12_LF_useh4F.png> <./Results_2026/position_p12_LF_useh4T.png>]
+Overfull \hbox (12.2563pt too wide) in paragraph at lines 1276--1284
 []\T1/lmr/m/n/10.95 Dans l'al-go-rithme de Sa-wada, l'etape M consiste a maxi-mi-ser l'es-pe-rance de la log-vraisemblance
  []
 
-[20 <./Results_2026/position_p13_HF_2D.png> <./Results_2026/position_p13_HF_3D.png> <./Results_2026/position_p13_LF_useh4F.png> <./Results_2026/position_p13_LF_useh4T.png> <./Results_2026/position_p12_HF_2D.png> <./Results_2026/position_p12_HF_3D.png> <./Results_2026/position_p12_LF_useh4F.png> <./Results_2026/position_p12_LF_useh4T.png>] [21] [22] (main.aux)
+[21] [22] (main.aux)
  ***********
 LaTeX2e <2025-11-01>
 L3 programming layer <2026-04-28>
@@ -682,17 +682,17 @@ Package rerunfilecheck Info: File `main.out' has not changed.
 (rerunfilecheck)             Checksum: 54E20F5F5EACCAE0310D91CC9F15F220;8081.
  ) 
 Here is how much of TeX's memory you used:
- 13456 strings out of 467683
- 221205 string characters out of 5412786
+ 13457 strings out of 467683
+ 221216 string characters out of 5412786
  650613 words of memory out of 5000000
  42228 multiletter control sequences out of 15000+600000
  697228 words of font info for 90 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  75i,9n,79p,562b,716s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/euler/eufm10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx12.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx8.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmcsc10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmex10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmi10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmi6.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmi8.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmib10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr12.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr17.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr6.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr8.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmri10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmsy10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmsy6.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmsy8.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmtt10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/symbols/msbm10.pfb>
-Output written on main.pdf (22 pages, 7421949 bytes).
+Output written on main.pdf (22 pages, 7422882 bytes).
 PDF statistics:
- 519 PDF objects out of 1000 (max. 8388607)
- 87 named destinations out of 1000 (max. 500000)
+ 521 PDF objects out of 1000 (max. 8388607)
+ 88 named destinations out of 1000 (max. 500000)
  440 words of extra memory for PDF output out of 10000 (max. 10000000)
 
