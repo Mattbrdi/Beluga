@@ -1,4 +1,4 @@
-This is pdfTeX, Version 3.141592653-2.6-1.40.29 (MiKTeX 26.5) (preloaded format=pdflatex 2026.6.4)  25 AUG 2026 12:05
+This is pdfTeX, Version 3.141592653-2.6-1.40.29 (MiKTeX 26.5) (preloaded format=pdflatex 2026.6.4)  25 AUG 2026 13:29
 entering extended mode
  restricted \write18 enabled.
  file:line:error style messages enabled.
@@ -736,67 +736,68 @@ pdfTeX warning (ext4): destination with the same identifier (name{figure.14}) ha
                                                   \__shipout_drop_firstpage_...
 l.1239 
         <./Results_2026/synthese_high_fusion_2D.png> <./Results_2026/direction_p7_HF_2D.png> <./Results_2026/direction_p11_HF_2D.png>]
-<Results_2026/position_p13_HF_2D.png, id=395, 279.0425pt x 268.00125pt>
+<Results_2026/position_p13_HF_2D.png, id=397, 279.0425pt x 268.00125pt>
 File: Results_2026/position_p13_HF_2D.png Graphic file (type png)
 <use Results_2026/position_p13_HF_2D.png>
-Package pdftex.def Info: Results_2026/position_p13_HF_2D.png  used on input line 1249.
-(pdftex.def)             Requested size: 109.26108pt x 104.93716pt.
-<Results_2026/position_p13_HF_3D.png, id=396, 265.49188pt x 268.50313pt>
+Package pdftex.def Info: Results_2026/position_p13_HF_2D.png  used on input line 1262.
+(pdftex.def)             Requested size: 218.51521pt x 209.87434pt.
+<Results_2026/position_p13_HF_3D.png, id=398, 265.49188pt x 268.50313pt>
 File: Results_2026/position_p13_HF_3D.png Graphic file (type png)
 <use Results_2026/position_p13_HF_3D.png>
-Package pdftex.def Info: Results_2026/position_p13_HF_3D.png  used on input line 1256.
-(pdftex.def)             Requested size: 109.26108pt x 110.50078pt.
-<Results_2026/position_p13_LF_useh4F.png, id=397, 278.54062pt x 270.00874pt>
+Package pdftex.def Info: Results_2026/position_p13_HF_3D.png  used on input line 1269.
+(pdftex.def)             Requested size: 218.51521pt x 220.99748pt.
+<Results_2026/position_p13_LF_useh4F.png, id=399, 278.54062pt x 270.00874pt>
 File: Results_2026/position_p13_LF_useh4F.png Graphic file (type png)
 <use Results_2026/position_p13_LF_useh4F.png>
-Package pdftex.def Info: Results_2026/position_p13_LF_useh4F.png  used on input line 1263.
-(pdftex.def)             Requested size: 109.26108pt x 105.91273pt.
-<Results_2026/position_p13_LF_useh4T.png, id=398, 279.0425pt x 266.49562pt>
+Package pdftex.def Info: Results_2026/position_p13_LF_useh4F.png  used on input line 1278.
+(pdftex.def)             Requested size: 218.51521pt x 211.82549pt.
+<Results_2026/position_p13_LF_useh4T.png, id=400, 279.0425pt x 266.49562pt>
 File: Results_2026/position_p13_LF_useh4T.png Graphic file (type png)
 <use Results_2026/position_p13_LF_useh4T.png>
-Package pdftex.def Info: Results_2026/position_p13_LF_useh4T.png  used on input line 1270.
-(pdftex.def)             Requested size: 109.26108pt x 104.34764pt.
-<Results_2026/position_p12_HF_2D.png, id=399, 271.0125pt x 268.00125pt>
-File: Results_2026/position_p12_HF_2D.png Graphic file (type png)
-<use Results_2026/position_p12_HF_2D.png>
-Package pdftex.def Info: Results_2026/position_p12_HF_2D.png  used on input line 1282.
-(pdftex.def)             Requested size: 109.26108pt x 108.04509pt.
-<Results_2026/position_p12_HF_3D.png, id=400, 278.54062pt x 268.50313pt>
-File: Results_2026/position_p12_HF_3D.png Graphic file (type png)
-<use Results_2026/position_p12_HF_3D.png>
-Package pdftex.def Info: Results_2026/position_p12_HF_3D.png  used on input line 1289.
-(pdftex.def)             Requested size: 109.26108pt x 105.32214pt.
-<Results_2026/position_p12_LF_useh4F.png, id=401, 276.03125pt x 271.0125pt>
-File: Results_2026/position_p12_LF_useh4F.png Graphic file (type png)
-<use Results_2026/position_p12_LF_useh4F.png>
-Package pdftex.def Info: Results_2026/position_p12_LF_useh4F.png  used on input line 1296.
-(pdftex.def)             Requested size: 109.26108pt x 107.27412pt.
-<Results_2026/position_p12_LF_useh4T.png, id=402, 271.0125pt x 265.49188pt>
-File: Results_2026/position_p12_LF_useh4T.png Graphic file (type png)
-<use Results_2026/position_p12_LF_useh4T.png>
-Package pdftex.def Info: Results_2026/position_p12_LF_useh4T.png  used on input line 1303.
-(pdftex.def)             Requested size: 109.26108pt x 107.03343pt.
+Package pdftex.def Info: Results_2026/position_p13_LF_useh4T.png  used on input line 1285.
+(pdftex.def)             Requested size: 218.51521pt x 208.69528pt.
  [22
 pdfTeX warning (ext4): destination with the same identifier (name{figure.15}) has been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.1322 
-       
+l.1292 
+        <./Results_2026/direction_temp_p7_HF_2D.png> <./Results_2026/direction_temp_p11_HF_2D.png>]
+<Results_2026/position_p12_HF_2D.png, id=410, 271.0125pt x 268.00125pt>
+File: Results_2026/position_p12_HF_2D.png Graphic file (type png)
+<use Results_2026/position_p12_HF_2D.png>
+Package pdftex.def Info: Results_2026/position_p12_HF_2D.png  used on input line 1297.
+(pdftex.def)             Requested size: 218.51521pt x 216.09427pt.
+<Results_2026/position_p12_HF_3D.png, id=411, 278.54062pt x 268.50313pt>
+File: Results_2026/position_p12_HF_3D.png Graphic file (type png)
+<use Results_2026/position_p12_HF_3D.png>
+Package pdftex.def Info: Results_2026/position_p12_HF_3D.png  used on input line 1304.
+(pdftex.def)             Requested size: 218.51521pt x 210.6443pt.
+<Results_2026/position_p12_LF_useh4F.png, id=412, 276.03125pt x 271.0125pt>
+File: Results_2026/position_p12_LF_useh4F.png Graphic file (type png)
+<use Results_2026/position_p12_LF_useh4F.png>
+Package pdftex.def Info: Results_2026/position_p12_LF_useh4F.png  used on input line 1313.
+(pdftex.def)             Requested size: 218.51521pt x 214.5524pt.
+<Results_2026/position_p12_LF_useh4T.png, id=413, 271.0125pt x 265.49188pt>
+File: Results_2026/position_p12_LF_useh4T.png Graphic file (type png)
+<use Results_2026/position_p12_LF_useh4T.png>
+Package pdftex.def Info: Results_2026/position_p12_LF_useh4T.png  used on input line 1320.
+(pdftex.def)             Requested size: 218.51521pt x 214.07092pt.
+ [23
 pdfTeX warning (ext4): destination with the same identifier (name{figure.16}) has been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.1322 
-       
+l.1327 
+        <./Results_2026/position_p13_HF_2D.png> <./Results_2026/position_p13_HF_3D.png> <./Results_2026/position_p13_LF_useh4F.png> <./Results_2026/position_p13_LF_useh4T.png>] [24
 pdfTeX warning (ext4): destination with the same identifier (name{figure.17}) has been already used, duplicate ignored
 <argument> ...shipout:D \box_use:N \l_shipout_box 
                                                   \__shipout_drop_firstpage_...
-l.1322 
-        <./Results_2026/direction_temp_p7_HF_2D.png> <./Results_2026/direction_temp_p11_HF_2D.png> <./Results_2026/position_p13_HF_2D.png> <./Results_2026/position_p13_HF_3D.png> <./Results_2026/position_p13_LF_useh4F.png> <./Results_2026/position_p13_LF_useh4T.png> <./Results_2026/position_p12_HF_2D.png> <./Results_2026/position_p12_HF_3D.png> <./Results_2026/position_p12_LF_useh4F.png> <./Results_2026/position_p12_LF_useh4T.png>]
-Overfull \hbox (12.2563pt too wide) in paragraph at lines 1343--1351
+l.1348 L
+        a validation sur dataset synthetique fournit un cadre reproductible ... <./Results_2026/position_p12_HF_2D.png> <./Results_2026/position_p12_HF_3D.png> <./Results_2026/position_p12_LF_useh4F.png> <./Results_2026/position_p12_LF_useh4T.png>]
+Overfull \hbox (12.2563pt too wide) in paragraph at lines 1360--1368
 []\T1/lmr/m/n/10.95 Dans l'al-go-rithme de Sa-wada, l'etape M consiste a maxi-mi-ser l'es-pe-rance de la log-vraisemblance
  []
 
-[23] [24] [25] (main.aux)
+[25] [26] (main.aux)
  ***********
 LaTeX2e <2025-11-01>
 L3 programming layer <2026-04-28>
@@ -805,17 +806,17 @@ Package rerunfilecheck Info: File `main.out' has not changed.
 (rerunfilecheck)             Checksum: 9729AE6918A9C9FC0C6E175DDF3573A4;8215.
  ) 
 Here is how much of TeX's memory you used:
- 13572 strings out of 467683
- 224065 string characters out of 5412786
- 652561 words of memory out of 5000000
+ 13575 strings out of 467683
+ 224101 string characters out of 5412786
+ 652431 words of memory out of 5000000
  42333 multiletter control sequences out of 15000+600000
  697228 words of font info for 90 fonts, out of 8000000 for 9000
  1141 hyphenation exceptions out of 8191
  75i,9n,79p,562b,716s stack positions out of 10000i,1000n,20000p,200000b,200000s
 <C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/euler/eufm10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx12.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmbx8.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmcsc10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmex10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmi10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmi6.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmi8.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmmib10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr12.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr17.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr6.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmr8.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmri10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmsy10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmsy6.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmsy8.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/lm/lmtt10.pfb><C:/Users/BORDERIES/AppData/Local/Programs/MiKTeX/fonts/type1/public/amsfonts/symbols/msbm10.pfb>
-Output written on main.pdf (25 pages, 8000592 bytes).
+Output written on main.pdf (26 pages, 8002876 bytes).
 PDF statistics:
- 550 PDF objects out of 1000 (max. 8388607)
- 94 named destinations out of 1000 (max. 500000)
+ 559 PDF objects out of 1000 (max. 8388607)
+ 97 named destinations out of 1000 (max. 500000)
  465 words of extra memory for PDF output out of 10000 (max. 10000000)
 

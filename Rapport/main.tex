@@ -1240,32 +1240,47 @@ seconde source de bruit pouvant nous servir dans l'interprétation de certaines 
 \subsection{Comparaison des differentes methodes d'estimation de position}
 Il ya globalement 4 méthodes implementées qui permettent d'estimer la positions des belugas à partir des TDOA
 mesuré. La High Fusion 3D et 2D (c'est à dire en projetant ou non sur le plan du sol) 
-et la low fusion en utilsant h4 (le 4e microphone situé en haut du tétrahèdre) ou non. 
+et la low fusion en utilsant h4 (le 4e microphone situé en haut du tétrahèdre) ou non. On montre donc
+figure \ref{fig:position-p12} et \ref{fig:position-p13} les résultats obtenus qui permettent de mieux comprendre les difference de résultats
+entre les algorithmes. 
+\paragraph{}
+Tout d'abord, entre le mode high fusion 3D et low fusion use h4 true : les résultats sont relativement identiques
+sur l'ensemble des positions testé, avec un petit avantage pour le high fusion en plus de permettre une 
+meilleure interprétabilité au niveau des directions estimées par chaque tétrahèdre.  
 
-\begin{figure}[htbp]\label{position p-13}
+\paragraph{}
+Ensuite pour ce qui est de la comparaison 3D-2D. La projection 2D permet en moyenne de faire de meilleurs estimations 
+de positions. En effet, il semble qu'estimer la positions en essaynt d'intersecter des droites 3D donne tendance 
+à rapprocher la position estimé de la source. Cela s'explique du fait que la composante de hauteur de la source
+par rapport au tétrahèdres est petites comparativement aux composantes sur le plan du sol. Ainsi, pour une 
+meme difference de positions, 
+
+\begin{figure}[H]\label{fig:position-p13}
   \centering
-  \begin{minipage}{0.24\linewidth}
+  \begin{minipage}{0.48\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Results_2026/position_p13_HF_2D.png}
     \vspace{0.1cm}
     \small HF 2D.
   \end{minipage}
   \hfill
-  \begin{minipage}{0.24\linewidth}\label{position-p12}
+  \begin{minipage}{0.48\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Results_2026/position_p13_HF_3D.png}
     \vspace{0.1cm}
     \small HF 3D.
   \end{minipage}
-  \hfill
-  \begin{minipage}{0.24\linewidth}
+
+  \vspace{0.3cm}
+
+  \begin{minipage}{0.48\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Results_2026/position_p13_LF_useh4F.png}
     \vspace{0.1cm}
     \small LF use H4 faux.
   \end{minipage}
   \hfill
-  \begin{minipage}{0.24\linewidth}
+  \begin{minipage}{0.48\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Results_2026/position_p13_LF_useh4T.png}
     \vspace{0.1cm}
@@ -1275,30 +1290,32 @@ et la low fusion en utilsant h4 (le 4e microphone situé en haut du tétrahèdre
   \label{fig:position-p13-methods}
 \end{figure}
 
-\begin{figure}[htbp]
+\begin{figure}[H]\label{fig:position-p12}
   \centering
-  \begin{minipage}{0.24\linewidth}
+  \begin{minipage}{0.48\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Results_2026/position_p12_HF_2D.png}
     \vspace{0.1cm}
     \small HF 2D.
   \end{minipage}
   \hfill
-  \begin{minipage}{0.24\linewidth}
+  \begin{minipage}{0.48\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Results_2026/position_p12_HF_3D.png}
     \vspace{0.1cm}
     \small HF 3D.
   \end{minipage}
-  \hfill
-  \begin{minipage}{0.24\linewidth}
+
+  \vspace{0.3cm}
+
+  \begin{minipage}{0.48\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Results_2026/position_p12_LF_useh4F.png}
     \vspace{0.1cm}
     \small LF use H4 faux.
   \end{minipage}
   \hfill
-  \begin{minipage}{0.24\linewidth}
+  \begin{minipage}{0.48\linewidth}
     \centering
     \includegraphics[width=\linewidth]{Results_2026/position_p12_LF_useh4T.png}
     \vspace{0.1cm}
