@@ -17,7 +17,7 @@ def dice_loss_from_logits(logits, targets, eps=1e-6):
 
     return 1 - dice.mean()
 
-class SpectroMaskLightningModule(L.LightningModule):
+class PhaseAwareSpectroMaskLightningModule(L.LightningModule):
     def __init__(self, model, lr=1e-3, pos_weight=torch.tensor([0.0])):
         super().__init__()
         self.model = model
