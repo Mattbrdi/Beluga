@@ -1,14 +1,9 @@
 import argparse
-import sys
-from pathlib import Path
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
 
+from time_frequency_mask.config import Parameters
 from time_frequency_mask.masknet.dataset import WhistleMaskDataModule
 from time_frequency_mask.masknet.models.spectro_mask_net_lightning import SpectroMaskLightningModule
 from time_frequency_mask.masknet.models.spectro_mask_net import SpectroMaskNet
-from time_frequency_mask.configuration import DATASET_PATH
 from lightning.pytorch.loggers import CSVLogger
 from lightning.pytorch.callbacks import ModelCheckpoint, EarlyStopping
 
@@ -21,18 +16,23 @@ def parse_args():
         "--phase-aware",
         action="store_true",
         help=(
-            "Use 16 input channels: four magnitudes and real/imaginary IPD "
-            "features for all six microphone pairs."
+            "Use M*M input channels: four magnitudes and real/imaginary IPD "
+            "features for all M(M-1) microphone pairs."
         ),
     )
+    parser.add_argument("--config", help="Configuration used for time_frequency_mask", required=True, type=str)
     parser.add_argument("--checkpoint", type=str, default=None, help="Checkpoint path to resume training ")
     return parser.parse_args()
 
 
 def main():
     args = parse_args()
+
+    parameters = Parameters.from_json(args.config)
+    M = parameters.array.num_mics
     datamodule = WhistleMaskDataModule(
-        dataset_path=DATASET_PATH,
+        parameters=parameters,
+        dataset_path=parameters.network.input_path,
         batch_size=24,
         seed=42,
         num_workers=8,
@@ -41,7 +41,7 @@ def main():
 
     model = SpectroMaskLightningModule(
         model=SpectroMaskNet(
-            n_channels=16 if args.phase_aware else 4,
+            n_channels=M*M if args.phase_aware else M,
             dropout=0.1,
         ),
         lr=1e-3,
