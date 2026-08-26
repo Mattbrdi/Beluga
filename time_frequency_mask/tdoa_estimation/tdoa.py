@@ -1,18 +1,11 @@
 import numpy as np 
 from numpy.typing import NDArray
 
-import sys
-from pathlib import Path
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
-from time_frequency_mask.configuration import SAMPLING_RATE, N_FFT, MAX_TDOA, DURATION
+from time_frequency_mask.config import AudioParameters
 from time_frequency_mask.tdoa_estimation.blob import Blob
 from time_frequency_mask.data_generation.core.preprocess import bandpass_filter
-from scipy.signal import correlate
 
-def windowed_correlation(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64], idx_0 : int, win_size = N_FFT, max_tdoa = MAX_TDOA, sampling_rate = SAMPLING_RATE):
+def windowed_correlation(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64], idx_0 : int, win_size : int, max_tdoa : float, sampling_rate : float) -> NDArray[np.float64]:
     
     if len(audio_one) != len(audio_two):
         raise ValueError(f"Audio length mismatch got {len(audio_one)} and {len(audio_two)}")
@@ -46,7 +39,7 @@ def windowed_correlation(audio_one : NDArray[np.float64], audio_two : NDArray[np
     cross_corr = np.array([corr(k) for k in range(2*n_tdoa +1)]).astype(np.float64)
     return cross_corr / norm2_s2_w
 
-def compute_tdoa(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64], idx_0 : int, win_size = N_FFT, max_tdoa = MAX_TDOA, sampling_rate = SAMPLING_RATE):
+def compute_tdoa(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64], idx_0 : int, win_size, max_tdoa, sampling_rate):
     n_tdoa = int(np.ceil(sampling_rate*max_tdoa))
     one_full_two_windowed = windowed_correlation(audio_one, audio_two, idx_0, win_size, max_tdoa, sampling_rate)
     two_full_one_windowed = windowed_correlation(audio_two, audio_one, idx_0, win_size, max_tdoa, sampling_rate)
@@ -59,16 +52,16 @@ def compute_tdoa(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64
     
     return -tdoa_idx
 
-def compute_cross_corr(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64], idx_0 : int, win_size = N_FFT):
-    one_full_two_windowed = windowed_correlation(audio_one, audio_two, idx_0, win_size)
-    two_full_one_windowed = windowed_correlation(audio_two, audio_one, idx_0, win_size)
+def compute_cross_corr(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64], idx_0 : int, win_size, max_tdoa, sampling_rate):
+    one_full_two_windowed = windowed_correlation(audio_one, audio_two, idx_0, win_size, max_tdoa, sampling_rate)
+    two_full_one_windowed = windowed_correlation(audio_two, audio_one, idx_0, win_size, max_tdoa, sampling_rate)
 
     two_full_one_windowed = np.flipud(two_full_one_windowed)
     cross_corr = one_full_two_windowed + two_full_one_windowed
     # return (cross_corr)/np.std(cross_corr)
     return (cross_corr)
 
-def compute_cross_corr_from_blob(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64], blobs : list[Blob], sampling_rate = SAMPLING_RATE) -> NDArray[np.float64]:
+def compute_cross_corr_from_blob(audio_one : NDArray[np.float64], audio_two : NDArray[np.float64], blobs : list[Blob], max_tdoa : float, sampling_rate : float) -> NDArray[np.float64]:
     
     correlations = []
     for i, blob in enumerate(blobs):
@@ -83,7 +76,7 @@ def compute_cross_corr_from_blob(audio_one : NDArray[np.float64], audio_two : ND
         audio_one_filtered = bandpass_filter(audio_one, sampling_rate, fmin, fmax)
         audio_two_filtered = bandpass_filter(audio_two, sampling_rate, fmin, fmax)
 
-        correlations.append(blob.area*compute_cross_corr(audio_one_filtered, audio_two_filtered, idx_center, win_size))
+        correlations.append(blob.area*compute_cross_corr(audio_one_filtered, audio_two_filtered, idx_center, win_size, max_tdoa, sampling_rate))
 
     return np.sum(correlations, axis=0)
 
@@ -93,7 +86,7 @@ def main():
     for i in range(-100,100):
         array_2 = np.arange(-500+i,450,1).astype(int)
 
-        print(i,":" ,compute_tdoa(array_1, array_2, 400, 200))
+        print(i,":" ,compute_tdoa(array_1, array_2, 400, 200, 0.0006, 384000))
 
 if __name__ == "__main__":
     main()
