@@ -452,7 +452,7 @@ def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_fi
             hop_length=200,
             n_mels=64,
             fmin=200,
-            sample_rate=384000, 
+            sample_rate=192000, 
         )
 
         long_audio, sample_rate, _ = spect_generator.load_audio(audio_file)
