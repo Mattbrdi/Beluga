@@ -60,6 +60,7 @@ def main():
     parser = argparse.ArgumentParser(description="Convert LabelMe polygon JSON to a binary mask.")
     # parser.add_argument("--output", type=Path)
     parser.add_argument("--label", default=None)
+    parser.add_argument("--path", type=str, help="path towards polygons")
     parser.add_argument(
         "--image-order",
         action="store_true",
@@ -68,9 +69,8 @@ def main():
     args = parser.parse_args()
     print("test")
 
-    PATH = r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\input\whistle2\json"
 
-    for json_path in Path(PATH).glob("*.json"):
+    for json_path in Path(args.path).glob("*.json"):
  
         mask = labelme_json_to_mask(
             json_path,
