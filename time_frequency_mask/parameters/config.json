@@ -23,10 +23,10 @@
         "spectrogram_type": 1
     },
     "network_parameters" : {
-        "input_path" : "C:\\Users\\amine\\Desktop\\Canada\\Beluga\\time_frequency_mask\\data_generation\\data\\output\\260701_new_labeling",
+        "input_path" :"",
         "image_size": 256,
         "output_path" : "",
-        "checkpoint_path": "C:\\Users\\amine\\Desktop\\Canada\\Beluga\\phase_aware_tf_mask_260819_02.ckpt"
+        "checkpoint_path": "C:/Users/BORDERIES/Desktop/Cours/Stage canada/Beluga/phase_aware_tf_mask_260819_02.ckpt"
 },
     "noise_parameters" : {
         "min_snr": 20,
@@ -36,8 +36,8 @@
         "low_band_noise": true
     },
     "generation_parameters": {
-        "whistle_bank_path": "C:\\Users\\amine\\Desktop\\Canada\\Beluga\\time_frequency_mask\\data_generation\\data\\input\\whistle2\\",
-        "output_dir": "C:\\Users\\amine\\Desktop\\Canada\\Beluga\\time_frequency_mask\\data_generation\\data\\260826s",
+        "whistle_bank_path": "",
+        "output_dir": "",
         "num_audio_samples" : 10,
         "max_num_whistles" : 7
     }
