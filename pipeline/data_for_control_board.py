@@ -12,9 +12,10 @@ from math import radians, sin, cos, sqrt, atan2
 #                ]
 
 
-audio_path =  [r"C:\Users\amine\Desktop\Canada\beluga\pipeline\test_data\full audios\8296\8296.240729065600.wav", 
-               r"C:\Users\amine\Desktop\Canada\beluga\pipeline\test_data\full audios\8295\8295.240729065600.wav",
-               ]
+audio_path = [
+    r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data\8295.240729065600.wav",
+    r"C:\Users\BORDERIES\Desktop\Cours\Stage canada\Beluga\pipeline\test_data\8296.240729065600.wav",
+]
 
 model_path = 'jsons/models/mobile_net_8_layers_qat.pt'
 param_path = 'jsons/parameters/default_parameters.json'

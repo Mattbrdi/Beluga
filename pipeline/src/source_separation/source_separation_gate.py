@@ -70,6 +70,7 @@ class SourceCountGateConfig:
     energy_floor_percentile: float = 20.0
     energy_threshold_db_above_floor: float = 6.0
     min_active_run_length: int = 3
+    min_frequency: float | None = None
     max_frequency: float | None = None
     min_valid_frequencies: int = 2
     min_active_bin_ratio: float = 1e-4
@@ -109,6 +110,8 @@ class SourceSeparationDecision:
     should_separate: bool
     global_n_sources: int | None
     source_counts: list[SourceCountPerTetra]
+    source_masks_by_tetra: dict[str, np.ndarray]
+    source_masks_by_source: list[dict[str, np.ndarray]]
     separated_audio_arrays_by_tetra: dict[str, list[AudioArray]]
     separated_audio_arrays_by_source: list[list[AudioArray]]
     sawada_models: dict[str, SawadaBSS]
@@ -164,28 +167,30 @@ class MultiTetraSourceSeparationGate:
         self,
         audio_arrays: list[AudioArray],
         environment: Environment | None = None,
+        active_tf_masks_by_tetra: dict[str, np.ndarray] | None = None,
     ) -> SourceSeparationDecision:
         if not audio_arrays:
             return self._no_separation([], "Aucun AudioArray a traiter.")
 
-        source_counts = [self.estimate_tetra_source_count(item) for item in audio_arrays]
+        source_counts = [
+            self.estimate_tetra_source_count(
+                item,
+                None
+                if active_tf_masks_by_tetra is None
+                else active_tf_masks_by_tetra.get(item.metadata.tetra_id),
+            )
+            for item in audio_arrays
+        ]
         global_n_sources = self._global_source_count(source_counts)
         should_separate, reason = self._should_run_sawada(source_counts, global_n_sources)
         if not should_separate:
             return self._no_separation(source_counts, reason, global_n_sources)
 
-        if environment is None and self.sawada_config.require_environment_for_audio_arrays:
-            return self._no_separation(
-                source_counts,
-                "Environment absent: impossible de reconstruire des AudioArray separes.",
-                global_n_sources,
-            )
-
         try:
-            by_tetra, models = self._separate_all_tetrahedra(
+            masks_by_tetra, models = self._separate_all_tetrahedra(
                 audio_arrays,
                 int(global_n_sources),
-                environment,
+                active_tf_masks_by_tetra,
             )
         except Exception as exc:
             return self._no_separation(
@@ -194,27 +199,37 @@ class MultiTetraSourceSeparationGate:
                 global_n_sources,
             )
 
-        if len(by_tetra) != len(audio_arrays) and self.sawada_config.require_all_tetrahedra_separated:
+        if len(masks_by_tetra) != len(audio_arrays) and self.sawada_config.require_all_tetrahedra_separated:
             return self._no_separation(
                 source_counts,
                 "Toutes les tetraedres n'ont pas pu etre separes.",
                 global_n_sources,
             )
 
-        by_source = self._group_by_source(audio_arrays, by_tetra, int(global_n_sources))
+        masks_by_source = self._group_masks_by_source(
+            audio_arrays,
+            masks_by_tetra,
+            int(global_n_sources),
+        )
         return SourceSeparationDecision(
             should_separate=True,
             global_n_sources=int(global_n_sources),
             source_counts=source_counts,
-            separated_audio_arrays_by_tetra=by_tetra,
-            separated_audio_arrays_by_source=by_source,
+            source_masks_by_tetra=masks_by_tetra,
+            source_masks_by_source=masks_by_source,
+            separated_audio_arrays_by_tetra={},
+            separated_audio_arrays_by_source=[],
             sawada_models=models,
             reason=reason,
         )
 
-    def estimate_tetra_source_count(self, audio_array: AudioArray) -> SourceCountPerTetra:
+    def estimate_tetra_source_count(
+        self,
+        audio_array: AudioArray,
+        active_tf_mask: np.ndarray | None = None,
+    ) -> SourceCountPerTetra:
         frequencies, _, X = self._stft(audio_array)
-        mask = self._activity_mask(X, frequencies)
+        mask = self._activity_mask(X, frequencies, active_tf_mask)
         config = self.source_count_config
         result = estimate_num_sources(
             X,
@@ -271,9 +286,20 @@ class MultiTetraSourceSeparationGate:
         X = np.moveaxis(stft_values, 0, -1)
         return frequencies, times, X
 
-    def _activity_mask(self, X: np.ndarray, frequencies: np.ndarray) -> np.ndarray:
+    def _activity_mask(
+        self,
+        X: np.ndarray,
+        frequencies: np.ndarray,
+        active_tf_mask: np.ndarray | None = None,
+    ) -> np.ndarray:
         config = self.source_count_config
-        if config.mask_mode == "all":
+        if active_tf_mask is not None:
+            mask = np.asarray(active_tf_mask, dtype=bool)
+            if mask.shape != X.shape[:2]:
+                raise ValueError(
+                    f"External active_tf_mask must have shape {X.shape[:2]}, got {mask.shape}"
+                )
+        elif config.mask_mode == "all":
             mask = np.ones(X.shape[:2], dtype=bool)
         elif config.mask_mode == "energy":
             energy = np.sum(np.abs(X) ** 2, axis=2)
@@ -284,6 +310,9 @@ class MultiTetraSourceSeparationGate:
         else:
             raise ValueError(f"Mode de masque inconnu: {config.mask_mode!r}")
 
+        if config.min_frequency is not None and config.min_frequency > 0:
+            mask = mask.copy()
+            mask[frequencies < config.min_frequency, :] = False
         if config.max_frequency is not None and config.max_frequency > 0:
             mask = mask.copy()
             mask[frequencies > config.max_frequency, :] = False
@@ -341,9 +370,9 @@ class MultiTetraSourceSeparationGate:
         self,
         audio_arrays: list[AudioArray],
         n_sources: int,
-        environment: Environment | None,
-    ) -> tuple[dict[str, list[AudioArray]], dict[str, SawadaBSS]]:
-        by_tetra: dict[str, list[AudioArray]] = {}
+        active_tf_masks_by_tetra: dict[str, np.ndarray] | None = None,
+    ) -> tuple[dict[str, np.ndarray], dict[str, SawadaBSS]]:
+        masks_by_tetra: dict[str, np.ndarray] = {}
         models: dict[str, SawadaBSS] = {}
         reference_envelopes: list[np.ndarray] | None = None
 
@@ -358,24 +387,26 @@ class MultiTetraSourceSeparationGate:
                 MultiSignal.from_array(
                     audio_array.data_array,
                     audio_array.metadata.sample_rate,
-                )
+                ),
+                active_tf_mask=(
+                    None
+                    if active_tf_masks_by_tetra is None
+                    else active_tf_masks_by_tetra.get(tetra_id)
+                ),
             )
-            separated = model.separate_source()
+            source_masks = model.get_final_masks().astype(bool)
             if self.sawada_config.align_sources_across_tetrahedra:
-                envelopes = [self._source_envelope(item.data) for item in separated]
+                envelopes = self._source_mask_envelopes(source_masks, model.tf_energy)
                 if reference_envelopes is None:
                     reference_envelopes = envelopes
                 else:
                     order = self._best_envelope_permutation(reference_envelopes, envelopes)
-                    separated = [separated[index] for index in order]
+                    source_masks = source_masks[list(order), :, :]
 
-            by_tetra[tetra_id] = [
-                self._to_audio_array(source, audio_array, environment)
-                for source in separated
-            ]
+            masks_by_tetra[tetra_id] = source_masks
             models[tetra_id] = model
 
-        return by_tetra, models
+        return masks_by_tetra, models
 
     def _to_audio_array(
         self,
@@ -408,6 +439,40 @@ class MultiTetraSourceSeparationGate:
             for source_index in range(min(n_sources, len(separated))):
                 grouped[source_index].append(separated[source_index])
         return grouped
+
+    def _group_masks_by_source(
+        self,
+        original_audio_arrays: list[AudioArray],
+        masks_by_tetra: dict[str, np.ndarray],
+        n_sources: int,
+    ) -> list[dict[str, np.ndarray]]:
+        grouped: list[dict[str, np.ndarray]] = [dict() for _ in range(n_sources)]
+        for audio_array in original_audio_arrays:
+            tetra_id = audio_array.metadata.tetra_id
+            masks = masks_by_tetra.get(tetra_id)
+            if masks is None:
+                continue
+            for source_index in range(min(n_sources, masks.shape[0])):
+                grouped[source_index][tetra_id] = masks[source_index]
+        return grouped
+
+    @staticmethod
+    def _source_mask_envelopes(
+        source_masks: np.ndarray,
+        tf_energy: np.ndarray | None,
+    ) -> list[np.ndarray]:
+        if tf_energy is None:
+            tf_energy = np.ones(source_masks.shape[1:], dtype=float)
+        envelopes = []
+        for source_mask in source_masks:
+            energy = np.sum(np.asarray(source_mask, dtype=float) * tf_energy, axis=0)
+            energy = energy - float(np.mean(energy))
+            norm = float(np.linalg.norm(energy))
+            if norm <= 1e-12:
+                envelopes.append(np.zeros_like(energy))
+            else:
+                envelopes.append(energy / norm)
+        return envelopes
 
     @staticmethod
     def _source_envelope(data: np.ndarray) -> np.ndarray:
@@ -449,6 +514,8 @@ class MultiTetraSourceSeparationGate:
             should_separate=False,
             global_n_sources=global_n_sources,
             source_counts=source_counts,
+            source_masks_by_tetra={},
+            source_masks_by_source=[],
             separated_audio_arrays_by_tetra={},
             separated_audio_arrays_by_source=[],
             sawada_models={},

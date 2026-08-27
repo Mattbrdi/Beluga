@@ -2,21 +2,23 @@ from pathlib import Path
 from PIL import Image
 
 import numpy as np
-import numpy.random as rd 
+from numpy.typing import NDArray
 
 import lightning as L
 from torch import Generator
 from torch.utils.data import Dataset, DataLoader, random_split
-from scipy.signal import stft, istft
+from scipy.signal import istft
 
-from time_frequency_mask.configuration import N_FFT, HOP_LENGTH, SAMPLING_RATE, N_FFT, HOP_LENGTH, N_TIMES, N_FREQS, IMAGE_SIZE, IMAGE_SIZE
-from time_frequency_mask.stft import frequency_band, scipy_stft_complex, scipy_spectrogram
+from time_frequency_mask.config import Parameters
+from time_frequency_mask.stft import frequency_band, scipy_stft_complex
 from time_frequency_mask.data_generation.core.preprocess import bandpass_filter
 from time_frequency_mask.data_generation.io.data_parser import read_wav_file
 
 
-def translate_waveform(waveform, shift):
-    freqs, times, D_full = scipy_stft_complex(waveform)
+def translate_waveform(waveform : NDArray[np.float64], shift : int, parameters : Parameters) -> NDArray[np.float64]:
+    audio, stft = parameters.audio, parameters.stft
+
+    freqs, times, D_full = scipy_stft_complex(waveform, audio.sampling_rate, stft)
 
     F, T = D_full.shape
 
@@ -39,17 +41,23 @@ def translate_waveform(waveform, shift):
 
     D_full_translated[dst_start:dst_end] = D_full[src_start:src_end]
 
-    _, waveform_translated = istft(D_full_translated, SAMPLING_RATE, 'hann', noverlap=N_FFT - HOP_LENGTH, nfft=N_FFT)
-    waveform_translated = bandpass_filter(waveform_translated, SAMPLING_RATE)
+    _, waveform_translated = istft(
+        D_full_translated,
+        audio.sampling_rate,
+        stft.window,
+        noverlap=stft.n_fft - stft.hop_length,
+        nfft=stft.n_fft
+    )
+    waveform_translated = bandpass_filter(waveform_translated, audio.sampling_rate, audio.min_freq, audio.max_freq)
 
     return np.pad(waveform_translated, (0, len(waveform)-len(waveform_translated)))
 
-def translate_mask(mask, shift):
+def translate_mask(mask, shift, n_freqs):
     src_start = max(0, -shift)
     dst_start = max(0, shift)
 
-    available_dst = N_FREQS - dst_start
-    available_src = N_FREQS - src_start
+    available_dst = n_freqs - dst_start
+    available_src = n_freqs - src_start
 
     placed_width = min(available_dst, available_src)
 
@@ -63,133 +71,160 @@ def translate_mask(mask, shift):
     new_mask[dst_start:dst_end, :] = mask[src_start:src_end, :]
     return new_mask
 
-class WhistleMaskDataset(Dataset):
-    def __init__(self, output_path):
-        absolute_output_path = Path(output_path).resolve()
-        if not absolute_output_path.is_dir():
-            raise ValueError(f"the provided output_path {output_path} does not exist")
-        
-        wav_folder = absolute_output_path / "wav"
-        mask_folder = absolute_output_path / "mask"
 
+
+
+def _normalize_magnitude(magnitude: NDArray[np.float64]) -> NDArray[np.float64]:
+    """Match the legacy per-microphone percentile normalization."""
+    normalized = np.asarray(magnitude, dtype=np.float64).copy()
+    if normalized.size == 0 or not np.all(np.isfinite(normalized)):
+        raise ValueError("The STFT magnitude must be finite and non-empty.")
+    if np.max(np.abs(normalized)) <= 0:
+        return np.zeros_like(normalized, dtype=np.float32)
+    normalized -= np.min(normalized)
+    scale = float(np.percentile(normalized, 99))
+    if not np.isfinite(scale) or scale <= 0:
+        return np.zeros_like(normalized, dtype=np.float32)
+    return np.clip(normalized / scale, 0.0, 1.0).astype(np.float32)
+
+
+def build_spectrogram_features(
+    audio_array: NDArray[np.float64],
+    parameters : Parameters,
+    *,
+    phase_aware: bool = False,
+) -> tuple[NDArray[np.float64], NDArray[np.float64], NDArray[np.float64]]:
+    """Build four magnitude or sixteen magnitude-plus-IPD channels."""
+
+    M = parameters.array.num_mics
+
+    audio, stft = parameters.audio, parameters.stft
+
+    audio_array = np.asarray(audio_array)
+    if audio_array.ndim != 2 or audio_array.shape[0] != M:
+        raise ValueError(
+            f"Expected M-channel audio shape ({M}, samples), got {audio_array.shape}."
+        )
+
+    complex_stfts = []
+    common_freqs = None
+    common_times = None
+    for microphone in audio_array:
+        freqs, times, Zxx = scipy_stft_complex(
+            microphone, audio.sampling_rate, stft
+        )
+        freqs, Zxx = frequency_band(
+            freqs, Zxx, audio.min_freq, audio.max_freq
+        )
+        if common_freqs is None:
+            common_freqs = freqs
+            common_times = times
+
+        elif not np.array_equal(freqs, common_freqs) or not np.array_equal(
+            common_times, times
+        ):
+            print(common_freqs, freqs)
+            raise ValueError("Microphone STFT grids do not match.")
+        complex_stfts.append(Zxx)
+
+    complex_stft = np.stack(complex_stfts, axis=0)
+    magnitude_features = np.stack(
+        [_normalize_magnitude(2.0 * np.abs(value)) for value in complex_stft],
+        axis=0,
+    )
+    if not phase_aware:
+        return magnitude_features, freqs, times
+
+    microphone_pairs = tuple(
+        (first, second)
+        for first in range(M)
+        for second in range(first + 1, M)
+    )
+    
+
+    phase_features = []
+    epsilon = np.finfo(complex_stft.real.dtype).eps
+    for first, second in microphone_pairs:
+        cross_spectrum = complex_stft[first] * complex_stft[second].conj()
+        magnitude = np.abs(cross_spectrum)
+        normalized_cross_spectrum = np.divide(
+            cross_spectrum,
+            magnitude,
+            out=np.zeros_like(cross_spectrum),
+            where=magnitude > epsilon,
+        )
+        phase_features.extend(
+            (
+                normalized_cross_spectrum.real.astype(np.float32),
+                normalized_cross_spectrum.imag.astype(np.float32),
+            )
+        )
+    features = np.concatenate(
+        (magnitude_features, np.stack(phase_features, axis=0)), axis=0
+    )
+    return features.astype(np.float32, copy=False), freqs, times
+
+
+def _center_pad(array: NDArray, image_size: int) -> NDArray:
+    if array.ndim < 2:
+        raise ValueError("Expected frequency and time dimensions.")
+    frequencies, times = array.shape[-2:]
+    if frequencies > image_size or times > image_size:
+        raise ValueError(
+            f"Array shape {array.shape} exceeds image size "
+            f"{(image_size, image_size)}."
+        )
+    frequency_padding = image_size - frequencies
+    time_padding = image_size - times
+    padding = [(0, 0)] * array.ndim
+    padding[-2] = (
+        frequency_padding // 2,
+        frequency_padding - frequency_padding // 2,
+    )
+    padding[-1] = (time_padding // 2, time_padding - time_padding // 2)
+    return np.pad(array, padding)
+
+
+class WhistleMaskDataset(Dataset):
+    """Load M-channel magnitude or M*M-channel phase-aware features."""
+
+    def __init__(self, input_path, parameters : Parameters, phase_aware: bool = False):
+        self.parameters = parameters
+        self.num_mics = parameters.array.num_mics
+        absolute_input_path = Path(input_path).resolve()
+        if not absolute_input_path.is_dir():
+            raise ValueError(f"the provided output_path {input_path} does not exist")
+
+        wav_folder = absolute_input_path / "wav"
+        mask_folder = absolute_input_path / "mask"
         if not wav_folder.is_dir():
-            raise FileNotFoundError(f"the provided output_path {output_path} does not contain wavs subfolder")
-        
+            raise FileNotFoundError(
+                f"the provided output_path {input_path} does not contain wavs subfolder"
+            )
         if not mask_folder.is_dir():
-            raise FileNotFoundError(f"the provided output_path {output_path} does not contain labels subfolder")
-        
+            raise FileNotFoundError(
+                f"the provided output_path {input_path} does not contain labels subfolder"
+            )
+
         self.wav_dir = wav_folder
         self.mask_dir = mask_folder
+        self.phase_aware = bool(phase_aware)
+        self.n_input_channels = self.num_mics*self.num_mics if self.phase_aware else self.num_mics
         self.samples = []
 
         for mask_path in sorted(self.mask_dir.glob("*.png")):
-            data = Image.open(mask_path)
-            width, height  = data.size
-            data = np.array(data.get_flattened_data(), dtype=np.uint8)
-            data = data > 0
-            data = data.reshape((height, width))
-            
-            if height > IMAGE_SIZE or width >= IMAGE_SIZE:
-                raise ValueError(f"incorrect shape got {data.shape} greater than {(IMAGE_SIZE, IMAGE_SIZE)}")
-
-            diffX = IMAGE_SIZE - width 
-            diffY = IMAGE_SIZE - height
-
-            if diffX < 0 or diffY < 0:
-                raise ValueError(f"D shape {data.shape} us larger than IMAGE_SIZE {IMAGE_SIZE}")
-
-            data = np.pad(data, ((diffY //2, diffY - diffY //2), (diffX //2, diffX - diffX // 2)))
-            data = data[np.newaxis, :]
             segment_name = mask_path.stem
-            # segment_name = label_data.get("segment_name")
-            # if not segment_name:
-            #     raise ValueError(f"{label_path} does not contain a segment_name")
-
             wav_path = self.wav_dir / f"{segment_name}.wav"
             if not wav_path.is_file():
                 raise FileNotFoundError(
                     f"Could not find wav for segment_name={segment_name}. "
                     f"Expected {wav_path}"
                 )
-            
-            audio_array, sampling_rate = read_wav_file(wav_path)
-
-            if sampling_rate != SAMPLING_RATE:
-                raise ValueError(f"Incorrect sampling rate got {sampling_rate}, instead of {SAMPLING_RATE}")
-            
-            Ds = []
-
-            freqs_list = []
-
-            times_list = []
-
-            for canal in audio_array:
-                freqs, times, D = scipy_spectrogram(canal)
-                # D = 20 * np.log10(np.maximum(2 * S, 1e-12))
-
-                freqs, D = frequency_band(freqs, D)
-
-                if np.max(np.abs(D)) > 0:
-                    D = D - np.min(D)
-                    D /= np.percentile(D,99)
-                    D = np.clip(D, 0, 1)
-
-                if D.shape != data.shape:
-                    raise ValueError(
-                        "Canal and mask data are not compatible."
-                        f"Canal shape is {D.shape}."
-                        f"mask shape is {data.shape}."
-                    )
-
-                n_freqs, n_times = D.shape
-                if n_freqs > IMAGE_SIZE or n_times > IMAGE_SIZE:
-                    raise ValueError(f"incorrect shape got {D.shape} greater than {(IMAGE_SIZE, IMAGE_SIZE)}")
-                
-                diffX = IMAGE_SIZE - n_times 
-                diffY = IMAGE_SIZE - n_freqs
-
-                if diffX < 0 or diffY < 0:
-                    raise ValueError(f"D shape {D.shape} us larger than IMAGE_SIZE {IMAGE_SIZE}")
-
-                D = np.pad(D, ((diffY // 2, diffY - diffY // 2), (diffX // 2, diffX - diffX // 2)))
-
-                Ds.append(D)
-                freqs_list.append(freqs)
-                times_list.append(times)
-
-            Ds = np.stack(Ds, axis=0)
-
-        #TODO: add augmentation for this
-        #     num_augment = rd.randint(0,3)
-
-        #     for i in range(num_augment):
-        #         shift = rd.randint(-N_FREQS //4, N_FREQS//4)
-        #         mask_shifted = translate_mask(data, shift)
-        #         Ds_shifted = []
-        #         for D in Ds:
-        #             D_shifted = translate_mask(D, shift)
-        #             Ds_shifted.append(D_shifted)
-
-        #         Ds_shifted = np.stack(Ds_shifted, axis=0)
-
-        #     self.samples.append(
-        #     {
-        #         "wav_path": wav_path,
-        #         "mask_path": mask_path,
-        #         "segment_name": segment_name,
-        #         "mask": mask_shifted,
-        #         "stft": Ds_shifted 
-        #     }
-        # )
-
-
             self.samples.append(
                 {
                     "wav_path": wav_path,
                     "mask_path": mask_path,
                     "segment_name": segment_name,
-                    "mask": data,
-                    "stft": Ds 
                 }
             )
 
@@ -198,32 +233,65 @@ class WhistleMaskDataset(Dataset):
 
     def __getitem__(self, idx):
         sample = self.samples[idx]
-        input_signal, frame_rate = read_wav_file(sample["wav_path"])
-        mask = sample["mask"]
-
+        with Image.open(sample["mask_path"]) as image:
+            mask = np.asarray(image, dtype=np.uint8) > 0
+        if mask.ndim != 2:
+            raise ValueError(
+                f"Expected a two-dimensional mask in {sample['mask_path']}, "
+                f"got {mask.shape}."
+            )
+        input_signal, sampling_rate = read_wav_file(sample["wav_path"], num_canals=self.num_mics)
+        if sampling_rate != self.parameters.audio.sampling_rate:
+            raise ValueError(
+                f"Incorrect sampling rate got {sampling_rate}, "
+                f"instead of {self.parameters.audio.sampling_rate}"
+            )
+        features, _, _ = build_spectrogram_features(
+            input_signal, self.parameters, phase_aware=self.phase_aware
+        )
+        if features.shape[-2:] != mask.shape:
+            raise ValueError(
+                f"Spectrogram shape {features.shape[-2:]} and mask shape "
+                f"{mask.shape} are not compatible for {sample['segment_name']}."
+            )
+        features = _center_pad(features, self.parameters.network.image_size).astype(np.float32, copy=False)
+        padded_mask = _center_pad(mask, self.parameters.network.image_size).astype(bool, copy=False)[np.newaxis, :]
+        # return {
+        #     "input_signal": input_signal,
+        #     "stft": features,
+        #     "mask": padded_mask,
+        #     "wav_path": str(sample["wav_path"]),
+        #     "mask_path": str(sample["mask_path"]),
+        #     "segment_name": sample["segment_name"],
+        #     "phase_aware": self.phase_aware,
+        # }
         return {
-            "input_signal": input_signal,
-            "stft": sample["stft"],
-            "mask": mask,
-            "wav_path": str(sample["wav_path"]),
-            "mask_path": str(sample["mask_path"]),
-            "segment_name": sample["segment_name"],
-        }
+                    "stft": features,
+                    "mask": padded_mask,
+                    "wav_path": str(sample["wav_path"]),
+                    "mask_path": str(sample["mask_path"]),
+                    "segment_name": sample["segment_name"],
+                    "phase_aware": self.phase_aware,
+                }
+        
 
 
 class WhistleMaskDataModule(L.LightningDataModule):
     def __init__(
             self,
+            parameters : Parameters,
             dataset_path=None,
             train_path=None,
             val_path=None,
             test_path=None,
-            batch_size=4,
             train_val_test_split=(0.7, 0.15, 0.15),
             seed=42,
-            num_workers=0
+            batch_size=4,
+            num_workers=0,
+            phase_aware=False,
         ):
         super().__init__()
+        self.parameters = parameters
         self.dataset_path = dataset_path
         self.train_path = train_path
         self.val_path = val_path
@@ -232,6 +300,7 @@ class WhistleMaskDataModule(L.LightningDataModule):
         self.train_val_test_split = train_val_test_split
         self.seed = seed
         self.num_workers = num_workers
+        self.phase_aware = bool(phase_aware)
 
         self.single_dataset_mode = dataset_path is not None
         self.explicit_split_mode = any(path is not None for path in [train_path, val_path, test_path])
@@ -247,7 +316,9 @@ class WhistleMaskDataModule(L.LightningDataModule):
 
     def setup(self, stage=None):
         if self.single_dataset_mode:
-            dataset = WhistleMaskDataset(self.dataset_path)
+            dataset = WhistleMaskDataset(
+                self.dataset_path, self.parameters, phase_aware=self.phase_aware
+            )
             split_lengths = self._split_lengths(len(dataset))
             self.train_dataset, self.val_dataset, self.test_dataset = random_split(
                 dataset,
@@ -256,9 +327,15 @@ class WhistleMaskDataModule(L.LightningDataModule):
             )
 
         elif self.explicit_split_mode:
-            self.train_dataset = WhistleMaskDataset(self.train_path)
-            self.val_dataset = WhistleMaskDataset(self.val_path)
-            self.test_dataset = WhistleMaskDataset(self.test_path)
+            self.train_dataset = WhistleMaskDataset(
+                self.train_path, self.parameters, phase_aware=self.phase_aware
+            )
+            self.val_dataset = WhistleMaskDataset(
+                self.val_path, self.parameters, phase_aware=self.phase_aware
+            )
+            self.test_dataset = WhistleMaskDataset(
+                self.test_path, self.parameters, phase_aware=self.phase_aware
+            )
 
     def train_dataloader(self):
         return DataLoader(
@@ -266,6 +343,8 @@ class WhistleMaskDataModule(L.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=True,
             num_workers=self.num_workers,
+            persistent_workers=self.num_workers > 0,
+            pin_memory=True,
         )
     
     def val_dataloader(self):
@@ -274,6 +353,8 @@ class WhistleMaskDataModule(L.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
+            persistent_workers=self.num_workers > 0,
+            pin_memory=True,
         )
 
     def test_dataloader(self):
@@ -282,6 +363,8 @@ class WhistleMaskDataModule(L.LightningDataModule):
             batch_size=self.batch_size,
             shuffle=False,
             num_workers=self.num_workers,
+            persistent_workers=self.num_workers > 0,
+            pin_memory=True,
         )
 
     def _split_lengths(self, dataset_size):

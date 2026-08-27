@@ -774,7 +774,11 @@ class SawadaBSS:
                 active_clusters[f] = self.bin_active_clusters[f]
         return active_clusters
 
-    def process_signal(self, multi_signal: MultiSignal) :
+    def process_signal(
+        self,
+        multi_signal: MultiSignal,
+        active_tf_mask: np.ndarray | None = None,
+    ) :
         """
         Exécute le pipeline complet : STFT -> Normalisation -> EM -> Alignement.
         Rempli les arguments         self.bin_models et self.bin_masks
@@ -789,7 +793,17 @@ class SawadaBSS:
         # 1. Prétraitement (STFT + Normalisation)
         raw_spectro = self.get_spectro(multi_signal)
         self.tf_energy = np.sum(np.abs(raw_spectro.Sxx) ** 2, axis=0)
-        self.active_tf_mask = self._compute_active_tf_mask(self.tf_energy)
+        if active_tf_mask is None:
+            self.active_tf_mask = self._compute_active_tf_mask(self.tf_energy, raw_spectro.f)
+        else:
+            active_tf_mask = np.asarray(active_tf_mask, dtype=bool)
+            if active_tf_mask.shape != self.tf_energy.shape:
+                raise ValueError(
+                    "active_tf_mask must have shape "
+                    f"{self.tf_energy.shape}, got {active_tf_mask.shape}"
+                )
+            self.energy_threshold_db = None
+            self.active_tf_mask = self._filter_active_tf_runs(active_tf_mask)
         self.nspectro_preprocessed = raw_spectro.normalize_each_bin()
         # 2. Algo : Clustering par bin (EM)
         print("Démarrage du clustering EM par bin...")

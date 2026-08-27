@@ -5,10 +5,12 @@ import cv2 as cv
 from time_frequency_mask.data_generation.models.mask import AudioMask
 from time_frequency_mask.plotter import plot_mask
  
-from time_frequency_mask.configuration import MIN_FREQ, MAX_TDOA, MAX_FREQ, SAMPLING_RATE, DURATION, N_FFT, DURATION, N_TIMES, START_FREQ_IDX, N_FREQS, HOP_LENGTH
+from time_frequency_mask.config import Parameters
 
 class Blob():
-    def __init__(self, data : NDArray[np.uint8], stats, area = None, max_tdoa : float = MAX_TDOA, sampling_rate : float = SAMPLING_RATE):
+    def __init__(self, data : NDArray[np.uint8], stats, parameters : Parameters, area = None):
+        audio, array, stft = parameters.audio, parameters.array, parameters.stft
+
         self.data = data
         n_freqs, n_times = data.shape
         if area is None:
@@ -17,12 +19,14 @@ class Blob():
             self.area = area
         self.stats = stats
         if data is None:
-            self.fmin = MIN_FREQ
-            self.fmax = MAX_FREQ
+            if audio.duration is None:
+                raise ValueError(f"Cannot create default blob if no default duration is provided")
+            self.fmin = audio.min_freq
+            self.fmax = audio.max_freq
             self.tmin = 0
-            self.tmax = DURATION
+            self.tmax = audio.duration
             self.tmin_idx = 0
-            self.tmax_idx = int(DURATION * SAMPLING_RATE)
+            self.tmax_idx = audio.num_samples
 
         else:
             x, y, w, h = cv.boundingRect(self.data)
@@ -39,31 +43,32 @@ class Blob():
             if y + h <=0 or  y + h > n_freqs:
                 raise ValueError(f"Error incorrect h boundingRect index not between 0 and n_freqs {n_freqs} got {x+h}")
 
-            duration = ((HOP_LENGTH*(n_times - 1)) + N_FFT) / sampling_rate  
+            duration = ((stft.hop_length*(n_times - 1)) + stft.n_fft) / audio.sampling_rate  
+            start_freq_idx = stft.freq_index(audio.sampling_rate, audio.min_freq)
 
-            h = min(h, N_FFT - START_FREQ_IDX)
-            y = y + START_FREQ_IDX
-            self.fmin = sampling_rate / N_FFT * y
-            self.fmax = sampling_rate / N_FFT * (y + h)
+            h = min(h, stft.n_fft - start_freq_idx)
+            y = y + start_freq_idx
+            self.fmin = audio.sampling_rate / stft.n_fft * y
+            self.fmax = audio.sampling_rate / stft.n_fft * (y + h)
 
             self.tmin = float(duration / n_times * x) 
             self.tmax = float(duration / n_times * (x + w))
             if x == 0:
-                self.tmin += max_tdoa
+                self.tmin += array.max_tdoa
 
             if x + w == n_times:
-                self.tmax -=max_tdoa
+                self.tmax -=array.max_tdoa
 
             #TODO: Vérifier que ça, ça marche bien:
-            self.tmin_idx = max(int(np.ceil(self.tmin * sampling_rate)),0)
-            self.tmax_idx = min(int(np.floor(self.tmax * sampling_rate)), int(sampling_rate*(duration - max_tdoa)))
+            self.tmin_idx = max(int(np.ceil(self.tmin * audio.sampling_rate)),0)
+            self.tmax_idx = min(int(np.floor(self.tmax * audio.sampling_rate)), int(audio.sampling_rate*(duration - array.max_tdoa)))
 
             # print(self.fmin, self.fmax)
             # print(self.tmin, self.tmax)
 
 
-def output_blobs_from_mask(mask : AudioMask, area_thr=30) -> list[Blob]:
-    mask_data = mask.data.astype(np.uint8)
+def output_blobs_from_mask(mask : NDArray[np.bool_], parameters : Parameters, area_thr=30) -> list[Blob]:
+    mask_data = mask.astype(np.uint8)
 
     masks = []
     N, labels, stats, centroids = cv.connectedComponentsWithStats(mask_data)
@@ -78,19 +83,25 @@ def output_blobs_from_mask(mask : AudioMask, area_thr=30) -> list[Blob]:
     
         label = (np.array(labels) == i).astype(np.uint8)
         # plot_mask(label)
-        masks.append(Blob(label, stats, stats[i, cv.CC_STAT_AREA]))
+        masks.append(Blob(label, stats, parameters, stats[i, cv.CC_STAT_AREA]))
 
     return masks
 
-def output_mask_from_blobs(blobs : list[Blob], n_freqs = N_FREQS, n_times = N_TIMES, sampling_rate = SAMPLING_RATE) -> AudioMask:
-    mask = AudioMask.create_empty_mask(n_freqs, n_times, sampling_rate)
+def output_mask_from_blobs(blobs : list[Blob], n_freqs : int, n_times : int) -> NDArray[np.bool_]:
+    mask = np.zeros((n_freqs, n_times), dtype=np.bool_)
 
     for blob in blobs:
-        mask.data = mask.data | (blob.data != 0)
+        mask = mask | (blob.data != 0)
 
     return mask
 
-def blob_filtering_heuristic(blobs : list[Blob], max_blobs_count = 7, min_area = 7*7, min_total_area = 12*12) -> list[Blob]:
+def blob_filtering_heuristic(
+    blobs : list[Blob],
+    min_freq : float,
+    max_blobs_count : int = 7,
+    min_area : int = 7*7,
+    min_total_area : int = 12*12,
+) -> list[Blob]:
     output_blobs = []
     mean_area = np.mean([blob.area for blob in blobs])
     count = len(blobs)
@@ -99,7 +110,7 @@ def blob_filtering_heuristic(blobs : list[Blob], max_blobs_count = 7, min_area =
     sorted_blobs = [blobs[argsort[idx]] for idx in range(min(count, max_blobs_count))]
 
     for blob in sorted_blobs:
-        freq_cond = blob.fmin < 1.05* MIN_FREQ
+        freq_cond = blob.fmin < 1.05* min_freq
 
         min_area_cond = blob.area < min_area
         

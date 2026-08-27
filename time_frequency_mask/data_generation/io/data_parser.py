@@ -7,7 +7,7 @@ from struct import unpack
 from pathlib import Path
 from PIL import Image
 
-from time_frequency_mask.configuration import WHISTLE_MASK_PATH, WHISTLE_WAV_PATH, SAMPLING_RATE, MIN_FREQ, MAX_FREQ, N_FFT, HOP_LENGTH
+from time_frequency_mask.config import Parameters
 from time_frequency_mask.stft import scipy_spectrogram, scipy_db_spectrogram, frequency_band
 
 def read_wav_metadata_and_data(file_path):
@@ -58,7 +58,7 @@ def read_wav_metadata_and_data(file_path):
 
     return audio_data, audio_format, n_channels, sample_width, frame_rate
 
-def read_wav_file(file_path, num_canals = 4):
+def read_wav_file(file_path, num_canals):
     """Read a PCM WAV file of 4 sources and convert it to a centered NumPy array.
 
     Args:
@@ -110,38 +110,34 @@ def read_image_file(file_path : str) -> NDArray:
     data = data.reshape((height, width))
     return data 
 
-def retrieve_wav_and_masks_paths() -> dict[str, list[Path]]:
-    wav_dir = Path(WHISTLE_WAV_PATH)
-    wav_paths = sorted(wav_dir.glob("*.wav"), key=lambda x: int(x.stem[7:]))
+def retrieve_wav_and_masks_paths(whistle_bank_path : Path)-> dict[str, list[Path]]:
+    whistle_wav_dir = whistle_bank_path / "wav"
+    whistle_mask_dir = whistle_bank_path / "mask"
 
-    mask_dir = Path(WHISTLE_MASK_PATH)
-    mask_paths = sorted(mask_dir.glob("*.png"), key=lambda x: int(x.stem    [7:-5]))
+    wav_paths = sorted(whistle_wav_dir.glob("*.wav"), key=lambda x: int(x.stem[7:])) # Only keep the number in whistle{i}.wav
 
     if not wav_paths:
-        raise FileNotFoundError(f"No WAV files found in {wav_dir}")
+        raise FileNotFoundError(f"No WAV files found in {whistle_wav_dir}")
 
-    if not mask_paths:
-        raise FileNotFoundError(f"No WAV files found in {mask_dir}")
+    pairs = []
 
-    wav_dir_stems = np.array([wav_path.stem for wav_path in wav_paths])
-    mask_dir_stems = np.array([mask_path.stem for mask_path in mask_paths])
+    for wav_path in wav_paths:
+        mask_path = whistle_mask_dir / f"{wav_path.stem}_mask.png"
 
-    mask_dir_stems_trimmed = np.array([stem[:-5] for stem in mask_dir_stems])
+        if mask_path.is_file():
+            pairs.append((wav_path, mask_path))
 
-    available_whistles = np.array(wav_dir_stems)[
-        np.isin(wav_dir_stems, mask_dir_stems_trimmed, assume_unique=True)
-    ]
-    
-    available_whistles_masks = np.array(mask_dir_stems)[
-        np.isin(wav_dir_stems, mask_dir_stems_trimmed, assume_unique=True)
-    ]
+    if not pairs:
+        raise FileNotFoundError(
+            f"No complete WAV/mask pairs found in {whistle_bank_path}"
+        )
 
-    wav_paths = [wav_dir / f"{available_whistle}.wav" for available_whistle in available_whistles]
-    mask_paths = [mask_dir / f"{available_whistle_mask}.png" for available_whistle_mask in available_whistles_masks]
+    return {
+        "wav_paths": [wav for wav, _ in pairs],
+        "mask_paths": [mask for _, mask in pairs],
+    }
 
-    return {"wav_paths": wav_paths, "mask_paths": mask_paths}
-
-def save_wav_file(audio_array : list[NDArray[np.float64]], file_name : str, num_channels = 4, sampling_rate : float = SAMPLING_RATE):
+def save_wav_file(audio_array : list[NDArray[np.float64]], file_name : str, sampling_rate : float, num_channels : int):
     """Save array to wav file
 
     Parameters
@@ -187,7 +183,12 @@ def save_mask(mask : NDArray[np.uint8], output_path : str):
 
     Image.fromarray(mask).save(str(output_path))
 
-def save_stft_png(audio_array: list[NDArray[np.float64]], output_path : str, sampling_rate = SAMPLING_RATE, is_db=False, fmin=MIN_FREQ, fmax=MAX_FREQ, n_fft = N_FFT, hop_length = HOP_LENGTH):
+def save_stft_png(
+    audio_array: list[NDArray[np.float64]],
+    output_path : str,
+    parameters : Parameters,
+    is_db=False,
+):
     Ds = []
     freqs_list = []
     times_list = []
@@ -195,14 +196,25 @@ def save_stft_png(audio_array: list[NDArray[np.float64]], output_path : str, sam
     import matplotlib.pyplot as plt
     vmin = -120
     vmax = -20
-    fig, axs = plt.subplots(4, 1, figsize=(30, 20), sharex=True, sharey=True)
+    fig, axs = plt.subplots(parameters.array.num_mics, 1, figsize=(30, 20), sharex=True, sharey=True)
+
+    axs = np.atleast_1d(axs)
+
     for canal in audio_array:
         if is_db:
-            freqs, times, D = scipy_db_spectrogram(canal, sampling_rate, n_fft, hop_length)
+            freqs, times, D = scipy_db_spectrogram(
+                                canal,
+                                parameters.audio.sampling_rate,
+                                parameters.stft
+                            )
         else:
-            freqs, times, D = scipy_spectrogram(canal, sampling_rate, n_fft, hop_length)
+            freqs, times, D = scipy_spectrogram(
+                                canal,
+                                parameters.audio.sampling_rate,
+                                parameters.stft
+                            )
       
-        freqs, D = frequency_band(freqs, D, fmin, fmax)
+        freqs, D = frequency_band(freqs, D, parameters.audio.min_freq, parameters.audio.max_freq)
     
         D = D - np.min(D)
         if not np.all(D == 0):
@@ -237,7 +249,7 @@ def save_stft_png(audio_array: list[NDArray[np.float64]], output_path : str, sam
         )
 
         axs[i].set_title(f'Spectrogramme SciPy du Canal {i+1}')
-        axs[i].set_ylim([fmin, fmax])
+        axs[i].set_ylim([parameters.audio.min_freq, parameters.audio.max_freq])
         axs[i].set_ylabel('Frequency (Hz)')
     plt.savefig(output_path)
     plt.close(fig)
