@@ -1,0 +1,12 @@
+{
+  "created_at": "2026-07-15T17:12:39",
+  "points": [
+    1
+  ],
+  "model_path": "C:\\Users\\BORDERIES\\Desktop\\Cours\\Stage canada\\Beluga\\pipeline\\jsons\\models\\mobile_net_8_layers_qat.pt",
+  "environment_path": "C:\\Users\\BORDERIES\\Desktop\\Cours\\Stage canada\\Beluga\\pipeline\\jsons\\environments\\env_cacouna_may2026.json",
+  "parameters_path": "C:\\Users\\BORDERIES\\Desktop\\Cours\\Stage canada\\Beluga\\pipeline\\jsons\\parameters\\default_parameters.json",
+  "ground_truth_path": "C:\\Users\\BORDERIES\\Desktop\\Cours\\Stage canada\\Beluga\\pipeline\\ground_truth\\trace_gps_calibration.csv",
+  "failures_count": 0,
+  "note": "Positions, TDOA et directions ont ete produits depuis le meme appel pipeline par point."
+}

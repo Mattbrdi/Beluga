@@ -1,0 +1,2 @@
+point_number,kept_count,total_count,mean_x,mean_y,median_x,median_y,variance_x,variance_y,std_x,std_y,std_distance_to_median_xy_m,mean_distance_to_ground_truth_m,mean_distance_to_mean_xy_m,mean_distance_to_median_xy_m
+1,67,67,41.328158474180704,85.10097615957791,28.447176860848913,72.61101592438806,62795.89883733983,20055.013916644624,250.59109887891037,141.6157262335106,232.77385921466947,459.3093710667128,171.4201366505146,170.26203926387498

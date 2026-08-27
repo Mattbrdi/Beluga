@@ -36,8 +36,8 @@ pipeline/test_data2026_all/*
 BSS/Dataset/generated/*
 Rapport/
 
-# Keep the large 2026 data folder ignored, but allow generated result files.
-!pipeline/test_data2026_all/
-pipeline/test_data2026_all/*
-!pipeline/test_data2026_all/results/
-!pipeline/test_data2026_all/results/**
+# Keep test_data payloads ignored, but allow generated result files.
+!pipeline/test_data*/
+pipeline/test_data*/*
+!pipeline/test_data*/results/
+!pipeline/test_data*/results/**
