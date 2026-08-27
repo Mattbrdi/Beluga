@@ -6,7 +6,7 @@ from scipy.spatial.distance import pdist
 import numpy as np
 import json
 from src.utils.rotation_bricks import enu2lla, lla2enu
-
+from time_frequency_mask.config import Parameters as TF_Parameters
 #########################################
 ########## Environment classes ##########
 #########################################
@@ -119,6 +119,12 @@ class WTDenoiseParameters:
     ff : int = 0
 
 @dataclass
+class TimeFrequencyMaskParameters:
+    use_tf_mask : bool = False
+    use_phase_aware_network : bool = False
+    tf_parameters : TF_Parameters | None = None
+
+@dataclass
 class BeamformingParameters:
     use_bf : bool = False
     beamformer : str = "mvdr"
@@ -143,7 +149,11 @@ class Parameters:
         self.max_position_frames = data["max_position_frames"]
         self.location_parameters = LocationParameters(**data["location_parameters"])
         self.use_gcc = data["use_gcc"]
-        self.use_mask_based_tdoa = data["use_mask_based_tdoa"]
+        self.tf_mask_parameters = TimeFrequencyMaskParameters(
+            use_tf_mask=data["time_frequency_parameters"]["use_tf_mask"],
+            use_phase_aware_network=data["time_frequency_parameters"]["use_phase_aware_model"],
+            tf_parameters = None if not data["time_frequency_parameters"]["use_tf_mask"] else TF_Parameters.from_json(data["time_frequency_parameters"]["time_frequency_mask_configuration"])
+        )
         vmd_options_dict = data["vmd_denoise_parameters"]["vmd_options"]
         vmd_options = VMDOptions(
             vmd_options_dict["max_iter"],
@@ -190,7 +200,6 @@ class Parameters:
             use_bf=data["beamforming_parameters"]["use_beamforming"],
             beamformer=data["beamforming_parameters"]["beamformer"],
             workflow=data["beamforming_parameters"]["workflow"],
-            use_tf_mask=data["beamforming_parameters"]["use_tf_mask"],
             mesh_size=data["beamforming_parameters"]["mesh_size"],
             use_coarse_and_fine_search=data["beamforming_parameters"]["use_coarse_and_fine_search"],
         )

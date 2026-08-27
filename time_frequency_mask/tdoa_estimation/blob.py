@@ -5,61 +5,70 @@ import cv2 as cv
 from time_frequency_mask.data_generation.models.mask import AudioMask
 from time_frequency_mask.plotter import plot_mask
  
-from time_frequency_mask.configuration import MIN_FREQ, MAX_TDOA, MAX_FREQ, SAMPLING_RATE, DURATION, N_FFT, DURATION, N_TIMES, START_FREQ_IDX, N_FREQS
+from time_frequency_mask.config import Parameters
 
 class Blob():
-    def __init__(self, data : NDArray[np.uint8], stats, area = N_FREQS*N_TIMES):
+    def __init__(self, data : NDArray[np.uint8], stats, parameters : Parameters, area = None):
+        audio, array, stft = parameters.audio, parameters.array, parameters.stft
+
         self.data = data
-        self.area = area
+        n_freqs, n_times = data.shape
+        if area is None:
+            self.area = n_freqs * n_times
+        else:
+            self.area = area
         self.stats = stats
         if data is None:
-            self.fmin = MIN_FREQ
-            self.fmax = MAX_FREQ
+            if audio.duration is None:
+                raise ValueError(f"Cannot create default blob if no default duration is provided")
+            self.fmin = audio.min_freq
+            self.fmax = audio.max_freq
             self.tmin = 0
-            self.tmax = DURATION
+            self.tmax = audio.duration
             self.tmin_idx = 0
-            self.tmax_idx = int(DURATION * SAMPLING_RATE)
+            self.tmax_idx = audio.num_samples
 
         else:
             x, y, w, h = cv.boundingRect(self.data)
             # print(x,y,w,h)
-            if x < 0 or x >= N_TIMES:
-                raise ValueError(f"Error incorrect x start boundingRect index not between 0 and N_TIMES {N_TIMES} got {x}")
+            if x < 0 or x >= n_times:
+                raise ValueError(f"Error incorrect x start boundingRect index not between 0 and n_times {n_times} got {x}")
             
-            if y < 0 or y >= N_FREQS:
-                raise ValueError(f"Error incorrect y start boundingRect index not between 0 and N_TIMES {N_FREQS} got {y}")
+            if y < 0 or y >= n_freqs:
+                raise ValueError(f"Error incorrect y start boundingRect index not between 0 and n_freqs {n_freqs} got {y}")
 
-            if x + w <= 0 or x + w > N_TIMES:
-                raise ValueError(f"Error incorrect w boundingRect index not between 0 and N_TIMES {N_TIMES} got {x+w}")
+            if x + w <= 0 or x + w > n_times:
+                raise ValueError(f"Error incorrect w boundingRect index not between 0 and n_times {n_times} got {x+w}")
             
-            if y + h <=0 or  y + h > N_FREQS:
-                raise ValueError(f"Error incorrect h boundingRect index not between 0 and N_TIMES {N_FREQS} got {x+h}")
+            if y + h <=0 or  y + h > n_freqs:
+                raise ValueError(f"Error incorrect h boundingRect index not between 0 and n_freqs {n_freqs} got {x+h}")
 
+            duration = ((stft.hop_length*(n_times - 1)) + stft.n_fft) / audio.sampling_rate  
+            start_freq_idx = stft.freq_index(audio.sampling_rate, audio.min_freq)
 
+            h = min(h, stft.n_fft - start_freq_idx)
+            y = y + start_freq_idx
+            self.fmin = audio.sampling_rate / stft.n_fft * y
+            self.fmax = audio.sampling_rate / stft.n_fft * (y + h)
 
-            h = min(h, N_FFT - START_FREQ_IDX)
-            y = y + START_FREQ_IDX
-            self.fmin = SAMPLING_RATE / N_FFT * y
-            self.fmax = SAMPLING_RATE / N_FFT * (y + h)
-
-            self.tmin = float(DURATION / N_TIMES * x) 
-            self.tmax = float(DURATION / N_TIMES * (x + w))
+            self.tmin = float(duration / n_times * x) 
+            self.tmax = float(duration / n_times * (x + w))
             if x == 0:
-                self.tmin += MAX_TDOA
+                self.tmin += array.max_tdoa
 
-            if x + w == N_TIMES:
-                self.tmax -=MAX_TDOA
+            if x + w == n_times:
+                self.tmax -=array.max_tdoa
 
             #TODO: Vérifier que ça, ça marche bien:
-            self.tmin_idx = max(int(np.ceil(self.tmin * SAMPLING_RATE)),0)
-            self.tmax_idx = min(int(np.floor(self.tmax * SAMPLING_RATE)), int(SAMPLING_RATE*(DURATION - MAX_TDOA)))
+            self.tmin_idx = max(int(np.ceil(self.tmin * audio.sampling_rate)),0)
+            self.tmax_idx = min(int(np.floor(self.tmax * audio.sampling_rate)), int(audio.sampling_rate*(duration - array.max_tdoa)))
 
             # print(self.fmin, self.fmax)
             # print(self.tmin, self.tmax)
 
 
-def output_blobs_from_mask(mask : AudioMask, area_thr=30) -> list[Blob]:
-    mask_data = mask.data.astype(np.uint8)
+def output_blobs_from_mask(mask : NDArray[np.bool_], parameters : Parameters, area_thr=30) -> list[Blob]:
+    mask_data = mask.astype(np.uint8)
 
     masks = []
     N, labels, stats, centroids = cv.connectedComponentsWithStats(mask_data)
@@ -74,19 +83,25 @@ def output_blobs_from_mask(mask : AudioMask, area_thr=30) -> list[Blob]:
     
         label = (np.array(labels) == i).astype(np.uint8)
         # plot_mask(label)
-        masks.append(Blob(label, stats, stats[i, cv.CC_STAT_AREA]))
+        masks.append(Blob(label, stats, parameters, stats[i, cv.CC_STAT_AREA]))
 
     return masks
 
-def output_mask_from_blobs(blobs : list[Blob]) -> AudioMask:
-    mask = AudioMask.create_empty_mask(SAMPLING_RATE)
+def output_mask_from_blobs(blobs : list[Blob], n_freqs : int, n_times : int) -> NDArray[np.bool_]:
+    mask = np.zeros((n_freqs, n_times), dtype=np.bool_)
 
     for blob in blobs:
-        mask.data = mask.data | (blob.data != 0)
+        mask = mask | (blob.data != 0)
 
     return mask
 
-def blob_filtering_heuristic(blobs : list[Blob], max_blobs_count = 7, min_area = 7*7, min_total_area = 12*12) -> list[Blob]:
+def blob_filtering_heuristic(
+    blobs : list[Blob],
+    min_freq : float,
+    max_blobs_count : int = 7,
+    min_area : int = 7*7,
+    min_total_area : int = 12*12,
+) -> list[Blob]:
     output_blobs = []
     mean_area = np.mean([blob.area for blob in blobs])
     count = len(blobs)
@@ -95,7 +110,7 @@ def blob_filtering_heuristic(blobs : list[Blob], max_blobs_count = 7, min_area =
     sorted_blobs = [blobs[argsort[idx]] for idx in range(min(count, max_blobs_count))]
 
     for blob in sorted_blobs:
-        freq_cond = blob.fmin < 1.05* MIN_FREQ
+        freq_cond = blob.fmin < 1.05* min_freq
 
         min_area_cond = blob.area < min_area
         

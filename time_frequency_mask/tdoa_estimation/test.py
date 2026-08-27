@@ -2,42 +2,46 @@
 import numpy as np 
 import sys
 from pathlib import Path
-
+import argparse
 from scipy.signal import correlate
 from scipy.fft import fft, ifft
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
-
 from BSS.Utils.signal_class import Signal, MultiSignal, Mixture
 
-from time_frequency_mask.configuration import DURATION, SAMPLING_RATE, MAX_TDOA
+from time_frequency_mask.config import Parameters
 from time_frequency_mask.plotter import plot_spectrogram_4D, plot_waveform_4D, plot_mask
 from time_frequency_mask.tdoa_estimation.blob import Blob, output_blobs_from_mask, blob_filtering_heuristic
 from time_frequency_mask.tdoa_estimation.tdoa import compute_tdoa, compute_cross_corr
 from time_frequency_mask.data_generation.models.mask import AudioMask
 from time_frequency_mask.data_generation.io.data_parser import read_wav_file
 from time_frequency_mask.data_generation.core.preprocess import bandpass_filter
-from time_frequency_mask.masknet.run_inference import get_mask_from_array
-
-WAV_PATH = r"C:\Users\amine\Downloads\amine.wav"#r"C:\Users\amine\Desktop\Canada\Beluga\time_frequency_mask\data_generation\data\input\beluga_2026_7.wav"
-
-synthetic = True
-plot = True
-denoise = False 
-std_noise = 5
-amplitude = 1
-# n_tdoa = int(np.ceil(SAMPLING_RATE*MAX_TDOA))
-n_tdoa = int(SAMPLING_RATE*MAX_TDOA)
-
+from time_frequency_mask.masknet.run_inference import get_mask_from_array, load_model
+from time_frequency_mask.masknet.models.spectro_mask_net import SpectroMaskNet
 delay_matrix = np.array([
     [0],  
     [59],
     [58],
     [10]])
 
-def get_synthetic_signal(duration = DURATION, fs = SAMPLING_RATE, amplitude = amplitude):
+def parse_args():
+    parser = argparse.ArgumentParser(description="TDOA estimation test")
+    parser.add_argument("--config", help="Configuration used for time_frequency_mask", required=True, type=str)
+    parser.add_argument("--wav-path", help="path to wav file used for testing.")
+    parser.add_argument("--synthetic", action="store_true", help="use synthetic data or not. If not wav_path has to be provided")
+    parser.add_argument("--denoise", action="store_true", help="Apply wiener filtering or not to noised data")
+    parser.add_argument("--plot", action="store_true", help="Plot generated data")
+    parser.add_argument("--std-noise", default=5., type=float, help="std of noise to define SNR")
+    parser.add_argument(
+        "--phase-aware",
+        action="store_true",
+        help=(
+            "Use M*M input channels: four magnitudes and real/imaginary IPD "
+            "features for all M(M-1) microphone pairs."
+        ),
+    )
+    return parser.parse_args()
+
+def get_synthetic_signal(duration, fs):
     s1 = Signal.generate_multi_freq_signal(
         duration, fs, start_time=0.15, end_time=0.45, 
         frequencies=[5000,2000], window_type='hann'
@@ -53,8 +57,8 @@ def get_synthetic_signal(duration = DURATION, fs = SAMPLING_RATE, amplitude = am
     msignal = MultiSignal([s1])
     return msignal, signal_energy
 
-def get_signal_from_path(path = WAV_PATH):
-    waveform, frame_rate = read_wav_file(WAV_PATH)
+def get_signal_from_path(path, num_canals):
+    waveform, frame_rate = read_wav_file(path, num_canals)
     msignal = MultiSignal.from_array(waveform[np.newaxis, 0], frame_rate)
     return msignal
 
@@ -63,51 +67,61 @@ def apply_delay(delay_matrix, msignal):
     tetra = mixer.apply(msignal, mode = "same") # dans tetra.data matrice (micro, sample)
     return tetra
 
-def apply_noise(tetra, std_noise = std_noise):
+def apply_noise(tetra, sampling_rate, std_noise):
     
     rng = np.random.default_rng(seed=42)  
-    noise = MultiSignal.from_array(data = rng.normal(loc=0, scale=std_noise, size = tetra.data.shape), fs = SAMPLING_RATE)
+    noise = MultiSignal.from_array(data = rng.normal(loc=0, scale=std_noise, size = tetra.data.shape), fs=sampling_rate)
     return tetra + noise
 
 def main():
+    args = parse_args()
+    parameters = Parameters.from_json(args.config)
+    audio = parameters.audio
+    M = parameters.array.num_mics
+    n_tdoa = int(np.ceil(parameters.array.max_tdoa*audio.sampling_rate))
     msignal = None
     signal_energy = None
-    if synthetic:
-        msignal, signal_energy = get_synthetic_signal()
+    if args.synthetic:
+        msignal, signal_energy = get_synthetic_signal(duration=audio.duration, fs=audio.sampling_rate)
     else:
-        msignal = get_signal_from_path()
+        msignal = get_signal_from_path(args.wav_path, M)
 
     tetra = apply_delay(delay_matrix, msignal)
 
-    tetra_noised = apply_noise(tetra).data
-
-    if denoise:
+    tetra_noised = apply_noise(tetra, audio.sampling_rate, args.std_noise).data
+    if args.denoise:
         from scipy.signal import wiener
 
-        noise_std = std_noise  # known std of the added noise
+        noise_std = args.std_noise  # known std of the added noise
         noise_var = noise_std ** 2
 
         # Wiener filter; mysize controls the local window size
         tetra_noised = wiener(tetra_noised, mysize=(1, 1000), noise=noise_var)
 
-    mask = AudioMask(get_mask_from_array(tetra_noised))
+    if args.phase_aware:
+        model = SpectroMaskNet(n_channels=M*M)
+    else:
+        model = SpectroMaskNet(n_channels=M)
+
+    model = load_model(model, parameters.network.checkpoint_path)
+
+    mask = get_mask_from_array(tetra_noised, model, parameters)
 
     if signal_energy is not None:
         active_count = np.count_nonzero(msignal.data[0])
-        SNR = 10 * np.log10(signal_energy / (active_count * std_noise**2))
+        SNR = 10 * np.log10(signal_energy / (active_count * args.std_noise**2))
         print(f"snr estimation: {SNR}")
     # mask.data = np.zeros_like(mask.data)
     
     # mask.data[48:49,60:-60] = True
 
-    if plot:
-        plot_waveform_4D(tetra_noised, SAMPLING_RATE)
-        # plot_mask(mask.data)
-        plot_spectrogram_4D(tetra_noised, SAMPLING_RATE, is_db=False, mask = mask.data)
+    if args.plot:
+        plot_waveform_4D(tetra_noised, audio.sampling_rate)
+        plot_spectrogram_4D(tetra_noised, audio.sampling_rate, parameters, is_db=False, mask = mask)
 
-    blobs = output_blobs_from_mask(mask)
+    blobs = output_blobs_from_mask(mask, parameters)
 
-    blobs = blob_filtering_heuristic(blobs)
+    blobs = blob_filtering_heuristic(blobs, audio.min_freq)
 
     for i, blob in enumerate(blobs):
         tmin_idx = blob.tmin_idx
@@ -120,13 +134,13 @@ def main():
         fmax = blob.fmax
 
         canal = np.copy(tetra_noised)
-
-        canal = bandpass_filter(canal, SAMPLING_RATE, fmin, fmax)
+        print(audio.sampling_rate, fmin, fmax)
+        canal = bandpass_filter(canal, audio.sampling_rate, fmin, fmax)
         print(f"tdoa estimation for blob {i} is:")
 
-        tdoa_01 = compute_tdoa(canal[0], canal[1], idx_center, win_size)
-        tdoa_02 = compute_tdoa(canal[0], canal[2], idx_center, win_size)
-        tdoa_03 = compute_tdoa(canal[0], canal[3], idx_center, win_size)
+        tdoa_01 = compute_tdoa(canal[0], canal[1], idx_center, win_size, parameters.array.max_tdoa, audio.sampling_rate)
+        tdoa_02 = compute_tdoa(canal[0], canal[2], idx_center, win_size, parameters.array.max_tdoa, audio.sampling_rate)
+        tdoa_03 = compute_tdoa(canal[0], canal[3], idx_center, win_size, parameters.array.max_tdoa, audio.sampling_rate)
 
         print(f"tdoa are : tdoa_01 {tdoa_01}, tdoa_02 {tdoa_02}, tdoa_03 {tdoa_03}")
 
@@ -145,14 +159,14 @@ def main():
 
         canal = np.copy(tetra_noised)
 
-        canal = bandpass_filter(canal, SAMPLING_RATE, fmin, fmax)
+        canal = bandpass_filter(canal, audio.sampling_rate, fmin, fmax)
 
-        correlations_01.append(blob.area*compute_cross_corr(canal[0], canal[1], idx_center, win_size))
-        correlations_02.append(blob.area*compute_cross_corr(canal[0], canal[2], idx_center, win_size))
-        correlations_03.append(blob.area*compute_cross_corr(canal[0], canal[3], idx_center, win_size))
+        correlations_01.append(blob.area*compute_cross_corr(canal[0], canal[1], idx_center, win_size, parameters.array.max_tdoa, audio.sampling_rate))
+        correlations_02.append(blob.area*compute_cross_corr(canal[0], canal[2], idx_center, win_size, parameters.array.max_tdoa, audio.sampling_rate))
+        correlations_03.append(blob.area*compute_cross_corr(canal[0], canal[3], idx_center, win_size, parameters.array.max_tdoa, audio.sampling_rate))
         # blob.area*np.sqrt(win_size*(fmax-fmin))
 
-
+    print(n_tdoa)
     print(f"tdoa estimation for merged blob estimator is:")
     tdoa_prime_01 = -(np.argmax(np.sum(correlations_01, axis=0)) - n_tdoa)
     tdoa_prime_02 = -(np.argmax(np.sum(correlations_02, axis=0)) - n_tdoa)

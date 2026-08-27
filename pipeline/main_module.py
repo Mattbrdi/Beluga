@@ -9,13 +9,14 @@ import soundfile as sf
 import pandas as pd
 from src.detection_bricks.mono_audio_detection import SpectrogramGenerator, MobileNetMultilabel, get_audio_start_time, run_pipeline_overlaps_long_spects
 from src.detection_bricks.canals_matching import spotting_to_location_preparation
+from src.detection_bricks.tf_mask_adapter import load_tf_mask_model, tf_mask_compatibility
 from src.utils.sub_classes import Environment, Parameters, AudioMetadata, AudioArray
 from src.location_bricks.frequencies_filtering import filter_audio_array, filter_audio_array_from_calltype
 from src.denoising_bricks.vmd_denoising import vmd_denoise
 from src.location_bricks.tdoa_brick import tdoas
 from src.location_bricks.low_level_fusion import low_fusion
 from src.location_bricks.high_level_fusion import high_fusion, fusion_bf
-from src.location_bricks.beamforming import get_tetrahedra, beamforming_doa
+from src.location_bricks.beamforming_adapter import get_tetrahedra, beamforming_doa
 from src.utils.plots import plot_spectro
 from src.denoising_bricks.wt_denoising import wt_denoise
 
@@ -149,8 +150,7 @@ def signal_characteristics(audio_arrays : list[AudioArray], band_threshold_db = 
     frequency_range = (median_band[0] - frequency_pad , median_band[1] + frequency_pad)
 
     return central_frequency, frequency_range, snrs_list
-    
-    
+
 
 def setup_to_detection(
         parameters : Parameters,
@@ -225,6 +225,17 @@ def setup_to_detection(
             audio_array = AudioArray(metadata, tetrahedra, parameters.location_parameters.use_h4, data_array=audio_data.T)
             audio_arrays.append(audio_array)
 
+    if parameters.tf_mask_parameters.use_tf_mask:
+        if not audio_arrays:
+            raise ValueError("No active audio arrays to validate")
+        
+        for audio_array in audio_arrays:
+            tf_mask_compatibility(
+                audio_array,
+                environment,
+                parameters.tf_mask_parameters.tf_parameters,
+            )
+
     return audio_arrays, event_duration, event_start_dt
 
 def tdoas_mask_check(tdoas_mask : list[np.ndarray]):
@@ -249,12 +260,13 @@ def tdoas_mask_check(tdoas_mask : list[np.ndarray]):
 def tdoa_and_error(
     parameters : Parameters,
     audio_arrays : list[AudioArray],
+    tf_mask_model = None,
 ):
     tdoas_measured = []
     tdoas_error_variance = []
     tdoas_mask = []
     for audio_array in audio_arrays:
-        new_tdoa, new_crb, new_mask, _ = tdoas(audio_array, use_gcc=False, compute_scores=False, use_mask_based_tdoa=parameters.use_mask_based_tdoa)
+        new_tdoa, new_crb, new_mask, _ = tdoas(audio_array, use_gcc=False, compute_scores=False, tf_mask_parameters=parameters.tf_mask_parameters, tf_mask_model = tf_mask_model)
         tdoas_measured.append(new_tdoa)
         tdoas_error_variance.append(new_crb)
         tdoas_mask.append(new_mask)
@@ -292,7 +304,8 @@ def wave_vector_and_error(
     parameters : Parameters,
     environment : Environment,
     audio_arrays : list[AudioArray],
-    fc : float
+    fc : float,
+    tf_mask_model = None
 ):
     wave_vectors = []
     wave_vectors_error_variance = []
@@ -301,7 +314,7 @@ def wave_vector_and_error(
     for tetrahedra, audio_array in zip(tetrahedras, audio_arrays):
         tetrahedral_array = get_tetrahedra(tetrahedra)
 
-        u = beamforming_doa(parameters, fc, tetrahedral_array, audio_array, C)
+        u = beamforming_doa(parameters.beamforming_parameters, fc, tetrahedral_array, audio_array, C,tf_mask_parameters=parameters.tf_mask_parameters, tf_mask_model=tf_mask_model)
 
         wave_vectors.append(u.reshape(-1, 1))
         #TODO: implement wave_vectors_error_variance
@@ -315,7 +328,7 @@ def wave_vector_and_error(
 ###############################
 
 def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds: list[pd.Series],
-                 call_type: str, offset: timedelta, environment: Environment, sound_mask):
+                 call_type: str, offset: timedelta, environment: Environment, sound_mask, tf_mask_model = None):
 
     start_detection = time()
 
@@ -395,8 +408,7 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
 
     use_bf = parameters.beamforming_parameters.use_bf and call_type == "Whistle"
     if use_bf:
-        tdoa_measurements = []
-        wave_vectors, wave_vectors_error_variance = wave_vector_and_error(parameters, environment, audio_arrays, central_frequency)
+        wave_vectors, wave_vectors_error_variance = wave_vector_and_error(parameters, environment, audio_arrays, central_frequency, tf_mask_model)
         associated_time = event_start_dt
         
         end_bf = time()
@@ -406,7 +418,7 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
         position_enu, position_error_variance = fusion_bf(wave_vectors, wave_vectors_error_variance, environment, parameters.location_parameters.projection_plan)
 
     else:
-        tdoas_measured, tdoas_error_variance, tdoas_mask = tdoa_and_error(parameters, audio_arrays)
+        tdoas_measured, tdoas_error_variance, tdoas_mask = tdoa_and_error(parameters, audio_arrays, tf_mask_model)
 
         associated_time = event_start_dt
         tdoa_measurements = []
@@ -499,6 +511,11 @@ def positions_from_audio(
     model.load_model(model_path)
     parameters = Parameters(param_path)
     environment = Environment(env_path, parameters.location_parameters.use_h4)
+
+    ##### Time frequency mask model #####
+    tf_mask_model = None
+    if parameters.tf_mask_parameters.use_tf_mask:
+        tf_mask_model = load_tf_mask_model(parameters.tf_mask_parameters.tf_parameters, parameters.tf_mask_parameters.use_phase_aware_network)
     
     ##### Time variables initialisation #####
     iters = 0
@@ -605,7 +622,7 @@ def positions_from_audio(
                             iteration_tdoas,
                         ) = one_iteration(
                             parameters, audio_files, sounds_lines, call_type,
-                            offset, environment, sound_mask
+                            offset, environment, sound_mask, tf_mask_model
                         )
 
                         if iteration_tdoas is not None:

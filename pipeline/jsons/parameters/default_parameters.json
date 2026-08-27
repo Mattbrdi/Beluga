@@ -3,7 +3,11 @@
   "print_level": 0,
   "max_position_frames": null,
   "use_gcc": false,
-  "use_mask_based_tdoa": false,
+  "time_frequency_parameters": {
+    "time_frequency_mask_configuration": "../time_frequency_mask/parameters/config.json",
+    "use_tf_mask": true,
+    "use_phase_aware_model": true
+  },
   "location_parameters": {
     "use_h4": true,
     "fusion_type": "high",
@@ -48,8 +52,7 @@
   "beamforming_parameters": {
     "use_beamforming": false,
     "beamformer": "mvdr",
-    "workflow": "SRPPHAT",
-    "use_tf_mask": true,
+    "workflow": "ISSM",
     "mesh_size": 100,
     "use_coarse_and_fine_search": true
   },

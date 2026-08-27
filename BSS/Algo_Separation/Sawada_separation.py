@@ -1,13 +1,69 @@
 from __future__ import annotations 
 import numpy as np 
 from scipy import signal as sp_signal 
-import matplotlib.pyplot as plt
+try:
+    import matplotlib.pyplot as plt
+except ModuleNotFoundError:
+    plt = None
 from ..Utils.signal_class import Signal, MultiSignal, NSpectrogram
 from dataclasses import dataclass, field, asdict
 from ..Utils.associated_dataclasses import StftParameters, EMClusteringParameters, SawadaBssParameters
+from ..CircularRansac.source_assignment import (
+    CentroidSourceAssignment,
+    fit_centroid_source_trajectories,
+    labels_to_source_masks,
+)
 from sklearn.cluster import KMeans # Utilisé uniquement pour l'initialisation rapide
 from typing import List, Dict, Optional
 from itertools import permutations
+
+
+def _normalize_for_correlation(signal: np.ndarray, eps: float = 1e-12) -> np.ndarray:
+    data = np.asarray(signal, dtype=float)
+    data = data - np.mean(data)
+    norm = np.linalg.norm(data)
+    if norm <= eps:
+        return data
+    return data / norm
+
+
+def _estimate_lag_by_correlation(
+    reference: np.ndarray,
+    target: np.ndarray,
+    max_lag_samples: int | None = None,
+) -> int:
+    """
+    Estime delay(target) - delay(reference) par maximum de correlation.
+    """
+    if max_lag_samples is not None and max_lag_samples < 0:
+        raise ValueError("max_lag_samples doit etre positif ou nul.")
+
+    reference_data = _normalize_for_correlation(reference)
+    target_data = _normalize_for_correlation(target)
+    correlation = sp_signal.correlate(
+        target_data,
+        reference_data,
+        mode="full",
+        method="fft",
+    )
+    lags = sp_signal.correlation_lags(
+        target_data.size,
+        reference_data.size,
+        mode="full",
+    )
+
+    if max_lag_samples is not None:
+        valid = np.abs(lags) <= max_lag_samples
+        correlation = correlation[valid]
+        lags = lags[valid]
+        if lags.size == 0:
+            raise ValueError("Aucun lag valide avec ce max_lag_samples.")
+
+    return int(lags[int(np.argmax(np.abs(correlation)))])
+
+
+def _pairwise_tdoa_count(n_mics: int) -> int:
+    return n_mics * (n_mics - 1) // 2
 
 
 @dataclass
@@ -25,6 +81,7 @@ class EMClustering:
     centroids: np.ndarray = field(init=False)  # Vecteurs directeurs a_i
     variances: np.ndarray = field(init=False)  # Sigmas_i^2
     weights: np.ndarray = field(init=False)    # Alpha_i (proportions)
+    posteriors: Optional[np.ndarray] = field(init=False, default=None)
 
     def _initialize(self, X):
         """
@@ -97,9 +154,10 @@ class EMClustering:
             weighted_X = X * np.sqrt(gamma)
             R_i = weighted_X @ weighted_X.conj().T
             
-            # diagonalisation pour extraire la direction dominante (u1)
+            # np.linalg.eigh trie les valeurs propres par ordre croissant:
+            # la direction dominante est donc le dernier vecteur propre.
             _, u = np.linalg.eigh(R_i)
-            self.centroids[:, i] = u[:, 0]
+            self.centroids[:, i] = u[:, -1]
             self.centroids /= (np.linalg.norm(self.centroids, axis=0) + self.eps)
             
             #  Mise à jour de la variance sigma_i^2
@@ -116,6 +174,7 @@ class EMClustering:
             # Cycle EM
             posteriors = self.e_step(X)
             self.m_step(X, posteriors)
+        self.posteriors = self.e_step(X)
             
     def predict(self, X: np.ndarray) -> np.ndarray:
         """
@@ -165,14 +224,37 @@ class SawadaBSS:
     em_clustering_parameters : EMClusteringParameters = field(default_factory= EMClusteringParameters)
     
     # Paramètres avec valeurs par défaut
-    whitening: bool = True 
+    whitening: bool = False
     
     # État de l'algorithme (Champs calculés plus tard)
     # On utilise default_factory pour les dictionnaires vides
     signal: Optional['MultiSignal'] = None
+    nspectro_normalized_unwhitened: Optional[NSpectrogram] = None
     nspectro_preprocessed: Optional[NSpectrogram] = None
     bin_models: Dict[int, 'EMClustering'] = field(default_factory=dict)
     bin_masks: Dict[int, np.ndarray] = field(default_factory=dict)
+    bin_posteriors: Dict[int, np.ndarray] = field(default_factory=dict)
+    bin_active_clusters: Dict[int, np.ndarray] = field(default_factory=dict)
+    cluster_masks_before_assignment: Optional[np.ndarray] = None
+    cluster_posteriors_before_assignment: Optional[np.ndarray] = None
+    cluster_active_before_assignment: Optional[np.ndarray] = None
+    tf_energy: Optional[np.ndarray] = None
+    active_tf_mask: Optional[np.ndarray] = None
+    active_frequency_mask: Optional[np.ndarray] = None
+    source_assignment: Optional[CentroidSourceAssignment] = None
+    source_assignment_labels: Optional[np.ndarray] = None
+    source_assignment_distances: Optional[np.ndarray] = None
+    source_assignment_relative_phases: Optional[np.ndarray] = None
+    source_assignment_selected_labels: Optional[np.ndarray] = None
+    source_assignment_slopes: Optional[np.ndarray] = None
+    source_assignment_intercepts: Optional[np.ndarray] = None
+    source_assignment_scores: Optional[np.ndarray] = None
+    source_assignment_n_inliers: Optional[np.ndarray] = None
+    source_assignment_n_trials: Optional[np.ndarray] = None
+    source_assignment_converged: Optional[np.ndarray] = None
+    source_assignment_frequency_inliers: Optional[np.ndarray] = None
+    source_assignment_selected_centroids: Optional[np.ndarray] = None
+    energy_threshold_db: Optional[float] = None
     
     eigenvalues_matrix: Optional[np.ndarray] = None
     eigenvector_matrix: Optional[np.ndarray] = None
@@ -185,6 +267,61 @@ class SawadaBSS:
             em_clustering_parameters=self.em_clustering_parameters,
             whitening=self.whitening,
         )
+
+    @staticmethod
+    def _keep_consecutive_active_runs(active_frames: np.ndarray, min_run_length: int) -> np.ndarray:
+        """
+        Conserve uniquement les groupes temporels actifs suffisamment longs.
+
+        Un bin temps-frequence actif isole ne porte pas assez d'information locale
+        pour stabiliser l'EM; on le retire donc avant le clustering.
+        """
+        active_frames = np.asarray(active_frames, dtype=bool)
+        if min_run_length <= 1 or active_frames.size == 0:
+            return active_frames.copy()
+
+        padded = np.r_[False, active_frames, False]
+        transitions = np.diff(padded.astype(int))
+        starts = np.flatnonzero(transitions == 1)
+        stops = np.flatnonzero(transitions == -1)
+
+        filtered = np.zeros_like(active_frames, dtype=bool)
+        for start, stop in zip(starts, stops):
+            if stop - start >= min_run_length:
+                filtered[start:stop] = True
+        return filtered
+
+    def _filter_active_tf_runs(self, active_mask: np.ndarray) -> np.ndarray:
+        min_run_length = max(
+            1,
+            int(self.em_clustering_parameters.min_active_frames_per_frequency),
+        )
+        if min_run_length <= 1:
+            return np.asarray(active_mask, dtype=bool).copy()
+
+        filtered_mask = np.zeros_like(active_mask, dtype=bool)
+        for frequency_index in range(active_mask.shape[0]):
+            filtered_mask[frequency_index] = self._keep_consecutive_active_runs(
+                active_mask[frequency_index],
+                min_run_length,
+            )
+        return filtered_mask
+
+    def _compute_active_tf_mask(self, tf_energy: np.ndarray) -> np.ndarray:
+        threshold_margin = self.em_clustering_parameters.energy_threshold_db_above_floor
+        active_mask = np.ones_like(tf_energy, dtype=bool)
+        self.energy_threshold_db = None
+        if threshold_margin is None:
+            return self._filter_active_tf_runs(active_mask)
+
+        energy_db = 10 * np.log10(tf_energy + self.em_clustering_parameters.eps)
+        floor_db = np.percentile(
+            energy_db,
+            self.em_clustering_parameters.energy_floor_percentile,
+        )
+        self.energy_threshold_db = float(floor_db + threshold_margin)
+        active_mask = energy_db >= self.energy_threshold_db
+        return self._filter_active_tf_runs(active_mask)
     
     
     
@@ -207,12 +344,136 @@ class SawadaBSS:
         return 
         
     def apply_whitening(self, spectro: NSpectrogram) -> NSpectrogram:
-        self.eigenvalues_matrix, self.eigenvector_matrix = spectro.decompose_spatial_correlation() 
-        whitening_matrix = spectro.compute_whitening_matrix(self.eigenvalues_matrix, self.eigenvector_matrix)
-        return spectro.apply_transformation(W = whitening_matrix)
+        n_micros, n_freqs, n_times = spectro.Sxx.shape
+        whitened_sxx = np.zeros_like(spectro.Sxx)
+        self.eigenvalues_matrix = np.zeros((n_freqs, n_micros), dtype=float)
+        self.eigenvector_matrix = np.zeros((n_freqs, n_micros, n_micros), dtype=complex)
+
+        for frequency_index in range(n_freqs):
+            X_f = spectro.Sxx[:, frequency_index, :]
+            spatial_correlation = (X_f @ X_f.conj().T) / max(n_times, 1)
+            eigenvalues, eigenvectors = np.linalg.eigh(spatial_correlation)
+            self.eigenvalues_matrix[frequency_index] = eigenvalues
+            self.eigenvector_matrix[frequency_index] = eigenvectors
+
+            inv_sqrt = 1.0 / np.sqrt(
+                np.maximum(eigenvalues, self.em_clustering_parameters.eps)
+            )
+            whitening_matrix = np.diag(inv_sqrt) @ eigenvectors.conj().T
+            whitened_sxx[:, frequency_index, :] = whitening_matrix @ X_f
+
+        return NSpectrogram(
+            f=spectro.f,
+            t=spectro.t,
+            Sxx=whitened_sxx,
+            fs=spectro.fs,
+            window=spectro.window,
+            nperseg=spectro.nperseg,
+            noverlap=spectro.noverlap,
+            nfft=spectro.nfft,
+            boundary=spectro.boundary,
+            padded=spectro.padded,
+            signal_lengths=spectro.signal_lengths,
+        ).normalize_each_bin()
+
+    def _merge_close_clusters(self, model: EMClustering, X: np.ndarray) -> np.ndarray:
+        """
+        Fusionne les clusters dont les directions sont indiscernables localement.
+
+        Deux clusters sont fusionnes si leur distance directionnelle
+        1 - |a_i^H a_j|^2 est plus petite que la dispersion moyenne des clusters,
+        multipliee par merge_centroid_distance_scale.
+        """
+        merge_scale = self.em_clustering_parameters.merge_centroid_distance_scale
+        active_clusters = np.ones(self.n_sources, dtype=bool)
+        if merge_scale is None or self.n_sources < 2 or model.posteriors is None:
+            return active_clusters
+
+        centroids = model.centroids / (
+            np.linalg.norm(model.centroids, axis=0, keepdims=True) + model.eps
+        )
+        directional_distances = 1.0 - np.abs(centroids.conj().T @ centroids) ** 2
+
+        parent = np.arange(self.n_sources)
+
+        def find(index: int) -> int:
+            while parent[index] != index:
+                parent[index] = parent[parent[index]]
+                index = parent[index]
+            return int(index)
+
+        def union(left: int, right: int) -> None:
+            left_root = find(left)
+            right_root = find(right)
+            if left_root != right_root:
+                parent[right_root] = left_root
+
+        for left in range(self.n_sources):
+            for right in range(left + 1, self.n_sources):
+                dispersion = 0.5 * (model.variances[left] + model.variances[right])
+                threshold = float(merge_scale) * max(float(dispersion), model.eps)
+                distance = float(np.real(directional_distances[left, right]))
+                if np.isfinite(distance) and distance <= threshold:
+                    union(left, right)
+
+        groups: dict[int, list[int]] = {}
+        for source_index in range(self.n_sources):
+            groups.setdefault(find(source_index), []).append(source_index)
+
+        posteriors = model.posteriors.copy()
+        for group in groups.values():
+            if len(group) <= 1:
+                continue
+
+            group_array = np.asarray(group, dtype=int)
+            posterior_mass = np.sum(posteriors[group_array], axis=1)
+            if np.sum(posterior_mass) <= model.eps:
+                keeper = int(group_array[np.argmax(model.weights[group_array])])
+            else:
+                keeper = int(group_array[np.argmax(posterior_mass)])
+
+            merged_gamma = np.sum(posteriors[group_array], axis=0)
+            merged_weight = float(np.sum(model.weights[group_array]))
+
+            for member in group_array:
+                if member == keeper:
+                    continue
+                posteriors[member] = 0.0
+                model.weights[member] = 0.0
+                model.variances[member] = np.inf
+                model.centroids[:, member] = model.centroids[:, keeper]
+                active_clusters[member] = False
+
+            posteriors[keeper] = merged_gamma
+            model.weights[keeper] = merged_weight
+
+            sum_gamma = float(np.sum(merged_gamma))
+            if sum_gamma <= model.eps:
+                continue
+
+            weighted_X = X * np.sqrt(merged_gamma)
+            R_i = weighted_X @ weighted_X.conj().T
+            _, eigenvectors = np.linalg.eigh(R_i)
+            model.centroids[:, keeper] = eigenvectors[:, -1]
+            model.centroids[:, keeper] /= (
+                np.linalg.norm(model.centroids[:, keeper]) + model.eps
+            )
+
+            new_proj_sq = np.abs(model.centroids[:, keeper:keeper + 1].conj().T @ X)[0] ** 2
+            new_dist_sq = np.maximum(0, 1 - new_proj_sq)
+            model.variances[keeper] = np.sum(merged_gamma * new_dist_sq) / (
+                sum_gamma * (X.shape[0] - 1) + model.eps
+            )
+
+        model.posteriors = posteriors / (np.sum(posteriors, axis=0, keepdims=True) + model.eps)
+        return active_clusters
     
     
-    def fit_bins(self, nspectro: 'NSpectrogram'):
+    def fit_bins(
+        self,
+        nspectro: 'NSpectrogram',
+        active_tf_mask: np.ndarray | None = None,
+    ):
         """
         Exécute le clustering EM pour chaque bin de fréquence indépendamment.
         
@@ -221,6 +482,11 @@ class SawadaBSS:
         """
         # Sxx shape: (n_micros, n_freqs, n_times)
         n_micros, n_freqs, n_times = nspectro.Sxx.shape
+        self.bin_models.clear()
+        self.bin_masks.clear()
+        self.bin_posteriors.clear()
+        self.bin_active_clusters.clear()
+        self.active_frequency_mask = np.zeros(n_freqs, dtype=bool)
         
         print(f"Début du clustering pour {n_freqs} bins fréquentiels...")
 
@@ -228,6 +494,29 @@ class SawadaBSS:
             # 1. Extraction des données pour la fréquence f
             # X_f shape: (n_micros, n_times)
             X_f = nspectro.Sxx[:, f_idx, :]
+            active_frames = (
+                np.ones(n_times, dtype=bool)
+                if active_tf_mask is None
+                else np.asarray(active_tf_mask[f_idx], dtype=bool)
+            )
+            active_frames = self._keep_consecutive_active_runs(
+                active_frames,
+                self.em_clustering_parameters.min_active_frames_per_frequency,
+            )
+            min_active = max(
+                self.n_sources,
+                self.em_clustering_parameters.min_active_frames_per_frequency,
+            )
+            has_enough_active_frames = int(np.sum(active_frames)) >= min_active
+            self.bin_masks[f_idx] = np.zeros((self.n_sources, n_times), dtype=int)
+            self.bin_posteriors[f_idx] = np.zeros((self.n_sources, n_times), dtype=float)
+            self.bin_active_clusters[f_idx] = np.zeros(self.n_sources, dtype=bool)
+            if not has_enough_active_frames:
+                print(f"\r frequence numéro {f_idx} ignorée", end="", flush=True)
+                continue
+
+            self.active_frequency_mask[f_idx] = True
+            X_fit = X_f[:, active_frames]
             
             # 2. Initialisation de l'EM pour ce bin
             # On utilise les paramètres de la classe Sawada
@@ -240,14 +529,28 @@ class SawadaBSS:
             
             # 3. Entraînement (M-Step et E-Step alternés)
             # Cette étape estime a_i(f) et sigma_i(f)
-            model.fit(X_f)
+            model.fit(X_fit)
+            active_clusters = np.ones(self.n_sources, dtype=bool)
             
             # 4. Génération du masque binaire (Hard labeling) pour ce bin
             # mask_f shape: (n_sources, n_times)
-            mask_f = model.predict(X_f)
+            mask_f = np.zeros((self.n_sources, n_times), dtype=int)
+            posterior_f = np.zeros((self.n_sources, n_times), dtype=float)
+            posterior_active = model.posteriors
+            if posterior_active is None:
+                posterior_active = model.e_step(X_fit)
+            posterior_f[:, active_frames] = posterior_active
+            best_source = np.argmax(posterior_active, axis=0)
+            for source_index in range(self.n_sources):
+                if active_clusters[source_index]:
+                    mask_f[source_index, active_frames] = (
+                        best_source == source_index
+                    )
             
             self.bin_models[f_idx] = model
             self.bin_masks[f_idx] = mask_f
+            self.bin_posteriors[f_idx] = posterior_f
+            self.bin_active_clusters[f_idx] = active_clusters
             print(f"\r frequence numéro {f_idx} terminée", end="", flush=True )
         print(" ")
         print("Clustering par bin terminé.")
@@ -257,14 +560,198 @@ class SawadaBSS:
         Retourne tous les centroïdes estimés sous forme de tenseur.
         Shape: (n_freqs, n_micros, n_sources)
         """
-        n_freqs = len(self.bin_models)
-        n_micros = self.bin_models[0].centroids.shape[0]
+        if self.nspectro_preprocessed is not None:
+            n_micros, n_freqs, _ = self.nspectro_preprocessed.Sxx.shape
+        elif self.bin_models:
+            n_freqs = max(self.bin_models) + 1
+            first_model = next(iter(self.bin_models.values()))
+            n_micros = first_model.centroids.shape[0]
+        else:
+            return np.empty((0, 0, self.n_sources), dtype=complex)
         
-        centroids_tensor = np.zeros((n_freqs, n_micros, self.n_sources), dtype=complex)
+        centroids_tensor = np.full(
+            (n_freqs, n_micros, self.n_sources),
+            np.nan + 1j * np.nan,
+            dtype=complex,
+        )
         for f_idx, model in self.bin_models.items():
             centroids_tensor[f_idx] = model.centroids
             
         return centroids_tensor
+
+    def _circular_ransac_slope_bounds(self, n_micros: int) -> np.ndarray:
+        slope_bound = self.em_clustering_parameters.ransac_slope_bound
+        if slope_bound is None:
+            slope_bound = 0.05
+        slope_bound = float(abs(slope_bound))
+        if not np.isfinite(slope_bound) or slope_bound <= 0.0:
+            raise ValueError("ransac_slope_bound doit etre strictement positif.")
+
+        bounds = np.tile(np.asarray([-slope_bound, slope_bound], dtype=float), (n_micros, 1))
+        reference_bound = max(slope_bound * 1e-6, self.em_clustering_parameters.eps)
+        bounds[0] = [-reference_bound, reference_bound]
+        return bounds
+
+    def _centroid_assignment_available_mask(self, centroids: np.ndarray) -> np.ndarray:
+        n_freqs, _, n_clusters = centroids.shape
+        available = np.all(np.isfinite(centroids.real) & np.isfinite(centroids.imag), axis=1)
+        if self.active_frequency_mask is not None and self.active_frequency_mask.size >= n_freqs:
+            available &= self.active_frequency_mask[:n_freqs, np.newaxis]
+
+        active_clusters = self.get_final_active_clusters()
+        if active_clusters.ndim == 2 and active_clusters.shape[0] >= n_freqs:
+            available &= active_clusters[:n_freqs, :n_clusters]
+        return available
+
+    def align_sources_with_circular_ransac(self) -> None:
+        """
+        Aligne les clusters frequentiels avec le RANSAC circulaire sur les centroides.
+
+        Les centroides complexes (F, micros, clusters) sont convertis en phases
+        relatives via C_m * conj(C_1), puis le RANSAC extrait des droites de
+        phase coherentes. Les labels obtenus fusionnent ensuite les masques de
+        clusters en masques sources finaux.
+        """
+        if self.nspectro_preprocessed is None:
+            raise ValueError("Aucun spectrogramme pretraite disponible.")
+        if not self.bin_masks:
+            raise ValueError("Aucun masque de cluster disponible.")
+
+        centroids = self.all_centroids
+        if centroids.ndim != 3 or centroids.size == 0:
+            raise ValueError("Aucun centroide disponible pour le RANSAC circulaire.")
+
+        n_freqs, n_micros, _ = centroids.shape
+        frequencies = np.asarray(self.nspectro_preprocessed.f, dtype=float)[:n_freqs]
+        available = self._centroid_assignment_available_mask(centroids)
+        if int(np.sum(np.any(available, axis=1))) < max(2, self.n_sources):
+            raise RuntimeError("Pas assez de frequences avec centroides disponibles pour le RANSAC.")
+        slope_bounds = self._circular_ransac_slope_bounds(n_micros)
+        print(
+            "RANSAC circulaire: "
+            f"{int(np.sum(np.any(available, axis=1)))}/{n_freqs} frequences utilisables, "
+            f"{int(np.sum(available))} centroides disponibles, "
+            f"{self.n_sources} sources, {n_micros} composantes.",
+            flush=True,
+        )
+        print(
+            "RANSAC circulaire params: "
+            f"threshold={self.em_clustering_parameters.ransac_residual_threshold}, "
+            f"max_trials={self.em_clustering_parameters.ransac_max_trials}, "
+            f"slope_grid={self.em_clustering_parameters.ransac_slope_grid_size}, "
+            f"LO={self.em_clustering_parameters.ransac_local_optimization_steps}, "
+            f"slope_bound={float(np.max(np.abs(slope_bounds[:, 1]))):.4g}.",
+            flush=True,
+        )
+
+        assignment = fit_centroid_source_trajectories(
+            centroids,
+            frequencies,
+            n_sources=self.n_sources,
+            slope_bounds=slope_bounds,
+            residual_threshold=self.em_clustering_parameters.ransac_residual_threshold,
+            component_axis=1,
+            available=available,
+            verbose=True,
+            max_trials=self.em_clustering_parameters.ransac_max_trials,
+            random_state=self.em_clustering_parameters.ransac_random_state,
+            local_optimization_steps=(
+                self.em_clustering_parameters.ransac_local_optimization_steps
+            ),
+            slope_grid_size=self.em_clustering_parameters.ransac_slope_grid_size,
+            n_local_refinements=(
+                self.em_clustering_parameters.ransac_n_local_refinements
+            ),
+            max_hypotheses_per_pair=(
+                self.em_clustering_parameters.ransac_max_hypotheses_per_pair
+            ),
+            min_inliers=max(
+                2,
+                self.em_clustering_parameters.min_active_frames_per_frequency,
+            ),
+        )
+        print(
+            f"RANSAC circulaire termine: {len(assignment.models)}/{self.n_sources} trajectoires trouvees.",
+            flush=True,
+        )
+
+        cluster_masks = self.get_final_masks()
+        self.cluster_masks_before_assignment = cluster_masks.copy()
+        source_masks = labels_to_source_masks(
+            cluster_masks,
+            assignment.labels,
+            n_sources=self.n_sources,
+            cluster_axis=0,
+            aggregation="sum",
+            clip=True,
+        )
+        cluster_posteriors = self.get_final_posteriors()
+        self.cluster_posteriors_before_assignment = cluster_posteriors.copy()
+        self.cluster_active_before_assignment = self.get_final_active_clusters().copy()
+        source_posteriors = labels_to_source_masks(
+            cluster_posteriors,
+            assignment.labels,
+            n_sources=self.n_sources,
+            cluster_axis=0,
+            aggregation="sum",
+            clip=True,
+        )
+
+        for frequency_index in range(source_masks.shape[1]):
+            self.bin_masks[frequency_index] = source_masks[:, frequency_index, :]
+            self.bin_posteriors[frequency_index] = source_posteriors[:, frequency_index, :]
+            self.bin_active_clusters[frequency_index] = np.any(
+                source_masks[:, frequency_index, :] > 0.5,
+                axis=1,
+            )
+
+        self.source_assignment = assignment
+        self.source_assignment_labels = assignment.labels
+        self.source_assignment_distances = assignment.distances
+        self.source_assignment_relative_phases = assignment.relative_phases
+        self.source_assignment_selected_labels = assignment.selected_labels
+        self.source_assignment_slopes = np.asarray(
+            [model.slope_ for model in assignment.models if model.slope_ is not None],
+            dtype=float,
+        )
+        self.source_assignment_intercepts = np.asarray(
+            [model.intercept_ for model in assignment.models if model.intercept_ is not None],
+            dtype=float,
+        )
+        self.source_assignment_scores = np.asarray(
+            [np.nan if model.score_ is None else model.score_ for model in assignment.models],
+            dtype=float,
+        )
+        self.source_assignment_n_inliers = np.asarray(
+            [model.n_inliers_ for model in assignment.models],
+            dtype=int,
+        )
+        self.source_assignment_n_trials = np.asarray(
+            [model.n_trials_ for model in assignment.models],
+            dtype=int,
+        )
+        self.source_assignment_converged = np.asarray(
+            [model.converged_ for model in assignment.models],
+            dtype=bool,
+        )
+        self.source_assignment_frequency_inliers = np.asarray(
+            [
+                np.zeros(n_freqs, dtype=bool)
+                if model.frequency_inliers_ is None
+                else model.frequency_inliers_
+                for model in assignment.models
+            ],
+            dtype=bool,
+        )
+        self.source_assignment_selected_centroids = np.asarray(
+            [
+                np.full(n_freqs, -1, dtype=int)
+                if model.selected_centroids_ is None
+                else model.selected_centroids_
+                for model in assignment.models
+            ],
+            dtype=int,
+        )
     
     def align_permutations(self, memory: str = 'ema'):
         """
@@ -320,6 +807,14 @@ class SawadaBSS:
             
             # 4. Appliquer la meilleure permutation au bin actuel
             self.bin_masks[f] = current_masks[list(best_perm), :]
+            if f in self.bin_posteriors:
+                self.bin_posteriors[f] = self.bin_posteriors[f][list(best_perm), :]
+            if f in self.bin_active_clusters:
+                self.bin_active_clusters[f] = self.bin_active_clusters[f][list(best_perm)]
+            if f in self.bin_models:
+                self.bin_models[f].centroids = self.bin_models[f].centroids[:, list(best_perm)]
+                self.bin_models[f].variances = self.bin_models[f].variances[list(best_perm)]
+                self.bin_models[f].weights = self.bin_models[f].weights[list(best_perm)]
             
             # 5. Mise à jour de la référence (Moyenne glissante pour stabilité)
             # Cela permet de lisser l'évolution temporelle des sources
@@ -365,6 +860,31 @@ class SawadaBSS:
         for f in range(n_freqs):
             final_masks[:, f, :] = self.bin_masks[f]
         return final_masks
+
+    def get_final_posteriors(self) -> np.ndarray:
+        """Retourne les probabilites posterieures EM alignees (Sources, Freqs, Temps)."""
+        n_freqs = len(self.bin_posteriors)
+        n_times = self.bin_posteriors[0].shape[1]
+
+        final_posteriors = np.zeros((self.n_sources, n_freqs, n_times))
+        for f in range(n_freqs):
+            final_posteriors[:, f, :] = self.bin_posteriors[f]
+        return final_posteriors
+
+    def get_final_active_clusters(self) -> np.ndarray:
+        """Retourne les clusters Sawada conserves apres fusion locale."""
+        if self.nspectro_preprocessed is not None:
+            n_freqs = self.nspectro_preprocessed.Sxx.shape[1]
+        elif self.bin_active_clusters:
+            n_freqs = max(self.bin_active_clusters) + 1
+        else:
+            return np.empty((0, self.n_sources), dtype=bool)
+
+        active_clusters = np.zeros((n_freqs, self.n_sources), dtype=bool)
+        for f in range(n_freqs):
+            if f in self.bin_active_clusters:
+                active_clusters[f] = self.bin_active_clusters[f]
+        return active_clusters
         
     def process_signal(self, multi_signal: MultiSignal) :
         """
@@ -379,15 +899,31 @@ class SawadaBSS:
         """
         self.signal = multi_signal
         # 1. Prétraitement (STFT + Normalisation + Blanchiment)
-        nspectro_whitened = self.preprocess(multi_signal)
-        self.nspectro_preprocessed = self.preprocess(multi_signal)
+        raw_spectro = self.get_spectro(multi_signal)
+        self.tf_energy = np.sum(np.abs(raw_spectro.Sxx) ** 2, axis=0)
+        self.active_tf_mask = self._compute_active_tf_mask(self.tf_energy)
+        nspectro_normalized = raw_spectro.normalize_each_bin()
+        self.nspectro_normalized_unwhitened = nspectro_normalized
+        nspectro_preprocessed = nspectro_normalized
+        if self.whitening:
+            nspectro_preprocessed = self.apply_whitening(nspectro_preprocessed)
+        self.nspectro_preprocessed = nspectro_preprocessed
         # 2. Algo : Clustering par bin (EM)
         print("Démarrage du clustering EM par bin...")
-        self.fit_bins(nspectro_whitened)
+        self.fit_bins(nspectro_preprocessed, self.active_tf_mask)
         
-        # 3. Algo : Alignement des permutations entre les fréquences
-        print("Alignement des permutations...")
-        self.align_permutations()
+        # 3. Algo : coherence des sources entre frequences
+        alignment_method = self.em_clustering_parameters.source_alignment_method
+        if alignment_method == "ransac":
+            print("Alignement des sources par RANSAC circulaire...")
+            self.align_sources_with_circular_ransac()
+        elif alignment_method == "envelope":
+            print("Alignement des permutations par enveloppes...")
+            self.align_permutations()
+        elif alignment_method in {"none", None}:
+            print("Alignement des sources desactive.")
+        else:
+            raise ValueError(f"Methode d'alignement inconnue: {alignment_method}")
         
         return None
     
@@ -443,3 +979,49 @@ class SawadaBSS:
             padded=Nspectro.padded,
             signal_lengths=Nspectro.signal_lengths
         )
+
+    def estimate_pairwise_tdoas(
+        self,
+        max_lag_samples: int | None = None,
+    ) -> np.ndarray:
+        """
+        Estime les TDOA pairwise pour chaque source separee.
+
+        La sortie a la forme (n_sources, n_pairs). Pour quatre micros, les
+        colonnes sont [M1M2, M1M3, M1M4, M2M3, M2M4, M3M4].
+        Convention : M_iM_j = delay(M_j) - delay(M_i).
+        """
+        if self.signal is None:
+            raise RuntimeError("Il faut appeler process_signal avant estimate_pairwise_tdoas.")
+
+        separated_sources = self.separate_source()
+        if not separated_sources:
+            return np.empty((0, 0), dtype=float)
+
+        n_mics = separated_sources[0].num_signals
+        tdoas = np.empty(
+            (len(separated_sources), _pairwise_tdoa_count(n_mics)),
+            dtype=float,
+        )
+
+        for source_index, source in enumerate(separated_sources):
+            source_data = source.data
+            pair_index = 0
+            for first in range(n_mics - 1):
+                for second in range(first + 1, n_mics):
+                    lag = _estimate_lag_by_correlation(
+                        reference=source_data[first],
+                        target=source_data[second],
+                        max_lag_samples=max_lag_samples,
+                    )
+                    tdoas[source_index, pair_index] = lag / source.freq
+                    pair_index += 1
+
+        return tdoas
+
+    def estimate_tdoas(
+        self,
+        max_lag_samples: int | None = None,
+    ) -> np.ndarray:
+        """Alias benchmark : renvoie les TDOA pairwise en secondes."""
+        return self.estimate_pairwise_tdoas(max_lag_samples=max_lag_samples)

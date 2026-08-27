@@ -2,7 +2,6 @@ import torch
 import torch.nn as nn
 import lightning as L
 from torchmetrics.segmentation import DiceScore
-from time_frequency_mask.configuration import SAMPLING_RATE
 
 def dice_loss_from_logits(logits, targets, eps=1e-6):
     targets = targets.float()
@@ -48,7 +47,6 @@ class SpectroMaskLightningModule(L.LightningModule):
     def validation_step(self, batch, batch_idx):
         x = batch["stft"].float()
         y = batch["mask"].float()
-        frame_rate = SAMPLING_RATE
 
         logits = self(x)
         targets = y.float()
