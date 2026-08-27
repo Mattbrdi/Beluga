@@ -21,7 +21,12 @@ from time_frequency_mask.tdoa_estimation.blob import (
     output_mask_from_blobs,
 )
 from ..utils.sub_classes import Parameters as PL_Parameters
-from ..utils.sub_classes import AudioArray, Tetrahedra, Environment
+from ..utils.sub_classes import (
+    AudioArray,
+    Environment,
+    Tetrahedra,
+    TimeFrequencyMaskParameters,
+)
 from time_frequency_mask.stft import scipy_stft_complex_psd, frequency_band
 from time_frequency_mask.data_generation.core.power_computation import compute_P_moy
 
@@ -77,6 +82,67 @@ def load_tf_mask_model(
         model = SpectroMaskNet(n_channels=M)
 
     return load_model(model, tf_parameters.network.checkpoint_path)
+
+
+def tf_frequency_band_mask(tf_parameters: TFParameters) -> NDArray[np.bool_]:
+    stft = tf_parameters.stft
+    audio = tf_parameters.audio
+    freqs = np.fft.rfftfreq(stft.n_fft, d=1.0 / audio.sampling_rate)
+    return (freqs >= audio.min_freq) & (freqs <= audio.max_freq)
+
+
+def compute_filtered_tf_mask(
+    audio_array: AudioArray,
+    tf_mask_parameters: TimeFrequencyMaskParameters,
+    tf_mask_model,
+) -> NDArray[np.bool_]:
+    if not tf_mask_parameters.use_tf_mask:
+        raise ValueError("TF-mask is disabled")
+    if tf_mask_parameters.tf_parameters is None:
+        raise ValueError("TF-mask parameters are missing")
+
+    tf_params = tf_mask_parameters.tf_parameters
+    image_size = tf_params.network.image_size
+    original_mask = get_mask_from_array_arbitrary_size(
+        audio_array.data_array,
+        tf_mask_model,
+        tf_params,
+        image_size,
+        image_size // 2,
+    )
+    blobs = output_blobs_from_mask(original_mask, tf_params)
+    filtered_blobs = blob_filtering_heuristic(blobs, tf_params.audio.min_freq)
+    return output_mask_from_blobs(filtered_blobs, *original_mask.shape)
+
+
+def expand_band_mask_to_full_stft(
+    mask: NDArray[np.bool_],
+    tf_parameters: TFParameters,
+) -> NDArray[np.bool_]:
+    mask = np.asarray(mask, dtype=bool)
+    frequency_band = tf_frequency_band_mask(tf_parameters)
+    expected_n_freqs = int(np.sum(frequency_band))
+    if mask.ndim != 2 or mask.shape[0] != expected_n_freqs:
+        raise ValueError(
+            f"Expected a band-limited mask with {expected_n_freqs} frequencies, got {mask.shape}"
+        )
+
+    full_mask = np.zeros((frequency_band.size, mask.shape[1]), dtype=bool)
+    full_mask[frequency_band, :] = mask
+    return full_mask
+
+
+def extract_band_mask_from_full_stft(
+    mask: NDArray[np.bool_],
+    tf_parameters: TFParameters,
+) -> NDArray[np.bool_]:
+    mask = np.asarray(mask, dtype=bool)
+    frequency_band = tf_frequency_band_mask(tf_parameters)
+    if mask.ndim != 2 or mask.shape[0] != frequency_band.size:
+        raise ValueError(
+            f"Expected a full STFT mask with {frequency_band.size} frequencies, got {mask.shape}"
+        )
+    return mask[frequency_band, :]
 
 
 def get_filtered_snrs(

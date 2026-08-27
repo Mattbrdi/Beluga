@@ -175,13 +175,13 @@ def _run_one_scene(args: argparse.Namespace, record: SceneRecord) -> bool:
 
     if decision.should_separate:
         print("")
-        print("Sources separees:")
-        for source_index, source_audio_arrays in enumerate(
-            decision.separated_audio_arrays_by_source,
+        print("Masques sources:")
+        for source_index, source_masks_by_tetra in enumerate(
+            decision.source_masks_by_source,
             start=1,
         ):
-            shapes = [item.data_array.shape for item in source_audio_arrays]
-            print(f"  Source {source_index}: {len(source_audio_arrays)} tetras, shapes={shapes}")
+            shapes = [mask.shape for mask in source_masks_by_tetra.values()]
+            print(f"  Source {source_index}: {len(source_masks_by_tetra)} tetras, shapes={shapes}")
     print("-" * 72)
 
     return count_ok

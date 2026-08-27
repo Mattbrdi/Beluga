@@ -1,7 +1,7 @@
 """Defines all the classes that will be used in 'final' functions"""
 
 from typing import Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from scipy.spatial.distance import pdist
 import numpy as np
 import json
@@ -132,6 +132,127 @@ class BeamformingParameters:
     use_tf_mask : bool = False
     mesh_size : int = 100
     use_coarse_and_fine_search : bool = False
+
+@dataclass
+class SourceSeparationParameters:
+    enabled: bool = field(
+        default=False,
+        metadata={
+            "description": (
+                "Active l'estimation du nombre de sources et la generation de "
+                "masques Sawada par source dans la pipeline."
+            )
+        },
+    )
+    source_count_method: str = field(
+        default="eigengap",
+        metadata={
+            "description": (
+                "Methode utilisee pour estimer le nombre de sources a partir des "
+                "bins actifs du masque temps-frequence."
+            ),
+            "choices": ["explained_variance", "relative_variance", "eigengap"],
+        },
+    )
+    source_count_aggregation: str = field(
+        default="quantile",
+        metadata={
+            "description": (
+                "Methode utilisee pour convertir les estimations frequence par "
+                "frequence en un nombre de sources par tetraedre."
+            ),
+            "choices": ["min", "median", "max", "mode", "quantile"],
+        },
+    )
+    source_count_aggregation_quantile: float = field(
+        default=0.8,
+        metadata={
+            "description": (
+                "Quantile utilise lorsque source_count_aggregation vaut 'quantile'."
+            ),
+            "unit": "ratio",
+        },
+    )
+    source_count_min_selected_frames: int = field(
+        default=20,
+        metadata={
+            "description": (
+                "Nombre minimal de bins temporels actifs requis pour estimer le "
+                "nombre de sources a une frequence."
+            )
+        },
+    )
+    source_count_min_active_run_length: int = field(
+        default=1,
+        metadata={
+            "description": (
+                "Nombre minimal de bins temporels actifs consecutifs pour garder "
+                "une activite dans le masque utilise par l'estimateur de sources."
+            )
+        },
+    )
+    source_count_min_valid_frequencies: int = field(
+        default=2,
+        metadata={
+            "description": (
+                "Nombre minimal de frequences valides pour considerer l'estimation "
+                "d'un tetraedre comme fiable."
+            )
+        },
+    )
+    min_sources_for_separation: int = field(
+        default=2,
+        metadata={
+            "description": (
+                "Nombre minimal de sources estimees globalement pour lancer Sawada."
+            )
+        },
+    )
+    min_reliable_tetrahedra: int = field(
+        default=2,
+        metadata={
+            "description": (
+                "Nombre minimal de tetraedres fiables avant d'accepter la decision "
+                "globale de separation."
+            )
+        },
+    )
+    global_source_strategy: str = field(
+        default="min",
+        metadata={
+            "description": (
+                "Strategie d'agregation des estimations fiables entre tetraedres."
+            ),
+            "choices": ["min", "median", "quantile"],
+        },
+    )
+    global_source_quantile: float = field(
+        default=0.5,
+        metadata={
+            "description": (
+                "Quantile utilise lorsque global_source_strategy vaut 'quantile'."
+            ),
+            "unit": "ratio",
+        },
+    )
+    require_all_tetrahedra_separated: bool = field(
+        default=True,
+        metadata={
+            "description": (
+                "Si True, la pipeline revient au masque reseau seul si Sawada "
+                "echoue sur au moins un tetraedre."
+            )
+        },
+    )
+    align_sources_across_tetrahedra: bool = field(
+        default=True,
+        metadata={
+            "description": (
+                "Si True, tente d'aligner l'ordre des sources Sawada entre "
+                "tetraedres a partir de leurs enveloppes TF masquees."
+            )
+        },
+    )
     
 @dataclass
 class LocationParameters:
@@ -201,6 +322,9 @@ class Parameters:
             workflow=data["beamforming_parameters"]["workflow"],
             mesh_size=data["beamforming_parameters"]["mesh_size"],
             use_coarse_and_fine_search=data["beamforming_parameters"]["use_coarse_and_fine_search"],
+        )
+        self.source_separation_parameters = SourceSeparationParameters(
+            **data.get("source_separation_parameters", {})
         )
         self.pre_filter_parameters = PreFilterParameters(data["pre_filter_parameters"]["order"], data["pre_filter_parameters"]["filtering_method"])
 

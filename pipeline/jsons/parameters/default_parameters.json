@@ -5,7 +5,7 @@
   "use_gcc": false,
   "time_frequency_parameters": {
     "time_frequency_mask_configuration": "../time_frequency_mask/parameters/config.json",
-    "use_tf_mask": true,
+    "use_tf_mask": false,
     "use_phase_aware_model": true
   },
   "location_parameters": {
@@ -54,6 +54,21 @@
     "workflow": "ISSM",
     "mesh_size": 100,
     "use_coarse_and_fine_search": true
+  },
+  "source_separation_parameters": {
+    "enabled": false,
+    "source_count_method": "eigengap",
+    "source_count_aggregation": "quantile",
+    "source_count_aggregation_quantile": 0.8,
+    "source_count_min_selected_frames": 20,
+    "source_count_min_active_run_length": 1,
+    "source_count_min_valid_frequencies": 2,
+    "min_sources_for_separation": 2,
+    "min_reliable_tetrahedra": 2,
+    "global_source_strategy": "min",
+    "global_source_quantile": 0.5,
+    "require_all_tetrahedra_separated": true,
+    "align_sources_across_tetrahedra": true
   },
   "pre_filter_parameters": {
     "order": 4,

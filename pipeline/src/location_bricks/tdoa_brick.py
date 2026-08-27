@@ -19,9 +19,8 @@ if str(PROJECT_ROOT) not in sys.path:
 from time_frequency_mask.config import Parameters as TFParameters
 from time_frequency_mask.tdoa_estimation.tdoa import compute_cross_corr_from_blob
 from time_frequency_mask.tdoa_estimation.blob import output_mask_from_blobs, output_blobs_from_mask, blob_filtering_heuristic
-from time_frequency_mask.masknet.run_inference import get_mask_from_array_arbitrary_size
 from ..utils.sub_classes import TimeFrequencyMaskParameters
-from ..detection_bricks.tf_mask_adapter import get_filtered_snrs
+from ..detection_bricks.tf_mask_adapter import compute_filtered_tf_mask, get_filtered_snrs
 ############################
 ##### TDOA computation #####
 ############################
@@ -453,7 +452,14 @@ def masked_crb_from_pair(metadata : AudioMetadata, duration: float, hydrophone_p
         return hfpc_crb_from_pair(metadata, snr, omega0, duration, delay, bandwidth)
 
 
-def tdoas(audio_array: AudioArray, use_gcc : bool = False, compute_scores : bool = False, tf_mask_parameters : TimeFrequencyMaskParameters | None = None, tf_mask_model = None):
+def tdoas(
+    audio_array: AudioArray,
+    use_gcc: bool = False,
+    compute_scores: bool = False,
+    tf_mask_parameters: TimeFrequencyMaskParameters | None = None,
+    tf_mask_model=None,
+    external_tf_mask: np.ndarray | None = None,
+):
     """
     Compute TDOAs from an audio array.
 
@@ -472,24 +478,51 @@ def tdoas(audio_array: AudioArray, use_gcc : bool = False, compute_scores : bool
     tdoas_mask = []
     all_scores = [] if compute_scores else None
 
-    blobs = []
+    filtered_blobs = []
+    filtered_mask = None
     tf_params = tf_mask_parameters.tf_parameters
-    if tf_mask_parameters.use_tf_mask and audio_array.metadata.beluga_call_type == 'Whistle':
-        image_size = tf_params.network.image_size
-        original_mask = get_mask_from_array_arbitrary_size(audio_array.data_array, tf_mask_model, tf_params, image_size, image_size // 2)
-        blobs = output_blobs_from_mask(original_mask, tf_params)
-        filtered_blobs = blob_filtering_heuristic(blobs, tf_params.audio.min_freq)
-        filtered_mask = output_mask_from_blobs(filtered_blobs, *original_mask.shape)
+    use_mask = (
+        (tf_mask_parameters.use_tf_mask or external_tf_mask is not None)
+        and audio_array.metadata.beluga_call_type == 'Whistle'
+    )
+    if use_mask:
+        if tf_params is None:
+            raise ValueError("TF-mask parameters are required to use a time-frequency mask")
+        if external_tf_mask is None:
+            filtered_mask = compute_filtered_tf_mask(
+                audio_array,
+                tf_mask_parameters,
+                tf_mask_model,
+            )
+        else:
+            filtered_mask = np.asarray(external_tf_mask, dtype=bool)
+
+        try:
+            blobs = output_blobs_from_mask(filtered_mask, tf_params)
+            filtered_blobs = blob_filtering_heuristic(blobs, tf_params.audio.min_freq)
+            filtered_mask = output_mask_from_blobs(filtered_blobs, *filtered_mask.shape)
+        except ValueError:
+            if external_tf_mask is not None:
+                filtered_blobs = []
+            else:
+                raise
 
     for hydrophone_pair in audio_array.pairs_dict.values():
         ##### Computing #####
-        if tf_mask_parameters.use_tf_mask and audio_array.metadata.beluga_call_type == 'Whistle' and filtered_blobs:
+        if use_mask and filtered_blobs:
             audio_one = hydrophone_pair.hydrophone_ref.audio_r
             audio_two = hydrophone_pair.hydrophone_delta.audio_r
             tdoa, use_tdoa, scores = masked_tdoa_from_pair(audio_one, audio_two, hydrophone_pair.max_delay_idx, filtered_blobs, audio_array.metadata.sample_rate, compute_scores)            
             
             duration = len(audio_one) / audio_array.metadata.sample_rate
             crb, use_crb = masked_crb_from_pair(audio_array.metadata, duration, hydrophone_pair, audio_one, audio_two, filtered_mask, tf_params)
+        elif use_mask and external_tf_mask is not None:
+            tdoa = 0.0
+            use_tdoa = False
+            scores = None
+            duration = audio_array.data_array.shape[1] / audio_array.metadata.sample_rate
+            crb, use_crb = crb_from_pair(audio_array.metadata, duration, hydrophone_pair)
+            use_crb = False
         else:
             tdoa, use_tdoa, scores = tdoa_from_pair(hydrophone_pair, audio_array.metadata.sample_rate, use_gcc, compute_scores)
 

@@ -8,7 +8,13 @@ import soundfile as sf
 import pandas as pd
 from src.detection_bricks.mono_audio_detection import SpectrogramGenerator, MobileNetMultilabel, get_audio_start_time, run_pipeline_overlaps_long_spects
 from src.detection_bricks.canals_matching import spotting_to_location_preparation
-from src.detection_bricks.tf_mask_adapter import load_tf_mask_model, tf_mask_compatibility
+from src.detection_bricks.tf_mask_adapter import (
+    compute_filtered_tf_mask,
+    expand_band_mask_to_full_stft,
+    extract_band_mask_from_full_stft,
+    load_tf_mask_model,
+    tf_mask_compatibility,
+)
 from src.utils.sub_classes import Environment, Parameters, AudioMetadata, AudioArray
 from src.location_bricks.frequencies_filtering import filter_audio_array, filter_audio_array_from_calltype
 from src.denoising_bricks.vmd_denoising import vmd_denoise
@@ -232,12 +238,25 @@ def tdoa_and_error(
     parameters : Parameters,
     audio_arrays : list[AudioArray],
     tf_mask_model = None,
+    tf_masks_by_tetra: dict[str, np.ndarray] | None = None,
 ):
     tdoas_measured = []
     tdoas_error_variance = []
     tdoas_mask = []
     for audio_array in audio_arrays:
-        new_tdoa, new_crb, new_mask, _ = tdoas(audio_array, use_gcc=False, compute_scores=False, tf_mask_parameters=parameters.tf_mask_parameters, tf_mask_model = tf_mask_model)
+        external_tf_mask = (
+            None
+            if tf_masks_by_tetra is None
+            else tf_masks_by_tetra.get(audio_array.metadata.tetra_id)
+        )
+        new_tdoa, new_crb, new_mask, _ = tdoas(
+            audio_array,
+            use_gcc=False,
+            compute_scores=False,
+            tf_mask_parameters=parameters.tf_mask_parameters,
+            tf_mask_model=tf_mask_model,
+            external_tf_mask=external_tf_mask,
+        )
         tdoas_measured.append(new_tdoa)
         tdoas_error_variance.append(new_crb)
         tdoas_mask.append(new_mask)
@@ -275,7 +294,8 @@ def wave_vector_and_error(
     environment : Environment,
     audio_arrays : list[AudioArray],
     fc : float,
-    tf_mask_model = None
+    tf_mask_model = None,
+    tf_masks_by_tetra: dict[str, np.ndarray] | None = None,
 ):
     wave_vectors = []
     wave_vectors_error_variance = []
@@ -283,14 +303,283 @@ def wave_vector_and_error(
     C = environment.sound_speed
     for tetrahedra, audio_array in zip(tetrahedras, audio_arrays):
         tetrahedral_array = get_tetrahedra(tetrahedra)
+        external_tf_mask = (
+            None
+            if tf_masks_by_tetra is None
+            else tf_masks_by_tetra.get(audio_array.metadata.tetra_id)
+        )
 
-        u = beamforming_doa(parameters.beamforming_parameters, fc, tetrahedral_array, audio_array, C,tf_mask_parameters=parameters.tf_mask_parameters, tf_mask_model=tf_mask_model)
+        u = beamforming_doa(
+            parameters.beamforming_parameters,
+            fc,
+            tetrahedral_array,
+            audio_array,
+            C,
+            tf_mask_parameters=parameters.tf_mask_parameters,
+            tf_mask_model=tf_mask_model,
+            external_tf_mask=external_tf_mask,
+        )
 
         wave_vectors.append(u.reshape(-1, 1))
         #TODO: implement wave_vectors_error_variance
         wave_vectors_error_variance.append(0)
 
     return wave_vectors, wave_vectors_error_variance
+
+
+def _tf_stft_parameters(tf_params):
+    from BSS.Utils.associated_dataclasses import StftParameters
+
+    stft = tf_params.stft
+    return StftParameters(
+        window=stft.window,
+        nperseg=stft.n_fft,
+        noverlap=stft.n_fft - stft.hop_length,
+        nfft=stft.n_fft,
+        boundary=stft.boundary,
+        padded=stft.padded,
+    )
+
+
+def _network_tf_masks(
+    parameters: Parameters,
+    audio_arrays: list[AudioArray],
+    tf_mask_model=None,
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    tf_params = parameters.tf_mask_parameters.tf_parameters
+    if tf_params is None:
+        raise ValueError("TF-mask parameters are required for source separation")
+
+    band_masks_by_tetra = {}
+    full_masks_by_tetra = {}
+    for audio_array in audio_arrays:
+        tetra_id = audio_array.metadata.tetra_id
+        band_mask = compute_filtered_tf_mask(
+            audio_array,
+            parameters.tf_mask_parameters,
+            tf_mask_model,
+        )
+        full_mask = expand_band_mask_to_full_stft(band_mask, tf_params)
+        band_masks_by_tetra[tetra_id] = band_mask
+        full_masks_by_tetra[tetra_id] = full_mask
+    return band_masks_by_tetra, full_masks_by_tetra
+
+
+def source_tf_masks_for_localization(
+    parameters: Parameters,
+    environment: Environment,
+    audio_arrays: list[AudioArray],
+    call_type: str,
+    tf_mask_model=None,
+) -> tuple[list[tuple[str, dict[str, np.ndarray] | None]], object | None]:
+    separation_parameters = getattr(parameters, "source_separation_parameters", None)
+    use_neural_mask = (
+        parameters.tf_mask_parameters.use_tf_mask
+        and parameters.tf_mask_parameters.tf_parameters is not None
+        and call_type == "Whistle"
+    )
+
+    if not use_neural_mask:
+        return [("", None)], None
+
+    if separation_parameters is None or not separation_parameters.enabled:
+        return [("", None)], None
+
+    from dataclasses import replace
+
+    from src.source_separation.source_separation_gate import (
+        MultiTetraSourceSeparationGate,
+        SawadaGateConfig,
+        SourceCountGateConfig,
+    )
+
+    tf_params = parameters.tf_mask_parameters.tf_parameters
+    band_masks_by_tetra, full_masks_by_tetra = _network_tf_masks(
+        parameters,
+        audio_arrays,
+        tf_mask_model,
+    )
+    stft_parameters = _tf_stft_parameters(tf_params)
+    source_count_config = SourceCountGateConfig(
+        stft_parameters=stft_parameters,
+        method=separation_parameters.source_count_method,
+        aggregation=separation_parameters.source_count_aggregation,
+        aggregation_quantile=separation_parameters.source_count_aggregation_quantile,
+        min_selected_frames=separation_parameters.source_count_min_selected_frames,
+        min_active_run_length=separation_parameters.source_count_min_active_run_length,
+        min_valid_frequencies=separation_parameters.source_count_min_valid_frequencies,
+        min_frequency=tf_params.audio.min_freq,
+        max_frequency=tf_params.audio.max_freq,
+        mask_mode="all",
+    )
+
+    default_sawada_config = SawadaGateConfig()
+    sawada_em_parameters = replace(
+        default_sawada_config.em_clustering_parameters,
+        min_frequency_hz=tf_params.audio.min_freq,
+        max_frequency_hz=tf_params.audio.max_freq,
+    )
+    sawada_config = replace(
+        default_sawada_config,
+        stft_parameters=stft_parameters,
+        min_sources_for_separation=(
+            separation_parameters.min_sources_for_separation
+        ),
+        min_reliable_tetrahedra=separation_parameters.min_reliable_tetrahedra,
+        global_source_strategy=separation_parameters.global_source_strategy,
+        global_source_quantile=separation_parameters.global_source_quantile,
+        require_all_tetrahedra_separated=(
+            separation_parameters.require_all_tetrahedra_separated
+        ),
+        align_sources_across_tetrahedra=(
+            separation_parameters.align_sources_across_tetrahedra
+        ),
+        em_clustering_parameters=sawada_em_parameters,
+    )
+    gate = MultiTetraSourceSeparationGate(source_count_config, sawada_config)
+    decision = gate.process(
+        audio_arrays,
+        environment,
+        active_tf_masks_by_tetra=full_masks_by_tetra,
+    )
+
+    if parameters.print_level > 0:
+        print(
+            "▒▒▒▒▒▒▒▒▒▒▒▒ Source separation: "
+            f"k={decision.global_n_sources}, "
+            f"separate={decision.should_separate}, reason={decision.reason}"
+        )
+        if parameters.print_level > 1:
+            for count in decision.source_counts:
+                print(
+                    f"  {count.tetra_id}: k={count.estimated_n_sources}, "
+                    f"reliable={count.reliable}, "
+                    f"valid_freq={count.valid_frequency_count}, "
+                    f"active_bins={count.active_bin_ratio:.1%}"
+                )
+
+    if not decision.should_separate or not decision.source_masks_by_source:
+        return [("", band_masks_by_tetra)], decision
+
+    source_masks = []
+    for source_index, masks_by_tetra in enumerate(decision.source_masks_by_source):
+        combined_masks = {}
+        for audio_array in audio_arrays:
+            tetra_id = audio_array.metadata.tetra_id
+            if tetra_id not in masks_by_tetra or tetra_id not in band_masks_by_tetra:
+                continue
+            sawada_band_mask = extract_band_mask_from_full_stft(
+                masks_by_tetra[tetra_id],
+                tf_params,
+            )
+            combined_masks[tetra_id] = (
+                np.asarray(band_masks_by_tetra[tetra_id], dtype=bool)
+                & np.asarray(sawada_band_mask, dtype=bool)
+            )
+        if combined_masks:
+            source_masks.append((f"S{source_index + 1}", combined_masks))
+
+    if not source_masks:
+        return [("", band_masks_by_tetra)], decision
+    return source_masks, decision
+
+
+def localize_audio_group(
+    parameters: Parameters,
+    environment: Environment,
+    audio_arrays: list[AudioArray],
+    call_type: str,
+    event_start_dt,
+    duration: float,
+    tf_mask_model=None,
+    tf_masks_by_tetra: dict[str, np.ndarray] | None = None,
+    timing_reference: float | None = None,
+) -> tuple[np.ndarray | None, np.ndarray | None, str]:
+    if not audio_arrays:
+        return None, None, "reject_empty_source_group"
+
+    from dataclasses import replace
+
+    audio_arrays = [
+        AudioArray(
+            replace(audio_array.metadata),
+            environment.tetrahedras[audio_array.metadata.tetra_id],
+            audio_array.use_h4,
+            data_array=audio_array.data_array.copy(),
+        )
+        for audio_array in audio_arrays
+    ]
+
+    central_frequency = audio_arrays[0].metadata.central_frequency
+    if central_frequency is None:
+        central_frequency, _, _ = signal_characteristics(audio_arrays)
+
+    use_bf = parameters.beamforming_parameters.use_bf and call_type == "Whistle"
+    if use_bf:
+        try:
+            wave_vectors, wave_vectors_error_variance = wave_vector_and_error(
+                parameters,
+                environment,
+                audio_arrays,
+                central_frequency,
+                tf_mask_model,
+                tf_masks_by_tetra,
+            )
+        except ValueError as exc:
+            print(f"Warning : Beamforming mask is not usable ({exc})")
+            return None, None, "reject_beamforming_mask"
+        end_bf = time()
+        if parameters.print_level > 0 and timing_reference is not None:
+            print(
+                "▒▒▒▒▒▒▒▒▒▒▒▒ wave vectors computed in: "
+                f"{end_bf - timing_reference:.2f}s"
+            )
+
+        position_enu, position_error_variance = fusion_bf(
+            wave_vectors,
+            wave_vectors_error_variance,
+            environment,
+            parameters.location_parameters.projection_plan,
+        )
+    else:
+        tdoas_measured, tdoas_error_variance, tdoas_mask = tdoa_and_error(
+            parameters,
+            audio_arrays,
+            tf_mask_model,
+            tf_masks_by_tetra,
+        )
+
+        if not tdoas_mask_check(tdoas_mask):
+            print("Warning : Tdoas are not usable")
+            return None, None, "reject_tdoa"
+
+        end_tdoa = time()
+        if parameters.print_level > 0 and timing_reference is not None:
+            print(f"▒▒▒▒▒▒▒▒▒▒▒▒ TDOAs computed in: {end_tdoa - timing_reference:.2f}s")
+
+        position_enu, position_error_variance = fusion(
+            parameters,
+            environment,
+            tdoas_measured,
+            tdoas_error_variance,
+            tdoas_mask,
+            end_tdoa,
+        )
+
+    if position_enu is None:
+        return None, None, "reject_fusion"
+
+    return position_enu, position_error_variance, "ok"
+
+
+def source_status_summary(statuses: list[str]) -> str:
+    if not statuses:
+        return "reject_no_source_group"
+    if all(status == "ok" for status in statuses):
+        return "ok"
+    if any(status == "ok" for status in statuses):
+        return "partial_ok:" + ",".join(statuses)
+    return statuses[0] if len(statuses) == 1 else "reject_all:" + ",".join(statuses)
 
 
 ###############################
@@ -308,10 +597,10 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
         )
         if audio_arrays is None:
             print("WARNING : Audio arrays is None, indicating a setup to detection issue")
-            return None, None, None, None, "reject_setup"
+            return [], [], [], [], [], None, None, "reject_setup"
     except Exception as e:
         print(f"▒▒▒▒▒▒▒▒▒▒▒▒ Pas de béluga ou erreur: {e}")
-        return None, None, None, None, "reject_setup"
+        return [], [], [], [], [], None, None, "reject_setup"
 
     end_detection = time()
     if parameters.print_level > 0:
@@ -321,7 +610,7 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
     for i in range(len(audio_arrays)):
         if audio_arrays[i].data_array.shape[1] == 0:
             print("WARNING : Canals matching went wrong, audio array's shape is empty")
-            return None, None, None, None, "reject_setup"
+            return [], [], [], [], [], None, None, "reject_setup"
         audio_arrays[i] = filter_audio_array_from_calltype(audio_arrays[i], parameters.pre_filter_parameters)
 
     # VMD filtering
@@ -332,16 +621,7 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
     end_denoising = time()
     if parameters.print_level > 0:
         print(f"▒▒▒▒▒▒▒▒▒▒▒▒ Denoising made in: {end_denoising - end_detection:.2f}s")
-    ######
-    ######
-    #####
-    # (mb55) ZONE OU PLACER LA DETECTION DU NOMBRE DE SOURCE ET LA SEPARATION DE SOURCES 
-    #ici c'est les audio pour une seconde de temps, il faut traiter audio_arrays qui contient les différend tétraèdre
-    #######
-    ######
-    ########
-    
-    # Signal characteristics
+
     central_frequency, frequency_range, snrs_list = signal_characteristics(audio_arrays)
     for i, snrs in enumerate(snrs_list):
         audio_arrays[i].metadata.snr_power = snrs
@@ -356,37 +636,58 @@ def one_iteration(parameters: Parameters, audio_files: list[str], beluga_sounds:
     for i in range(len(audio_arrays)):
         audio_arrays[i] = filter_audio_array(audio_arrays[i], parameters.pre_filter_parameters)
 
+    source_mask_groups, _separation_decision = source_tf_masks_for_localization(
+        parameters,
+        environment,
+        audio_arrays,
+        call_type,
+        tf_mask_model,
+    )
 
-    use_bf = parameters.beamforming_parameters.use_bf and call_type == "Whistle"
-    if use_bf:
-        wave_vectors, wave_vectors_error_variance = wave_vector_and_error(parameters, environment, audio_arrays, central_frequency, tf_mask_model)
-        associated_time = event_start_dt
-        
-        end_bf = time()
-        if parameters.print_level > 0:
-            print(f"▒▒▒▒▒▒▒▒▒▒▒▒ wave vectors computed in: {end_bf - end_denoising:.2f}s")
+    positions_enu = []
+    positions_error_variance = []
+    associated_times = []
+    durations = []
+    source_labels = []
+    statuses = []
+    n_groups = len(source_mask_groups)
 
-        position_enu, position_error_variance = fusion_bf(wave_vectors, wave_vectors_error_variance, environment, parameters.location_parameters.projection_plan)
+    for source_index, (source_label, tf_masks_by_tetra) in enumerate(source_mask_groups):
+        if parameters.print_level > 0 and n_groups > 1:
+            print(f"▒▒▒▒▒▒▒▒▒▒▒▒ Localisation source {source_index + 1}/{n_groups}")
 
-    else:
-        tdoas_measured, tdoas_error_variance, tdoas_mask = tdoa_and_error(parameters, audio_arrays, tf_mask_model)
+        position_enu, position_error_variance, status = localize_audio_group(
+            parameters,
+            environment,
+            audio_arrays,
+            call_type,
+            event_start_dt,
+            duration,
+            tf_mask_model,
+            tf_masks_by_tetra,
+            timing_reference=end_denoising,
+        )
+        statuses.append(status)
+        if position_enu is None:
+            continue
 
-        associated_time = event_start_dt
+        positions_enu.append(position_enu)
+        positions_error_variance.append(position_error_variance)
+        associated_times.append(event_start_dt)
+        durations.append(duration)
+        source_labels.append(source_label)
 
-        if not tdoas_mask_check(tdoas_mask):
-            print("Warning : Tdoas are not usable")
-            return None, None, associated_time, duration, "reject_tdoa"
-        
-        end_tdoa = time()
-        if parameters.print_level > 0:
-            print(f"▒▒▒▒▒▒▒▒▒▒▒▒ TDOAs computed in: {end_tdoa - end_denoising:.2f}s")
-
-        position_enu, position_error_variance = fusion(parameters, environment, tdoas_measured, tdoas_error_variance, tdoas_mask, end_tdoa)
-
-    if position_enu is None:
-        return None, None, associated_time, duration, "reject_fusion"
-
-    return position_enu, position_error_variance, associated_time, duration, "ok"
+    status = source_status_summary(statuses)
+    return (
+        positions_enu,
+        positions_error_variance,
+        associated_times,
+        durations,
+        source_labels,
+        event_start_dt,
+        duration,
+        status,
+    )
 
 
 def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_files:list[str]) -> tuple[list[np.ndarray], list[np.ndarray], list, list[float], list[str],list, list[float], list[str], list[str], list[pd.DataFrame]] :
@@ -515,20 +816,52 @@ def positions_from_audio(model_path :str, env_path:str, param_path:str, audio_fi
                         sounds_lines = [result_df.loc[iters] for result_df in results_dfs]
                         if parameters.print_level >1:
                             print(f'offset : {offset}')
-                        position_enu, position_error_variance, associated_time, duration, status = one_iteration(parameters, audio_files, sounds_lines, call_type, offset, environment, sound_mask, tf_mask_model)
+                        (
+                            event_positions_enu,
+                            event_positions_error_variance,
+                            event_associated_times,
+                            event_position_durations,
+                            event_source_labels,
+                            event_time,
+                            event_duration,
+                            status,
+                        ) = one_iteration(
+                            parameters,
+                            audio_files,
+                            sounds_lines,
+                            call_type,
+                            offset,
+                            environment,
+                            sound_mask,
+                            tf_mask_model,
+                        )
 
-                        if associated_time is not None:
-                            event_times.append(associated_time)
-                            event_durations.append(duration)
+                        if event_time is not None:
+                            event_times.append(event_time)
+                            event_durations.append(event_duration)
                             event_call_types.append(call_type)
                             event_status.append(status)         
 
-                        if position_enu is not None:
+                        for (
+                            position_enu,
+                            position_error_variance,
+                            associated_time,
+                            duration,
+                            source_label,
+                        ) in zip(
+                            event_positions_enu,
+                            event_positions_error_variance,
+                            event_associated_times,
+                            event_position_durations,
+                            event_source_labels,
+                        ):
                             positions_enu.append(position_enu)
                             positions_error_variance.append(position_error_variance)
                             associated_times.append(associated_time)
                             durations.append(duration)
-                            call_types.append(call_type)
+                            call_types.append(
+                                call_type if not source_label else f"{call_type}_{source_label}"
+                            )
                     
         except Exception as e:
             

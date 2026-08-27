@@ -21,14 +21,12 @@ from beamforming.workflows.wideband.tops import TOPS
 from beamforming.workflows.wideband.masked import MaskedBeamformer
 from beamforming.grid import SearchGrid
 from beamforming.signal.stft import compute_band_stft, STFTConfig
-from time_frequency_mask.masknet.run_inference import (
-    get_mask_from_array_arbitrary_size,
-)
 from time_frequency_mask.tdoa_estimation.blob import (
     output_blobs_from_mask,
     output_mask_from_blobs,
     blob_filtering_heuristic,
 )
+from ..detection_bricks.tf_mask_adapter import compute_filtered_tf_mask
 
 # TODO: Fix this by removing the need for sys and pathlib
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -118,6 +116,7 @@ def beamforming_doa(
     stft_config: STFTConfig = STFTConfig(),
     tf_mask_parameters: TimeFrequencyMaskParameters | None = None,
     tf_mask_model=None,
+    external_tf_mask: np.ndarray | None = None,
 ):
     if tf_mask_parameters is None:
         tf_mask_parameters = TimeFrequencyMaskParameters()
@@ -126,7 +125,7 @@ def beamforming_doa(
 
     beamformer_method = beamforming_parameters.beamformer
     workflow = beamforming_parameters.workflow
-    use_tf_mask = tf_mask_parameters.use_tf_mask
+    use_tf_mask = tf_mask_parameters.use_tf_mask or external_tf_mask is not None
     mesh_size = beamforming_parameters.mesh_size
     use_coarse_and_fine_search = beamforming_parameters.use_coarse_and_fine_search
 
@@ -146,6 +145,8 @@ def beamforming_doa(
     tf_params = tf_mask_parameters.tf_parameters
 
     if use_tf_mask:
+        if tf_params is None:
+            raise ValueError("TF-mask parameters are required to use a time-frequency mask")
         audio, stft = tf_params.audio, tf_params.stft
         stft_config = STFTConfig(
             n_fft=stft.n_fft,
@@ -158,17 +159,18 @@ def beamforming_doa(
         )
 
     if use_tf_mask:
-        image_size = tf_params.network.image_size
-        original_mask = get_mask_from_array_arbitrary_size(
-            audio_array.data_array,
-            tf_mask_model,
-            tf_params,
-            image_size,
-            image_size // 2,
-        )
-        blobs = output_blobs_from_mask(original_mask, tf_params)
+        if external_tf_mask is None:
+            filtered_mask = compute_filtered_tf_mask(
+                audio_array,
+                tf_mask_parameters,
+                tf_mask_model,
+            )
+        else:
+            filtered_mask = np.asarray(external_tf_mask, dtype=bool)
+
+        blobs = output_blobs_from_mask(filtered_mask, tf_params)
         filtered_blobs = blob_filtering_heuristic(blobs, tf_params.audio.min_freq)
-        filtered_mask = output_mask_from_blobs(filtered_blobs, *original_mask.shape)
+        filtered_mask = output_mask_from_blobs(filtered_blobs, *filtered_mask.shape)
 
     if workflow != "narrowband":
         freqs, _, Zxx = compute_band_stft(audio_array_data, stft_config, sampling_rate)
