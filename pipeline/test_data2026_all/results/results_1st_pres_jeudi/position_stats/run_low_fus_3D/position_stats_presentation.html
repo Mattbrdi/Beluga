@@ -1,0 +1,1273 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Resultats localisation Beluga</title>
+  <style>
+    :root {
+      --text: #17202a;
+      --muted: #59636f;
+      --line: #d9dee5;
+      --blue: #2454a6;
+      --orange: #b75b13;
+      --green: #237a4b;
+      --bg: #f5f7fa;
+      --slide: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: var(--text);
+      background: var(--bg);
+    }
+    .slide {
+      width: 1280px;
+      min-height: 720px;
+      margin: 24px auto;
+      padding: 40px 48px;
+      background: var(--slide);
+      border: 1px solid var(--line);
+      box-shadow: 0 8px 30px rgba(25, 35, 45, 0.12);
+      page-break-after: always;
+    }
+    h1, h2 { margin: 0 0 12px; }
+    h1 { font-size: 44px; }
+    h2 { font-size: 34px; }
+    p { color: var(--muted); font-size: 18px; line-height: 1.35; }
+    .hero {
+      display: grid;
+      align-content: center;
+      gap: 18px;
+    }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-top: 28px;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      border-left: 5px solid var(--blue);
+      padding: 14px 16px;
+      background: #fbfcfe;
+    }
+    .metric-label {
+      color: var(--muted);
+      font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      margin-bottom: 8px;
+    }
+    .metric-value {
+      font-size: 23px;
+      font-weight: 700;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+      font-size: 18px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 12px;
+      text-align: right;
+    }
+    th:first-child, td:first-child { text-align: left; }
+    th { color: var(--muted); font-size: 14px; text-transform: uppercase; }
+    .point-layout {
+      display: grid;
+      grid-template-columns: 340px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+    .metrics-grid {
+      display: grid;
+      gap: 10px;
+    }
+    .images {
+      display: block;
+    }
+    .tdoa-slide {
+      display: flex;
+      flex-direction: column;
+    }
+    .tdoa-figure {
+      flex: 1;
+      min-height: 0;
+    }
+    .tdoa-slide img {
+      height: 570px;
+    }
+    figure { margin: 0; }
+    img {
+      width: 100%;
+      height: 540px;
+      object-fit: contain;
+      border: 1px solid var(--line);
+      background: white;
+    }
+    figcaption {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.25;
+    }
+    .note {
+      margin-top: 24px;
+      padding: 16px 18px;
+      border-left: 5px solid var(--orange);
+      background: #fff8f2;
+      font-size: 18px;
+      color: var(--text);
+    }
+    @media print {
+      body { background: white; }
+      .slide {
+        margin: 0;
+        box-shadow: none;
+        border: none;
+        width: 100%;
+        min-height: 100vh;
+      }
+    }
+  </style>
+</head>
+<body>
+  <section class="slide hero">
+    <div>
+      <h1>Resultats de localisation 2D</h1>
+      <p>Analyse des points 7 a 20: filtrage par ecart type, comparaison a la ground truth et dispersion autour de la moyenne.</p>
+    </div>
+    <div class="summary-grid">
+      
+    <div class="metric">
+      <div class="metric-label">Nombre de points</div>
+      <div class="metric-value">14</div>
+    </div>
+    
+      
+    <div class="metric">
+      <div class="metric-label">Meilleur point vs GT</div>
+      <div class="metric-value">Point 7 - 61.0 m</div>
+    </div>
+    
+      
+    <div class="metric">
+      <div class="metric-label">Point le plus disperse vs GT</div>
+      <div class="metric-value">Point 17 - 1231.3 m</div>
+    </div>
+    
+      
+    <div class="metric">
+      <div class="metric-label">Point le plus compact</div>
+      <div class="metric-value">Point 15 - 35.5 m</div>
+    </div>
+    
+    </div>
+    <div class="note">La distance a la ground truth est calculee point par point avec la ground truth correspondant au timestamp. La distance a la moyenne mesure la dispersion des positions gardees autour de leur position moyenne.</div>
+  </section>
+
+  <section class="slide">
+    <h2>Synthese globale</h2>
+    <p>Les distances moyennes et les ecarts types affiches sont calcules uniquement sur les positions conservees par le filtre statistique.</p>
+    
+    <table>
+      <thead>
+        <tr>
+          <th>Point</th>
+          <th>Gardees</th>
+          <th>Taux</th>
+          <th>Dist. moy. GT</th>
+          <th>Dist. moy. moyenne</th>
+          <th>Std x,y gardes</th>
+        </tr>
+      </thead>
+      <tbody>
+    <tr><td>7</td><td>77/89</td><td>86.5%</td><td>61.0 m</td><td>64.0 m</td><td>(41.7, 38.2) m</td></tr>
+<tr><td>8</td><td>56/74</td><td>75.7%</td><td>987.2 m</td><td>194.4 m</td><td>(162.1, 142.8) m</td></tr>
+<tr><td>9</td><td>72/79</td><td>91.1%</td><td>553.3 m</td><td>402.5 m</td><td>(282.3, 512.4) m</td></tr>
+<tr><td>10</td><td>64/79</td><td>81.0%</td><td>511.8 m</td><td>345.5 m</td><td>(206.9, 267.4) m</td></tr>
+<tr><td>11</td><td>72/83</td><td>86.7%</td><td>874.4 m</td><td>583.9 m</td><td>(545.4, 367.2) m</td></tr>
+<tr><td>12</td><td>57/80</td><td>71.2%</td><td>431.5 m</td><td>170.5 m</td><td>(146.3, 82.5) m</td></tr>
+<tr><td>13</td><td>74/89</td><td>83.1%</td><td>264.9 m</td><td>178.6 m</td><td>(201.4, 113.4) m</td></tr>
+<tr><td>14</td><td>70/87</td><td>80.5%</td><td>116.1 m</td><td>63.2 m</td><td>(42.1, 27.0) m</td></tr>
+<tr><td>15</td><td>74/94</td><td>78.7%</td><td>316.6 m</td><td>35.5 m</td><td>(31.6, 17.3) m</td></tr>
+<tr><td>16</td><td>65/90</td><td>72.2%</td><td>727.6 m</td><td>59.6 m</td><td>(63.6, 10.9) m</td></tr>
+<tr><td>17</td><td>66/93</td><td>71.0%</td><td>1231.3 m</td><td>67.1 m</td><td>(68.9, 17.1) m</td></tr>
+<tr><td>18</td><td>58/95</td><td>61.1%</td><td>1122.8 m</td><td>117.2 m</td><td>(123.5, 56.6) m</td></tr>
+<tr><td>19</td><td>70/95</td><td>73.7%</td><td>531.0 m</td><td>99.1 m</td><td>(110.8, 29.1) m</td></tr>
+<tr><td>20</td><td>70/88</td><td>79.5%</td><td>885.3 m</td><td>55.5 m</td><td>(31.1, 29.3) m</td></tr>
+      </tbody>
+    </table>
+    
+    <div class="note">Le point le moins compact est le point 11, avec une distance moyenne a la moyenne de 583.9 m.</div>
+  </section>
+
+  
+    <section class="slide point-slide">
+      <header>
+        <h2>Point 7</h2>
+        <p>Comparaison des positions localisees, du filtrage statistique et de la ground truth temporelle.</p>
+      </header>
+      <div class="point-layout">
+        <div class="metrics-grid">
+    <div class="metric">
+      <div class="metric-label">Positions gardees</div>
+      <div class="metric-value">77/89 (86.5%)</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la GT</div>
+      <div class="metric-value">61.0 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la GT</div>
+      <div class="metric-value">55.1 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance max a la GT</div>
+      <div class="metric-value">238.3 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la moyenne</div>
+      <div class="metric-value">64.0 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la moyenne</div>
+      <div class="metric-value">61.1 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Std x,y gardes</div>
+      <div class="metric-value">41.7 m, 38.2 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Sigma max garde</div>
+      <div class="metric-value">0.97</div>
+    </div>
+    </div>
+        <div class="images">
+          <figure>
+            <img src="point_7_presentation_enu.png" alt="Positions vs ground truth point 7">
+            <figcaption>Plan ENU: positions trouvees, positions gardees, moyenne et ground truth.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+    
+
+    <section class="slide tdoa-slide">
+      <header>
+        <h2>Point 7 - Dispersion des TDOA</h2>
+        <p>Repartition par tetraedre et paire d'hydrophones, apres exclusion des valeurs situees a plus de deux ecarts types.</p>
+      </header>
+      <figure class="tdoa-figure">
+        <img src="../tdoa_stats/run_20260708_125823_331301/plots/point_7_tdoa_distributions.png" alt="Distributions et ecarts types des TDOA du point 7">
+        <figcaption>La ligne rouge indique la moyenne finale. La moyenne, l'ecart type et le nombre de mesures conservees sont indiques sous chaque paire.</figcaption>
+      </figure>
+    </section>
+    
+
+    <section class="slide point-slide">
+      <header>
+        <h2>Point 8</h2>
+        <p>Comparaison des positions localisees, du filtrage statistique et de la ground truth temporelle.</p>
+      </header>
+      <div class="point-layout">
+        <div class="metrics-grid">
+    <div class="metric">
+      <div class="metric-label">Positions gardees</div>
+      <div class="metric-value">56/74 (75.7%)</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la GT</div>
+      <div class="metric-value">987.2 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la GT</div>
+      <div class="metric-value">997.3 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance max a la GT</div>
+      <div class="metric-value">1206.6 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la moyenne</div>
+      <div class="metric-value">194.4 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la moyenne</div>
+      <div class="metric-value">198.9 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Std x,y gardes</div>
+      <div class="metric-value">162.1 m, 142.8 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Sigma max garde</div>
+      <div class="metric-value">0.97</div>
+    </div>
+    </div>
+        <div class="images">
+          <figure>
+            <img src="point_8_presentation_enu.png" alt="Positions vs ground truth point 8">
+            <figcaption>Plan ENU: positions trouvees, positions gardees, moyenne et ground truth.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+    
+
+    <section class="slide tdoa-slide">
+      <header>
+        <h2>Point 8 - Dispersion des TDOA</h2>
+        <p>Repartition par tetraedre et paire d'hydrophones, apres exclusion des valeurs situees a plus de deux ecarts types.</p>
+      </header>
+      <figure class="tdoa-figure">
+        <img src="../tdoa_stats/run_20260708_125823_331301/plots/point_8_tdoa_distributions.png" alt="Distributions et ecarts types des TDOA du point 8">
+        <figcaption>La ligne rouge indique la moyenne finale. La moyenne, l'ecart type et le nombre de mesures conservees sont indiques sous chaque paire.</figcaption>
+      </figure>
+    </section>
+    
+
+    <section class="slide point-slide">
+      <header>
+        <h2>Point 9</h2>
+        <p>Comparaison des positions localisees, du filtrage statistique et de la ground truth temporelle.</p>
+      </header>
+      <div class="point-layout">
+        <div class="metrics-grid">
+    <div class="metric">
+      <div class="metric-label">Positions gardees</div>
+      <div class="metric-value">72/79 (91.1%)</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la GT</div>
+      <div class="metric-value">553.3 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la GT</div>
+      <div class="metric-value">353.1 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance max a la GT</div>
+      <div class="metric-value">1816.6 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la moyenne</div>
+      <div class="metric-value">402.5 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la moyenne</div>
+      <div class="metric-value">170.9 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Std x,y gardes</div>
+      <div class="metric-value">282.3 m, 512.4 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Sigma max garde</div>
+      <div class="metric-value">0.99</div>
+    </div>
+    </div>
+        <div class="images">
+          <figure>
+            <img src="point_9_presentation_enu.png" alt="Positions vs ground truth point 9">
+            <figcaption>Plan ENU: positions trouvees, positions gardees, moyenne et ground truth.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+    
+
+    <section class="slide tdoa-slide">
+      <header>
+        <h2>Point 9 - Dispersion des TDOA</h2>
+        <p>Repartition par tetraedre et paire d'hydrophones, apres exclusion des valeurs situees a plus de deux ecarts types.</p>
+      </header>
+      <figure class="tdoa-figure">
+        <img src="../tdoa_stats/run_20260708_125823_331301/plots/point_9_tdoa_distributions.png" alt="Distributions et ecarts types des TDOA du point 9">
+        <figcaption>La ligne rouge indique la moyenne finale. La moyenne, l'ecart type et le nombre de mesures conservees sont indiques sous chaque paire.</figcaption>
+      </figure>
+    </section>
+    
+
+    <section class="slide point-slide">
+      <header>
+        <h2>Point 10</h2>
+        <p>Comparaison des positions localisees, du filtrage statistique et de la ground truth temporelle.</p>
+      </header>
+      <div class="point-layout">
+        <div class="metrics-grid">
+    <div class="metric">
+      <div class="metric-label">Positions gardees</div>
+      <div class="metric-value">64/79 (81.0%)</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la GT</div>
+      <div class="metric-value">511.8 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la GT</div>
+      <div class="metric-value">450.1 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance max a la GT</div>
+      <div class="metric-value">1648.2 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la moyenne</div>
+      <div class="metric-value">345.5 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la moyenne</div>
+      <div class="metric-value">305.7 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Std x,y gardes</div>
+      <div class="metric-value">206.9 m, 267.4 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Sigma max garde</div>
+      <div class="metric-value">0.93</div>
+    </div>
+    </div>
+        <div class="images">
+          <figure>
+            <img src="point_10_presentation_enu.png" alt="Positions vs ground truth point 10">
+            <figcaption>Plan ENU: positions trouvees, positions gardees, moyenne et ground truth.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+    
+
+    <section class="slide tdoa-slide">
+      <header>
+        <h2>Point 10 - Dispersion des TDOA</h2>
+        <p>Repartition par tetraedre et paire d'hydrophones, apres exclusion des valeurs situees a plus de deux ecarts types.</p>
+      </header>
+      <figure class="tdoa-figure">
+        <img src="../tdoa_stats/run_20260708_125823_331301/plots/point_10_tdoa_distributions.png" alt="Distributions et ecarts types des TDOA du point 10">
+        <figcaption>La ligne rouge indique la moyenne finale. La moyenne, l'ecart type et le nombre de mesures conservees sont indiques sous chaque paire.</figcaption>
+      </figure>
+    </section>
+    
+
+    <section class="slide point-slide">
+      <header>
+        <h2>Point 11</h2>
+        <p>Comparaison des positions localisees, du filtrage statistique et de la ground truth temporelle.</p>
+      </header>
+      <div class="point-layout">
+        <div class="metrics-grid">
+    <div class="metric">
+      <div class="metric-label">Positions gardees</div>
+      <div class="metric-value">72/83 (86.7%)</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la GT</div>
+      <div class="metric-value">874.4 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la GT</div>
+      <div class="metric-value">601.1 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance max a la GT</div>
+      <div class="metric-value">2110.3 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la moyenne</div>
+      <div class="metric-value">583.9 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la moyenne</div>
+      <div class="metric-value">478.7 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Std x,y gardes</div>
+      <div class="metric-value">545.4 m, 367.2 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Sigma max garde</div>
+      <div class="metric-value">0.99</div>
+    </div>
+    </div>
+        <div class="images">
+          <figure>
+            <img src="point_11_presentation_enu.png" alt="Positions vs ground truth point 11">
+            <figcaption>Plan ENU: positions trouvees, positions gardees, moyenne et ground truth.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+    
+
+    <section class="slide tdoa-slide">
+      <header>
+        <h2>Point 11 - Dispersion des TDOA</h2>
+        <p>Repartition par tetraedre et paire d'hydrophones, apres exclusion des valeurs situees a plus de deux ecarts types.</p>
+      </header>
+      <figure class="tdoa-figure">
+        <img src="../tdoa_stats/run_20260708_125823_331301/plots/point_11_tdoa_distributions.png" alt="Distributions et ecarts types des TDOA du point 11">
+        <figcaption>La ligne rouge indique la moyenne finale. La moyenne, l'ecart type et le nombre de mesures conservees sont indiques sous chaque paire.</figcaption>
+      </figure>
+    </section>
+    
+
+    <section class="slide point-slide">
+      <header>
+        <h2>Point 12</h2>
+        <p>Comparaison des positions localisees, du filtrage statistique et de la ground truth temporelle.</p>
+      </header>
+      <div class="point-layout">
+        <div class="metrics-grid">
+    <div class="metric">
+      <div class="metric-label">Positions gardees</div>
+      <div class="metric-value">57/80 (71.2%)</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la GT</div>
+      <div class="metric-value">431.5 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la GT</div>
+      <div class="metric-value">403.3 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance max a la GT</div>
+      <div class="metric-value">923.7 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la moyenne</div>
+      <div class="metric-value">170.5 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la moyenne</div>
+      <div class="metric-value">163.6 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Std x,y gardes</div>
+      <div class="metric-value">146.3 m, 82.5 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Sigma max garde</div>
+      <div class="metric-value">0.96</div>
+    </div>
+    </div>
+        <div class="images">
+          <figure>
+            <img src="point_12_presentation_enu.png" alt="Positions vs ground truth point 12">
+            <figcaption>Plan ENU: positions trouvees, positions gardees, moyenne et ground truth.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+    
+
+    <section class="slide tdoa-slide">
+      <header>
+        <h2>Point 12 - Dispersion des TDOA</h2>
+        <p>Repartition par tetraedre et paire d'hydrophones, apres exclusion des valeurs situees a plus de deux ecarts types.</p>
+      </header>
+      <figure class="tdoa-figure">
+        <img src="../tdoa_stats/run_20260708_125823_331301/plots/point_12_tdoa_distributions.png" alt="Distributions et ecarts types des TDOA du point 12">
+        <figcaption>La ligne rouge indique la moyenne finale. La moyenne, l'ecart type et le nombre de mesures conservees sont indiques sous chaque paire.</figcaption>
+      </figure>
+    </section>
+    
+
+    <section class="slide point-slide">
+      <header>
+        <h2>Point 13</h2>
+        <p>Comparaison des positions localisees, du filtrage statistique et de la ground truth temporelle.</p>
+      </header>
+      <div class="point-layout">
+        <div class="metrics-grid">
+    <div class="metric">
+      <div class="metric-label">Positions gardees</div>
+      <div class="metric-value">74/89 (83.1%)</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la GT</div>
+      <div class="metric-value">264.9 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la GT</div>
+      <div class="metric-value">207.1 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance max a la GT</div>
+      <div class="metric-value">868.5 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la moyenne</div>
+      <div class="metric-value">178.6 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la moyenne</div>
+      <div class="metric-value">123.3 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Std x,y gardes</div>
+      <div class="metric-value">201.4 m, 113.4 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Sigma max garde</div>
+      <div class="metric-value">0.94</div>
+    </div>
+    </div>
+        <div class="images">
+          <figure>
+            <img src="point_13_presentation_enu.png" alt="Positions vs ground truth point 13">
+            <figcaption>Plan ENU: positions trouvees, positions gardees, moyenne et ground truth.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+    
+
+    <section class="slide tdoa-slide">
+      <header>
+        <h2>Point 13 - Dispersion des TDOA</h2>
+        <p>Repartition par tetraedre et paire d'hydrophones, apres exclusion des valeurs situees a plus de deux ecarts types.</p>
+      </header>
+      <figure class="tdoa-figure">
+        <img src="../tdoa_stats/run_20260708_125823_331301/plots/point_13_tdoa_distributions.png" alt="Distributions et ecarts types des TDOA du point 13">
+        <figcaption>La ligne rouge indique la moyenne finale. La moyenne, l'ecart type et le nombre de mesures conservees sont indiques sous chaque paire.</figcaption>
+      </figure>
+    </section>
+    
+
+    <section class="slide point-slide">
+      <header>
+        <h2>Point 14</h2>
+        <p>Comparaison des positions localisees, du filtrage statistique et de la ground truth temporelle.</p>
+      </header>
+      <div class="point-layout">
+        <div class="metrics-grid">
+    <div class="metric">
+      <div class="metric-label">Positions gardees</div>
+      <div class="metric-value">70/87 (80.5%)</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la GT</div>
+      <div class="metric-value">116.1 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la GT</div>
+      <div class="metric-value">112.4 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance max a la GT</div>
+      <div class="metric-value">252.2 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la moyenne</div>
+      <div class="metric-value">63.2 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la moyenne</div>
+      <div class="metric-value">60.6 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Std x,y gardes</div>
+      <div class="metric-value">42.1 m, 27.0 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Sigma max garde</div>
+      <div class="metric-value">0.99</div>
+    </div>
+    </div>
+        <div class="images">
+          <figure>
+            <img src="point_14_presentation_enu.png" alt="Positions vs ground truth point 14">
+            <figcaption>Plan ENU: positions trouvees, positions gardees, moyenne et ground truth.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+    
+
+    <section class="slide tdoa-slide">
+      <header>
+        <h2>Point 14 - Dispersion des TDOA</h2>
+        <p>Repartition par tetraedre et paire d'hydrophones, apres exclusion des valeurs situees a plus de deux ecarts types.</p>
+      </header>
+      <figure class="tdoa-figure">
+        <img src="../tdoa_stats/run_20260708_125823_331301/plots/point_14_tdoa_distributions.png" alt="Distributions et ecarts types des TDOA du point 14">
+        <figcaption>La ligne rouge indique la moyenne finale. La moyenne, l'ecart type et le nombre de mesures conservees sont indiques sous chaque paire.</figcaption>
+      </figure>
+    </section>
+    
+
+    <section class="slide point-slide">
+      <header>
+        <h2>Point 15</h2>
+        <p>Comparaison des positions localisees, du filtrage statistique et de la ground truth temporelle.</p>
+      </header>
+      <div class="point-layout">
+        <div class="metrics-grid">
+    <div class="metric">
+      <div class="metric-label">Positions gardees</div>
+      <div class="metric-value">74/94 (78.7%)</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la GT</div>
+      <div class="metric-value">316.6 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la GT</div>
+      <div class="metric-value">314.7 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance max a la GT</div>
+      <div class="metric-value">387.4 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la moyenne</div>
+      <div class="metric-value">35.5 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la moyenne</div>
+      <div class="metric-value">32.7 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Std x,y gardes</div>
+      <div class="metric-value">31.6 m, 17.3 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Sigma max garde</div>
+      <div class="metric-value">0.91</div>
+    </div>
+    </div>
+        <div class="images">
+          <figure>
+            <img src="point_15_presentation_enu.png" alt="Positions vs ground truth point 15">
+            <figcaption>Plan ENU: positions trouvees, positions gardees, moyenne et ground truth.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+    
+
+    <section class="slide tdoa-slide">
+      <header>
+        <h2>Point 15 - Dispersion des TDOA</h2>
+        <p>Repartition par tetraedre et paire d'hydrophones, apres exclusion des valeurs situees a plus de deux ecarts types.</p>
+      </header>
+      <figure class="tdoa-figure">
+        <img src="../tdoa_stats/run_20260708_125823_331301/plots/point_15_tdoa_distributions.png" alt="Distributions et ecarts types des TDOA du point 15">
+        <figcaption>La ligne rouge indique la moyenne finale. La moyenne, l'ecart type et le nombre de mesures conservees sont indiques sous chaque paire.</figcaption>
+      </figure>
+    </section>
+    
+
+    <section class="slide point-slide">
+      <header>
+        <h2>Point 16</h2>
+        <p>Comparaison des positions localisees, du filtrage statistique et de la ground truth temporelle.</p>
+      </header>
+      <div class="point-layout">
+        <div class="metrics-grid">
+    <div class="metric">
+      <div class="metric-label">Positions gardees</div>
+      <div class="metric-value">65/90 (72.2%)</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la GT</div>
+      <div class="metric-value">727.6 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la GT</div>
+      <div class="metric-value">714.2 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance max a la GT</div>
+      <div class="metric-value">882.4 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la moyenne</div>
+      <div class="metric-value">59.6 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la moyenne</div>
+      <div class="metric-value">61.6 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Std x,y gardes</div>
+      <div class="metric-value">63.6 m, 10.9 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Sigma max garde</div>
+      <div class="metric-value">0.92</div>
+    </div>
+    </div>
+        <div class="images">
+          <figure>
+            <img src="point_16_presentation_enu.png" alt="Positions vs ground truth point 16">
+            <figcaption>Plan ENU: positions trouvees, positions gardees, moyenne et ground truth.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+    
+
+    <section class="slide tdoa-slide">
+      <header>
+        <h2>Point 16 - Dispersion des TDOA</h2>
+        <p>Repartition par tetraedre et paire d'hydrophones, apres exclusion des valeurs situees a plus de deux ecarts types.</p>
+      </header>
+      <figure class="tdoa-figure">
+        <img src="../tdoa_stats/run_20260708_125823_331301/plots/point_16_tdoa_distributions.png" alt="Distributions et ecarts types des TDOA du point 16">
+        <figcaption>La ligne rouge indique la moyenne finale. La moyenne, l'ecart type et le nombre de mesures conservees sont indiques sous chaque paire.</figcaption>
+      </figure>
+    </section>
+    
+
+    <section class="slide point-slide">
+      <header>
+        <h2>Point 17</h2>
+        <p>Comparaison des positions localisees, du filtrage statistique et de la ground truth temporelle.</p>
+      </header>
+      <div class="point-layout">
+        <div class="metrics-grid">
+    <div class="metric">
+      <div class="metric-label">Positions gardees</div>
+      <div class="metric-value">66/93 (71.0%)</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la GT</div>
+      <div class="metric-value">1231.3 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la GT</div>
+      <div class="metric-value">1227.3 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance max a la GT</div>
+      <div class="metric-value">1387.9 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la moyenne</div>
+      <div class="metric-value">67.1 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la moyenne</div>
+      <div class="metric-value">53.5 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Std x,y gardes</div>
+      <div class="metric-value">68.9 m, 17.1 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Sigma max garde</div>
+      <div class="metric-value">0.97</div>
+    </div>
+    </div>
+        <div class="images">
+          <figure>
+            <img src="point_17_presentation_enu.png" alt="Positions vs ground truth point 17">
+            <figcaption>Plan ENU: positions trouvees, positions gardees, moyenne et ground truth.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+    
+
+    <section class="slide tdoa-slide">
+      <header>
+        <h2>Point 17 - Dispersion des TDOA</h2>
+        <p>Repartition par tetraedre et paire d'hydrophones, apres exclusion des valeurs situees a plus de deux ecarts types.</p>
+      </header>
+      <figure class="tdoa-figure">
+        <img src="../tdoa_stats/run_20260708_125823_331301/plots/point_17_tdoa_distributions.png" alt="Distributions et ecarts types des TDOA du point 17">
+        <figcaption>La ligne rouge indique la moyenne finale. La moyenne, l'ecart type et le nombre de mesures conservees sont indiques sous chaque paire.</figcaption>
+      </figure>
+    </section>
+    
+
+    <section class="slide point-slide">
+      <header>
+        <h2>Point 18</h2>
+        <p>Comparaison des positions localisees, du filtrage statistique et de la ground truth temporelle.</p>
+      </header>
+      <div class="point-layout">
+        <div class="metrics-grid">
+    <div class="metric">
+      <div class="metric-label">Positions gardees</div>
+      <div class="metric-value">58/95 (61.1%)</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la GT</div>
+      <div class="metric-value">1122.8 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la GT</div>
+      <div class="metric-value">1125.6 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance max a la GT</div>
+      <div class="metric-value">1381.5 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la moyenne</div>
+      <div class="metric-value">117.2 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la moyenne</div>
+      <div class="metric-value">105.7 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Std x,y gardes</div>
+      <div class="metric-value">123.5 m, 56.6 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Sigma max garde</div>
+      <div class="metric-value">1.00</div>
+    </div>
+    </div>
+        <div class="images">
+          <figure>
+            <img src="point_18_presentation_enu.png" alt="Positions vs ground truth point 18">
+            <figcaption>Plan ENU: positions trouvees, positions gardees, moyenne et ground truth.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+    
+
+    <section class="slide tdoa-slide">
+      <header>
+        <h2>Point 18 - Dispersion des TDOA</h2>
+        <p>Repartition par tetraedre et paire d'hydrophones, apres exclusion des valeurs situees a plus de deux ecarts types.</p>
+      </header>
+      <figure class="tdoa-figure">
+        <img src="../tdoa_stats/run_20260708_125823_331301/plots/point_18_tdoa_distributions.png" alt="Distributions et ecarts types des TDOA du point 18">
+        <figcaption>La ligne rouge indique la moyenne finale. La moyenne, l'ecart type et le nombre de mesures conservees sont indiques sous chaque paire.</figcaption>
+      </figure>
+    </section>
+    
+
+    <section class="slide point-slide">
+      <header>
+        <h2>Point 19</h2>
+        <p>Comparaison des positions localisees, du filtrage statistique et de la ground truth temporelle.</p>
+      </header>
+      <div class="point-layout">
+        <div class="metrics-grid">
+    <div class="metric">
+      <div class="metric-label">Positions gardees</div>
+      <div class="metric-value">70/95 (73.7%)</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la GT</div>
+      <div class="metric-value">531.0 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la GT</div>
+      <div class="metric-value">549.5 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance max a la GT</div>
+      <div class="metric-value">755.6 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la moyenne</div>
+      <div class="metric-value">99.1 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la moyenne</div>
+      <div class="metric-value">92.1 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Std x,y gardes</div>
+      <div class="metric-value">110.8 m, 29.1 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Sigma max garde</div>
+      <div class="metric-value">0.98</div>
+    </div>
+    </div>
+        <div class="images">
+          <figure>
+            <img src="point_19_presentation_enu.png" alt="Positions vs ground truth point 19">
+            <figcaption>Plan ENU: positions trouvees, positions gardees, moyenne et ground truth.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+    
+
+    <section class="slide tdoa-slide">
+      <header>
+        <h2>Point 19 - Dispersion des TDOA</h2>
+        <p>Repartition par tetraedre et paire d'hydrophones, apres exclusion des valeurs situees a plus de deux ecarts types.</p>
+      </header>
+      <figure class="tdoa-figure">
+        <img src="../tdoa_stats/run_20260708_125823_331301/plots/point_19_tdoa_distributions.png" alt="Distributions et ecarts types des TDOA du point 19">
+        <figcaption>La ligne rouge indique la moyenne finale. La moyenne, l'ecart type et le nombre de mesures conservees sont indiques sous chaque paire.</figcaption>
+      </figure>
+    </section>
+    
+
+    <section class="slide point-slide">
+      <header>
+        <h2>Point 20</h2>
+        <p>Comparaison des positions localisees, du filtrage statistique et de la ground truth temporelle.</p>
+      </header>
+      <div class="point-layout">
+        <div class="metrics-grid">
+    <div class="metric">
+      <div class="metric-label">Positions gardees</div>
+      <div class="metric-value">70/88 (79.5%)</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la GT</div>
+      <div class="metric-value">885.3 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la GT</div>
+      <div class="metric-value">896.3 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance max a la GT</div>
+      <div class="metric-value">942.6 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance moyenne a la moyenne</div>
+      <div class="metric-value">55.5 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Distance mediane a la moyenne</div>
+      <div class="metric-value">52.1 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Std x,y gardes</div>
+      <div class="metric-value">31.1 m, 29.3 m</div>
+    </div>
+    
+
+    <div class="metric">
+      <div class="metric-label">Sigma max garde</div>
+      <div class="metric-value">0.94</div>
+    </div>
+    </div>
+        <div class="images">
+          <figure>
+            <img src="point_20_presentation_enu.png" alt="Positions vs ground truth point 20">
+            <figcaption>Plan ENU: positions trouvees, positions gardees, moyenne et ground truth.</figcaption>
+          </figure>
+        </div>
+      </div>
+    </section>
+    
+
+    <section class="slide tdoa-slide">
+      <header>
+        <h2>Point 20 - Dispersion des TDOA</h2>
+        <p>Repartition par tetraedre et paire d'hydrophones, apres exclusion des valeurs situees a plus de deux ecarts types.</p>
+      </header>
+      <figure class="tdoa-figure">
+        <img src="../tdoa_stats/run_20260708_125823_331301/plots/point_20_tdoa_distributions.png" alt="Distributions et ecarts types des TDOA du point 20">
+        <figcaption>La ligne rouge indique la moyenne finale. La moyenne, l'ecart type et le nombre de mesures conservees sont indiques sous chaque paire.</figcaption>
+      </figure>
+    </section>
+    
+</body>
+</html>
